@@ -31,11 +31,11 @@ export function TopBar() {
         </svg>
       </button>
       <span class="text-sm font-bold text-primary mr-4">Branchdeck</span>
-      <Show when={repoStore.state.activeRepo}>
-        <span class="text-xs text-text mr-2">{repoStore.state.activeRepo?.name}</span>
-        <Show when={repoStore.state.activeWorktree}>
+      <Show when={repoStore.getActiveRepo()}>
+        <span class="text-xs text-text mr-2">{repoStore.getActiveRepo()?.name}</span>
+        <Show when={repoStore.getActiveWorktree()}>
           <span class="text-xs text-text-muted mr-1">/</span>
-          <span class="text-xs text-info">{repoStore.state.activeWorktree?.branch}</span>
+          <span class="text-xs text-info">{repoStore.getActiveWorktree()?.branch}</span>
         </Show>
       </Show>
       <div class="ml-auto">

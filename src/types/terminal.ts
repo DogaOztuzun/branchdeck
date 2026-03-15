@@ -7,4 +7,5 @@ export type TabInfo = {
   sessionId: string;
   title: string;
   type: 'shell' | 'claude';
+  worktreePath: string;
 };

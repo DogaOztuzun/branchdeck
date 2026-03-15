@@ -4,13 +4,13 @@ import { closeTerminal, createTerminalSession, writeTerminal } from '../commands
 
 type TerminalState = {
   tabs: TabInfo[];
-  activeTabId: string | null;
+  activeTabByWorktree: Record<string, string | null>;
 };
 
 function createTerminalStore() {
   const [state, setState] = createStore<TerminalState>({
     tabs: [],
-    activeTabId: null,
+    activeTabByWorktree: {},
   });
 
   const outputHandlers = new Map<string, (data: Uint8Array) => void>();
@@ -22,25 +22,30 @@ function createTerminalStore() {
         handler(new Uint8Array(event.data.bytes));
       }
     } else if (event.event === 'exit') {
-      const tab = state.tabs.find((t) => t.sessionId === sessionId);
-      if (tab) {
-        setState(
-          produce((s) => {
-            const t = s.tabs.find((t) => t.sessionId === sessionId);
-            if (t) {
-              t.title = `${t.title} (exited)`;
-            }
-          }),
-        );
-      }
+      setState(
+        produce((s) => {
+          const t = s.tabs.find((t) => t.sessionId === sessionId);
+          if (t) {
+            t.title = `${t.title} (exited)`;
+          }
+        }),
+      );
     }
   }
 
-  async function openShellTab(cwd: string) {
+  function getTabsForWorktree(worktreePath: string): TabInfo[] {
+    return state.tabs.filter((t) => t.worktreePath === worktreePath);
+  }
+
+  function getActiveTabId(worktreePath: string): string | null {
+    return state.activeTabByWorktree[worktreePath] ?? null;
+  }
+
+  async function openShellTab(worktreePath: string) {
     const tabId = crypto.randomUUID();
     let resolvedSessionId = '';
 
-    const sessionId = await createTerminalSession(cwd, '', {}, (event) =>
+    const sessionId = await createTerminalSession(worktreePath, '', {}, (event) =>
       handlePtyEvent(resolvedSessionId, event),
     );
     resolvedSessionId = sessionId;
@@ -50,22 +55,23 @@ function createTerminalStore() {
       sessionId,
       title: 'Terminal',
       type: 'shell',
+      worktreePath,
     };
 
     setState(
       produce((s) => {
         s.tabs.push(tab);
-        s.activeTabId = tabId;
+        s.activeTabByWorktree[worktreePath] = tabId;
       }),
     );
   }
 
-  async function openClaudeTab(cwd: string) {
+  async function openClaudeTab(worktreePath: string) {
     const tabId = crypto.randomUUID();
     let resolvedSessionId = '';
     const env = { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1' };
 
-    const sessionId = await createTerminalSession(cwd, '', env, (event) =>
+    const sessionId = await createTerminalSession(worktreePath, '', env, (event) =>
       handlePtyEvent(resolvedSessionId, event),
     );
     resolvedSessionId = sessionId;
@@ -75,12 +81,13 @@ function createTerminalStore() {
       sessionId,
       title: 'Claude Code',
       type: 'claude',
+      worktreePath,
     };
 
     setState(
       produce((s) => {
         s.tabs.push(tab);
-        s.activeTabId = tabId;
+        s.activeTabByWorktree[worktreePath] = tabId;
       }),
     );
 
@@ -92,6 +99,8 @@ function createTerminalStore() {
     const tab = state.tabs.find((t) => t.id === tabId);
     if (!tab) return;
 
+    const { worktreePath } = tab;
+
     await closeTerminal(tab.sessionId);
     outputHandlers.delete(tab.sessionId);
 
@@ -101,15 +110,19 @@ function createTerminalStore() {
         if (index !== -1) {
           s.tabs.splice(index, 1);
         }
-        if (s.activeTabId === tabId) {
-          s.activeTabId = s.tabs.length > 0 ? s.tabs[Math.max(0, index - 1)].id : null;
+        if (s.activeTabByWorktree[worktreePath] === tabId) {
+          const remaining = s.tabs.filter((t) => t.worktreePath === worktreePath);
+          s.activeTabByWorktree[worktreePath] =
+            remaining.length > 0
+              ? (remaining[Math.max(0, index - 1)]?.id ?? remaining[0]?.id ?? null)
+              : null;
         }
       }),
     );
   }
 
-  function setActiveTab(tabId: string) {
-    setState('activeTabId', tabId);
+  function setActiveTab(worktreePath: string, tabId: string) {
+    setState('activeTabByWorktree', worktreePath, tabId);
   }
 
   function registerOutputHandler(sessionId: string, handler: (data: Uint8Array) => void) {
@@ -122,6 +135,8 @@ function createTerminalStore() {
 
   return {
     state,
+    getTabsForWorktree,
+    getActiveTabId,
     openShellTab,
     openClaudeTab,
     closeTab,

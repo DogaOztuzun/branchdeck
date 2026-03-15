@@ -1,37 +1,44 @@
-import { register } from '@tauri-apps/plugin-global-shortcut';
 import { getLayoutStore } from './stores/layout';
 import { getRepoStore } from './stores/repo';
 import { getTerminalStore } from './stores/terminal';
 
-function getCwd(): string {
+function getWorktreePath(): string {
   const repoStore = getRepoStore();
-  return repoStore.state.activeWorktree?.path ?? repoStore.state.activeRepo?.path ?? '.';
+  return repoStore.state.activeWorktreePath ?? repoStore.state.activeRepoPath ?? '';
 }
 
-export async function registerShortcuts() {
+export function registerShortcuts() {
   const terminalStore = getTerminalStore();
   const layout = getLayoutStore();
 
-  await register('Ctrl+Shift+T', () => {
-    terminalStore.openShellTab(getCwd());
-  });
+  document.addEventListener('keydown', (e) => {
+    if (!e.ctrlKey || !e.shiftKey) return;
 
-  await register('Ctrl+Shift+A', () => {
-    terminalStore.openClaudeTab(getCwd());
-  });
+    const wtPath = getWorktreePath();
 
-  await register('Ctrl+Shift+W', () => {
-    const activeId = terminalStore.state.activeTabId;
-    if (activeId) {
-      terminalStore.closeTab(activeId);
+    switch (e.key) {
+      case 'T':
+        e.preventDefault();
+        if (wtPath) terminalStore.openShellTab(wtPath);
+        break;
+      case 'A':
+        e.preventDefault();
+        if (wtPath) terminalStore.openClaudeTab(wtPath);
+        break;
+      case 'W': {
+        e.preventDefault();
+        const activeId = terminalStore.getActiveTabId(wtPath);
+        if (activeId) terminalStore.closeTab(activeId);
+        break;
+      }
+      case 'B':
+        e.preventDefault();
+        layout.toggleRepoSidebar();
+        break;
+      case 'L':
+        e.preventDefault();
+        layout.toggleChangesSidebar();
+        break;
     }
-  });
-
-  await register('Ctrl+Shift+B', () => {
-    layout.toggleRepoSidebar();
-  });
-
-  await register('Ctrl+Shift+L', () => {
-    layout.toggleChangesSidebar();
   });
 }

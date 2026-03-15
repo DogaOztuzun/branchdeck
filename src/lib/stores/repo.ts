@@ -12,20 +12,31 @@ import { getAppConfig, getRepoConfig, saveAppConfig, saveRepoConfig } from '../c
 
 type RepoState = {
   repos: RepoInfo[];
-  activeRepo: RepoInfo | null;
+  activeRepoPath: string | null;
   worktreesByRepo: Record<string, WorktreeInfo[]>;
-  activeWorktree: WorktreeInfo | null;
+  activeWorktreePath: string | null;
   statuses: FileStatus[];
 };
 
 function createRepoStore() {
   const [state, setState] = createStore<RepoState>({
     repos: [],
-    activeRepo: null,
+    activeRepoPath: null,
     worktreesByRepo: {},
-    activeWorktree: null,
+    activeWorktreePath: null,
     statuses: [],
   });
+
+  function getActiveRepo(): RepoInfo | null {
+    if (!state.activeRepoPath) return null;
+    return state.repos.find((r) => r.path === state.activeRepoPath) ?? null;
+  }
+
+  function getActiveWorktree(): WorktreeInfo | null {
+    if (!state.activeRepoPath || !state.activeWorktreePath) return null;
+    const wts = state.worktreesByRepo[state.activeRepoPath] ?? [];
+    return wts.find((w) => w.path === state.activeWorktreePath) ?? null;
+  }
 
   async function loadRepos() {
     const repos = await listRepositories();
@@ -41,7 +52,7 @@ function createRepoStore() {
     const lastRepo = state.repos.find((r) => r.path === config.lastActiveRepo);
     if (!lastRepo) return;
 
-    setState('activeRepo', lastRepo);
+    setState('activeRepoPath', lastRepo.path);
     const wts = await listWorktrees(lastRepo.path);
     setState('worktreesByRepo', lastRepo.path, wts);
 
@@ -51,20 +62,20 @@ function createRepoStore() {
       : wts.find((w) => w.isMain);
 
     if (targetWt) {
-      await selectWorktree(targetWt);
+      setActiveWorktree(targetWt.path);
     }
   }
 
   async function persistState() {
     try {
       const config = await getAppConfig();
-      config.lastActiveRepo = state.activeRepo?.path ?? null;
+      config.lastActiveRepo = state.activeRepoPath;
       await saveAppConfig(config);
 
-      if (state.activeRepo && state.activeWorktree) {
-        const repoConfig = await getRepoConfig(state.activeRepo.path);
-        repoConfig.lastWorktree = state.activeWorktree.path;
-        await saveRepoConfig(state.activeRepo.path, repoConfig);
+      if (state.activeRepoPath && state.activeWorktreePath) {
+        const repoConfig = await getRepoConfig(state.activeRepoPath);
+        repoConfig.lastWorktree = state.activeWorktreePath;
+        await saveRepoConfig(state.activeRepoPath, repoConfig);
       }
     } catch {
       // Config save is best-effort
@@ -74,12 +85,8 @@ function createRepoStore() {
   async function addRepo() {
     const repo = await addRepository();
     if (repo) {
-      setState(
-        produce((s) => {
-          s.repos.push(repo);
-        }),
-      );
-      await selectRepo(repo);
+      await loadRepos();
+      await selectRepo(repo.path);
     }
   }
 
@@ -89,9 +96,9 @@ function createRepoStore() {
       produce((s) => {
         s.repos = s.repos.filter((r) => r.path !== repoPath);
         delete s.worktreesByRepo[repoPath];
-        if (s.activeRepo?.path === repoPath) {
-          s.activeRepo = null;
-          s.activeWorktree = null;
+        if (s.activeRepoPath === repoPath) {
+          s.activeRepoPath = null;
+          s.activeWorktreePath = null;
           s.statuses = [];
         }
       }),
@@ -99,22 +106,34 @@ function createRepoStore() {
     persistState();
   }
 
-  async function selectRepo(repo: RepoInfo) {
-    setState('activeRepo', repo);
-    const wts = await listWorktrees(repo.path);
-    setState('worktreesByRepo', repo.path, wts);
+  async function ensureWorktreesLoaded(repoPath: string) {
+    if (!state.worktreesByRepo[repoPath]) {
+      const wts = await listWorktrees(repoPath);
+      setState('worktreesByRepo', repoPath, wts);
+    }
+  }
+
+  async function selectRepo(repoPath: string) {
+    setState('activeRepoPath', repoPath);
+    await ensureWorktreesLoaded(repoPath);
+    const wts = state.worktreesByRepo[repoPath] ?? [];
     const main = wts.find((w) => w.isMain);
     if (main) {
-      await selectWorktree(main);
+      setActiveWorktree(main.path);
     } else {
-      setState('activeWorktree', null);
+      setState('activeWorktreePath', null);
       setState('statuses', []);
       persistState();
     }
   }
 
-  async function selectWorktree(worktree: WorktreeInfo) {
-    setState('activeWorktree', worktree);
+  async function selectRepoAndWorktree(repoPath: string, worktreePath: string) {
+    setState('activeRepoPath', repoPath);
+    setActiveWorktree(worktreePath);
+  }
+
+  async function setActiveWorktree(worktreePath: string) {
+    setState('activeWorktreePath', worktreePath);
     await refreshStatus();
     persistState();
   }
@@ -132,29 +151,27 @@ function createRepoStore() {
   }
 
   async function refreshStatus() {
-    if (!state.activeWorktree) {
+    if (!state.activeWorktreePath) {
       setState('statuses', []);
       return;
     }
-    const statuses = await getRepoStatus(state.activeWorktree.path);
+    const statuses = await getRepoStatus(state.activeWorktreePath);
     setState('statuses', statuses);
-  }
-
-  function getWorktrees(repoPath: string): WorktreeInfo[] {
-    return state.worktreesByRepo[repoPath] ?? [];
   }
 
   return {
     state,
+    getActiveRepo,
+    getActiveWorktree,
     loadRepos,
     restoreLastSession,
+    ensureWorktreesLoaded,
     addRepo,
     removeRepo,
     selectRepo,
-    selectWorktree,
+    selectRepoAndWorktree,
     createWorktree,
     refreshStatus,
-    getWorktrees,
   };
 }
 
