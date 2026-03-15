@@ -68,7 +68,8 @@ sudo apt-get install -y \
   libjavascriptcoregtk-4.1-dev \
   libsoup-3.0-dev \
   libgtk-3-dev \
-  libayatana-appindicator3-dev
+  libayatana-appindicator3-dev \
+  librsvg2-dev
 ```
 
 ## Getting Started
