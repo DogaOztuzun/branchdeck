@@ -1,0 +1,66 @@
+@import "tailwindcss";
+@import "@xterm/xterm/css/xterm.css";
+@import "solid-resizable-panels/styles.css";
+
+@theme {
+  --color-bg: #1a1b26;
+  --color-surface: #24283b;
+  --color-border: #414868;
+  --color-primary: #7aa2f7;
+  --color-text: #c0caf5;
+  --color-text-muted: #565f89;
+  --color-success: #9ece6a;
+  --color-warning: #e0af68;
+  --color-error: #f7768e;
+  --color-info: #7dcfff;
+  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+}
+
+/* Override solid-resizable-panels handle defaults (higher specificity) */
+.ResizeablePanelGroup .ResizeablePanelGroup-ResizeHandle {
+  background-color: transparent;
+  border-radius: 0;
+  position: relative;
+}
+.ResizeablePanelGroup-ResizeHandle::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background-color: var(--color-border);
+  transition:
+    width 150ms,
+    background-color 150ms;
+}
+.ResizeablePanelGroup-ResizeHandle:hover::after {
+  width: 3px;
+  background-color: var(--color-primary);
+}
+
+/* Dark scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 4px;
+}

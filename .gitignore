@@ -1,0 +1,6 @@
+node_modules
+dist
+target
+.claude/settings.local.json
+_bmad-output/
+
