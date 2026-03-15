@@ -13,6 +13,10 @@
 
 </div>
 
+<p align="center">
+  <img src="docs/assets/branchdeck-alpha-screenshot.png" alt="Branchdeck screenshot" width="800" />
+</p>
+
 ## Why Branchdeck?
 
 Branchdeck is a lightweight desktop app that combines git worktree navigation, embedded terminals, and one-click coding agent sessions into a single three-pane layout.
