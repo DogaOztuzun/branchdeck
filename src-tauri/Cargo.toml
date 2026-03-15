@@ -1,6 +1,6 @@
 [package]
 name = "branchdeck"
-version = "0.1.2"
+version = "0.2.0"
 description = "Terminal-first workflow manager for git repositories and worktrees"
 authors = ["Doga"]
 edition = "2021"
