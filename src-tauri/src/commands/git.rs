@@ -1,5 +1,5 @@
 use crate::error::AppError;
-use crate::models::{FileStatus, RepoInfo, WorktreeInfo};
+use crate::models::{FileStatus, RepoInfo, WorktreeInfo, WorktreePreview};
 use crate::services::{config, git};
 use std::path::PathBuf;
 use tauri_plugin_dialog::DialogExt;
@@ -68,6 +68,22 @@ pub fn create_worktree_cmd(
     branch: Option<String>,
 ) -> Result<WorktreeInfo, AppError> {
     git::create_worktree(&PathBuf::from(&repo_path), &name, branch.as_deref())
+}
+
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub fn remove_worktree_cmd(
+    repo_path: String,
+    worktree_name: String,
+    delete_branch: bool,
+) -> Result<(), AppError> {
+    git::remove_worktree(&PathBuf::from(&repo_path), &worktree_name, delete_branch)
+}
+
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub fn preview_worktree_cmd(repo_path: String, name: String) -> Result<WorktreePreview, AppError> {
+    git::preview_worktree(&PathBuf::from(&repo_path), &name)
 }
 
 #[tauri::command]

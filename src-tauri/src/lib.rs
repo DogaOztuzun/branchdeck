@@ -27,6 +27,8 @@ pub fn run() {
             commands::git::remove_repository,
             commands::git::list_worktrees_cmd,
             commands::git::create_worktree_cmd,
+            commands::git::remove_worktree_cmd,
+            commands::git::preview_worktree_cmd,
             commands::git::get_repo_status,
             commands::workspace::get_app_config,
             commands::workspace::save_app_config,

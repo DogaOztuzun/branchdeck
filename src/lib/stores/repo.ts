@@ -7,6 +7,7 @@ import {
   listRepositories,
   listWorktrees,
   removeRepository,
+  removeWorktree as removeWorktreeCmd,
 } from '../commands/git';
 import { getAppConfig, getRepoConfig, saveAppConfig, saveRepoConfig } from '../commands/workspace';
 
@@ -138,6 +139,33 @@ function createRepoStore() {
     persistState();
   }
 
+  async function removeWorktree(repoPath: string, worktreeName: string, deleteBranch: boolean) {
+    try {
+      await removeWorktreeCmd(repoPath, worktreeName, deleteBranch);
+    } catch (e) {
+      throw new Error(String(e));
+    }
+    setState(
+      produce((s) => {
+        const wts = s.worktreesByRepo[repoPath];
+        if (wts) {
+          s.worktreesByRepo[repoPath] = wts.filter((w) => w.name !== worktreeName);
+        }
+        if (s.activeWorktreePath) {
+          const stillExists = s.worktreesByRepo[repoPath]?.some(
+            (w) => w.path === s.activeWorktreePath,
+          );
+          if (!stillExists) {
+            const main = s.worktreesByRepo[repoPath]?.find((w) => w.isMain);
+            s.activeWorktreePath = main?.path ?? null;
+          }
+        }
+      }),
+    );
+    await refreshStatus();
+    persistState();
+  }
+
   async function createWorktree(repoPath: string, name: string, branch?: string) {
     const wt = await createWorktreeCmd(repoPath, name, branch);
     setState(
@@ -168,6 +196,7 @@ function createRepoStore() {
     ensureWorktreesLoaded,
     addRepo,
     removeRepo,
+    removeWorktree,
     selectRepo,
     selectRepoAndWorktree,
     createWorktree,
