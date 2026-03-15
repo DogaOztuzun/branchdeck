@@ -1,16 +1,25 @@
 import { createSignal, For, onMount, Show } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { getRepoStore } from '../../lib/stores/repo';
-import type { RepoInfo } from '../../types/git';
+import type { RepoInfo, WorktreeInfo } from '../../types/git';
 import { ContextMenu } from '../ui/ContextMenu';
+import { AddWorktreeModal } from '../worktree/AddWorktreeModal';
+import { DeleteWorktreeDialog } from '../worktree/DeleteWorktreeDialog';
 
 export function RepoSidebar() {
   const repoStore = getRepoStore();
   const [expandedRepos, setExpandedRepos] = createSignal<Set<string>>(new Set());
+  const [addWorktreeRepo, setAddWorktreeRepo] = createSignal<string | null>(null);
   const [contextMenu, setContextMenu] = createSignal<{
     x: number;
     y: number;
     repo: RepoInfo;
+  } | null>(null);
+  const [wtContextMenu, setWtContextMenu] = createSignal<{
+    x: number;
+    y: number;
+    repoPath: string;
+    wt: WorktreeInfo;
   } | null>(null);
 
   onMount(async () => {
@@ -30,6 +39,22 @@ export function RepoSidebar() {
       }
       return next;
     });
+  }
+
+  const [deleteError, setDeleteError] = createSignal<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = createSignal<{
+    repoPath: string;
+    wt: WorktreeInfo;
+  } | null>(null);
+
+  async function handleDeleteWorktree(repoPath: string, wtName: string, deleteBranch: boolean) {
+    setDeleteError(null);
+    setDeleteTarget(null);
+    try {
+      await repoStore.removeWorktree(repoPath, wtName, deleteBranch);
+    } catch (e) {
+      setDeleteError(String(e));
+    }
   }
 
   function handleContextMenu(e: MouseEvent, repo: RepoInfo) {
@@ -75,29 +100,38 @@ export function RepoSidebar() {
                       {(wt) => (
                         <button
                           type="button"
-                          class={`flex items-center w-full px-3 py-1 text-xs cursor-pointer hover:bg-bg/50 ${
+                          class={`flex items-center w-full px-3 py-1 text-xs cursor-pointer hover:bg-bg/50 group ${
                             repoStore.state.activeWorktreePath === wt.path
                               ? 'text-info'
                               : 'text-text-muted'
                           }`}
                           onClick={() => repoStore.selectRepoAndWorktree(repo.path, wt.path)}
+                          onContextMenu={(e) => {
+                            if (!wt.isMain) {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setWtContextMenu({
+                                x: e.clientX,
+                                y: e.clientY,
+                                repoPath: repo.path,
+                                wt,
+                              });
+                            }
+                          }}
                         >
+                          <span
+                            class={`mr-1.5 text-[10px] ${wt.isMain ? 'text-success' : 'text-text-muted/50'}`}
+                          >
+                            {wt.isMain ? '\u25CF' : '\u25CB'}
+                          </span>
                           <span class="truncate">{wt.branch || wt.name}</span>
-                          <Show when={wt.isMain}>
-                            <span class="ml-1 text-success">*</span>
-                          </Show>
                         </button>
                       )}
                     </For>
                     <button
                       type="button"
                       class="w-full px-3 py-1 text-xs text-text-muted hover:text-text cursor-pointer text-left hover:bg-bg/50"
-                      onClick={() => {
-                        const name = prompt('Worktree name:');
-                        if (name) {
-                          repoStore.createWorktree(repo.path, name);
-                        }
-                      }}
+                      onClick={() => setAddWorktreeRepo(repo.path)}
                     >
                       + New Worktree
                     </button>
@@ -108,6 +142,18 @@ export function RepoSidebar() {
           }}
         </For>
       </div>
+      <Show when={deleteError()}>
+        <div class="px-3 py-2 text-xs text-error border-t border-border">
+          {deleteError()}
+          <button
+            type="button"
+            class="ml-2 text-text-muted hover:text-text cursor-pointer"
+            onClick={() => setDeleteError(null)}
+          >
+            dismiss
+          </button>
+        </div>
+      </Show>
       <div class="p-2 border-t border-border">
         <button
           type="button"
@@ -117,6 +163,29 @@ export function RepoSidebar() {
           + Add Repository
         </button>
       </div>
+      <DeleteWorktreeDialog
+        open={deleteTarget() !== null}
+        worktreeName={deleteTarget()?.wt.name ?? ''}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={(deleteBranch) => {
+          const target = deleteTarget();
+          if (target) {
+            handleDeleteWorktree(target.repoPath, target.wt.name, deleteBranch);
+          }
+        }}
+      />
+      <AddWorktreeModal
+        open={addWorktreeRepo() !== null}
+        repoPath={addWorktreeRepo() ?? ''}
+        onClose={() => setAddWorktreeRepo(null)}
+        onCreate={(wt) => {
+          const repoPath = addWorktreeRepo();
+          setAddWorktreeRepo(null);
+          if (repoPath) {
+            repoStore.selectRepoAndWorktree(repoPath, wt.path);
+          }
+        }}
+      />
       <Show when={contextMenu()}>
         {(menu) => (
           <Portal>
@@ -131,6 +200,24 @@ export function RepoSidebar() {
                 },
               ]}
               onClose={() => setContextMenu(null)}
+            />
+          </Portal>
+        )}
+      </Show>
+      <Show when={wtContextMenu()}>
+        {(menu) => (
+          <Portal>
+            <ContextMenu
+              x={menu().x}
+              y={menu().y}
+              items={[
+                {
+                  label: 'Delete Worktree',
+                  variant: 'danger',
+                  onClick: () => setDeleteTarget({ repoPath: menu().repoPath, wt: menu().wt }),
+                },
+              ]}
+              onClose={() => setWtContextMenu(null)}
             />
           </Portal>
         )}
