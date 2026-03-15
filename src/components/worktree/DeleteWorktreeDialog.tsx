@@ -1,5 +1,5 @@
 import { Dialog } from '@kobalte/core';
-import { createSignal, Show } from 'solid-js';
+import { createEffect, createSignal, Show } from 'solid-js';
 
 type DeleteWorktreeDialogProps = {
   open: boolean;
@@ -10,6 +10,12 @@ type DeleteWorktreeDialogProps = {
 
 export function DeleteWorktreeDialog(props: DeleteWorktreeDialogProps) {
   const [deleteBranch, setDeleteBranch] = createSignal(true);
+
+  createEffect(() => {
+    if (props.open) {
+      setDeleteBranch(true);
+    }
+  });
 
   return (
     <Dialog.Root
