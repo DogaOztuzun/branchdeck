@@ -1,0 +1,125 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+      tag: ${{ steps.bump.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get current version
+        id: current
+        run: echo "version=$(jq -r .version package.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Bump version
+        id: bump
+        run: |
+          IFS='.' read -r major minor patch <<< "${{ steps.current.outputs.version }}"
+          case "${{ inputs.bump }}" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            patch) patch=$((patch + 1)) ;;
+          esac
+          VERSION="${major}.${minor}.${patch}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Bumping to ${VERSION}"
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Update version in all files
+        run: |
+          VERSION="${{ steps.bump.outputs.version }}"
+          # package.json
+          jq ".version = \"${VERSION}\"" package.json > tmp.json && mv tmp.json package.json
+          # src-tauri/tauri.conf.json
+          jq ".version = \"${VERSION}\"" src-tauri/tauri.conf.json > tmp.json && mv tmp.json src-tauri/tauri.conf.json
+          # src-tauri/Cargo.toml
+          sed -i "0,/^version = /s/^version = .*/version = \"${VERSION}\"/" src-tauri/Cargo.toml
+          # Update Cargo.lock
+          cd src-tauri && cargo update -p branchdeck --precise "${VERSION}" 2>/dev/null || cargo generate-lockfile
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
+          git commit -m "chore: release v${{ steps.bump.outputs.version }}"
+          git tag "${{ steps.bump.outputs.tag }}"
+          git push origin main --tags
+
+  build:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.tag }}
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev libgtk-3-dev libayatana-appindicator3-dev
+
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint check
+        run: bun run check
+
+      - name: Rust checks
+        working-directory: src-tauri
+        run: |
+          cargo fmt --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ needs.version.outputs.tag }}
+          releaseName: "Branchdeck ${{ needs.version.outputs.tag }}"
+          releaseBody: |
+            ## Branchdeck ${{ needs.version.outputs.tag }}
+
+            ### Install
+
+            **Debian/Ubuntu (.deb)**
+            ```bash
+            sudo dpkg -i branchdeck_${{ needs.version.outputs.version }}_amd64.deb
+            ```
+
+            **AppImage**
+            ```bash
+            chmod +x branchdeck_${{ needs.version.outputs.version }}_amd64.AppImage
+            ./branchdeck_${{ needs.version.outputs.version }}_amd64.AppImage
+            ```
+          releaseDraft: false
+          prerelease: true
+          includeUpdaterJson: false
+          args: --verbose
