@@ -1,6 +1,6 @@
 {
   "name": "branchdeck",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Terminal-first workflow manager for git repositories and worktrees",
   "type": "module",
   "scripts": {
