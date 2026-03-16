@@ -45,3 +45,11 @@ pub struct BranchInfo {
     pub is_head: bool,
     pub has_worktree: bool,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackingInfo {
+    pub ahead: usize,
+    pub behind: usize,
+    pub upstream_name: String,
+}

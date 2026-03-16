@@ -28,6 +28,12 @@ export type BranchInfo = {
   hasWorktree: boolean;
 };
 
+export type TrackingInfo = {
+  ahead: number;
+  behind: number;
+  upstreamName: string;
+};
+
 export type FileStatus = {
   path: string;
   status: string;

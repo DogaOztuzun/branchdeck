@@ -4,6 +4,7 @@ import type {
   BranchInfo,
   FileStatus,
   RepoInfo,
+  TrackingInfo,
   WorktreeInfo,
   WorktreePreview,
 } from '../../types/git';
@@ -90,6 +91,18 @@ export async function listBranches(repoPath: string): Promise<BranchInfo[]> {
     return await invoke<BranchInfo[]>('list_branches_cmd', { repoPath });
   } catch (e) {
     logError(`listBranches failed: ${e}`);
+    throw e;
+  }
+}
+
+export async function getBranchTracking(
+  repoPath: string,
+  branchName: string,
+): Promise<TrackingInfo | null> {
+  try {
+    return await invoke<TrackingInfo | null>('get_branch_tracking_cmd', { repoPath, branchName });
+  } catch (e) {
+    logError(`getBranchTracking failed: ${e}`);
     throw e;
   }
 }

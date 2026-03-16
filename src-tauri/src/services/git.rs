@@ -1,5 +1,7 @@
 use crate::error::AppError;
-use crate::models::{BranchInfo, FileStatus, RepoInfo, WorktreeInfo, WorktreePreview};
+use crate::models::{
+    BranchInfo, FileStatus, RepoInfo, TrackingInfo, WorktreeInfo, WorktreePreview,
+};
 use git2::{BranchType, Repository, StatusOptions};
 use log::{debug, error, info};
 use std::path::Path;
@@ -426,6 +428,50 @@ pub fn get_status(worktree_path: &Path) -> Result<Vec<FileStatus>, AppError> {
     );
 
     Ok(result)
+}
+
+pub fn get_branch_tracking(
+    repo_path: &Path,
+    branch_name: &str,
+) -> Result<Option<TrackingInfo>, AppError> {
+    let repo = Repository::open(repo_path)?;
+
+    let branch = match repo.find_branch(branch_name, BranchType::Local) {
+        Ok(b) => b,
+        Err(e) => {
+            debug!("Branch {branch_name:?} not found for tracking: {e}");
+            return Ok(None);
+        }
+    };
+
+    let upstream = match branch.upstream() {
+        Ok(u) => u,
+        Err(e) if e.code() == git2::ErrorCode::NotFound => {
+            debug!("No upstream for branch {branch_name:?}");
+            return Ok(None);
+        }
+        Err(e) => {
+            error!("Failed to get upstream for {branch_name:?}: {e}");
+            return Err(e.into());
+        }
+    };
+
+    let local_oid = branch.get().peel_to_commit()?.id();
+    let upstream_oid = upstream.get().peel_to_commit()?.id();
+
+    let (ahead, behind) = repo.graph_ahead_behind(local_oid, upstream_oid)?;
+
+    let upstream_name = upstream.name()?.unwrap_or("unknown").to_string();
+
+    debug!(
+        "Branch {branch_name:?} tracking: ahead={ahead}, behind={behind}, upstream={upstream_name:?}"
+    );
+
+    Ok(Some(TrackingInfo {
+        ahead,
+        behind,
+        upstream_name,
+    }))
 }
 
 fn format_status(status: git2::Status) -> String {

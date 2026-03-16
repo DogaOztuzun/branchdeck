@@ -1,8 +1,9 @@
 import { createStore, produce } from 'solid-js/store';
-import type { FileStatus, RepoInfo, WorktreeInfo } from '../../types/git';
+import type { FileStatus, RepoInfo, TrackingInfo, WorktreeInfo } from '../../types/git';
 import {
   addRepository,
   createWorktree as createWorktreeCmd,
+  getBranchTracking,
   getRepoStatus,
   listRepositories,
   listWorktrees,
@@ -17,6 +18,7 @@ type RepoState = {
   worktreesByRepo: Record<string, WorktreeInfo[]>;
   activeWorktreePath: string | null;
   statuses: FileStatus[];
+  trackingByBranch: Record<string, TrackingInfo | null>;
 };
 
 function createRepoStore() {
@@ -26,6 +28,7 @@ function createRepoStore() {
     worktreesByRepo: {},
     activeWorktreePath: null,
     statuses: [],
+    trackingByBranch: {},
   });
 
   function getActiveRepo(): RepoInfo | null {
@@ -56,6 +59,7 @@ function createRepoStore() {
     setState('activeRepoPath', lastRepo.path);
     const wts = await listWorktrees(lastRepo.path);
     setState('worktreesByRepo', lastRepo.path, wts);
+    loadBranchTracking(lastRepo.path);
 
     const repoConfig = await getRepoConfig(lastRepo.path);
     const targetWt = repoConfig.lastWorktree
@@ -107,11 +111,31 @@ function createRepoStore() {
     persistState();
   }
 
+  async function loadBranchTracking(repoPath: string) {
+    const wts = state.worktreesByRepo[repoPath] ?? [];
+    const branches = wts.map((w) => w.branch).filter(Boolean);
+    for (const branch of branches) {
+      try {
+        const tracking = await getBranchTracking(repoPath, branch);
+        setState('trackingByBranch', branch, tracking);
+      } catch {
+        // Tracking is best-effort
+      }
+    }
+  }
+
+  async function refreshTracking() {
+    if (state.activeRepoPath) {
+      await loadBranchTracking(state.activeRepoPath);
+    }
+  }
+
   async function ensureWorktreesLoaded(repoPath: string) {
     if (!state.worktreesByRepo[repoPath]) {
       const wts = await listWorktrees(repoPath);
       setState('worktreesByRepo', repoPath, wts);
     }
+    loadBranchTracking(repoPath);
   }
 
   async function selectRepo(repoPath: string) {
@@ -206,6 +230,8 @@ function createRepoStore() {
     selectRepoAndWorktree,
     createWorktree,
     refreshStatus,
+    loadBranchTracking,
+    refreshTracking,
   };
 }
 

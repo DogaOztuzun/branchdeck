@@ -1,5 +1,7 @@
 use crate::error::AppError;
-use crate::models::{BranchInfo, FileStatus, RepoInfo, WorktreeInfo, WorktreePreview};
+use crate::models::{
+    BranchInfo, FileStatus, RepoInfo, TrackingInfo, WorktreeInfo, WorktreePreview,
+};
 use crate::services::{config, git};
 use std::path::PathBuf;
 use tauri_plugin_dialog::DialogExt;
@@ -102,4 +104,13 @@ pub fn get_repo_status(worktree_path: String) -> Result<Vec<FileStatus>, AppErro
 #[allow(clippy::needless_pass_by_value)]
 pub fn list_branches_cmd(repo_path: String) -> Result<Vec<BranchInfo>, AppError> {
     git::list_branches(&PathBuf::from(&repo_path))
+}
+
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub fn get_branch_tracking_cmd(
+    repo_path: String,
+    branch_name: String,
+) -> Result<Option<TrackingInfo>, AppError> {
+    git::get_branch_tracking(&PathBuf::from(&repo_path), &branch_name)
 }

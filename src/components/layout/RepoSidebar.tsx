@@ -1,4 +1,4 @@
-import { createSignal, For, onMount, Show } from 'solid-js';
+import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { getRepoStore } from '../../lib/stores/repo';
 import type { RepoInfo, WorktreeInfo } from '../../types/git';
@@ -30,6 +30,12 @@ export function RepoSidebar() {
       setExpandedRepos(new Set([repoStore.state.activeRepoPath]));
     }
   });
+
+  // Refresh branch tracking every 60s
+  const trackingInterval = setInterval(() => {
+    repoStore.refreshTracking();
+  }, 60_000);
+  onCleanup(() => clearInterval(trackingInterval));
 
   function toggleExpanded(repoPath: string) {
     setExpandedRepos((prev) => {
@@ -127,6 +133,27 @@ export function RepoSidebar() {
                             {wt.isMain ? '\u25CF' : '\u25CB'}
                           </span>
                           <span class="truncate">{wt.branch || wt.name}</span>
+                          {(() => {
+                            const tracking = repoStore.state.trackingByBranch[wt.branch];
+                            if (!tracking || (tracking.ahead === 0 && tracking.behind === 0))
+                              return null;
+                            return (
+                              <span class="ml-auto flex gap-1 text-[10px] shrink-0">
+                                {tracking.ahead > 0 && (
+                                  <span class="text-success">
+                                    {'\u2191'}
+                                    {tracking.ahead}
+                                  </span>
+                                )}
+                                {tracking.behind > 0 && (
+                                  <span class="text-error">
+                                    {'\u2193'}
+                                    {tracking.behind}
+                                  </span>
+                                )}
+                              </span>
+                            );
+                          })()}
                         </button>
                       )}
                     </For>
