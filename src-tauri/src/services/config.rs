@@ -1,4 +1,5 @@
 use crate::error::AppError;
+use log::{debug, error, info};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
@@ -28,6 +29,18 @@ pub struct RepoConfig {
     pub path: String,
     pub last_worktree: Option<String>,
     pub sidebar_collapsed: bool,
+    #[serde(default)]
+    pub presets: Vec<Preset>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Preset {
+    pub name: String,
+    pub command: String,
+    pub tab_type: String,
+    #[serde(default)]
+    pub env: std::collections::HashMap<String, String>,
 }
 
 impl Default for GlobalConfig {
@@ -75,7 +88,14 @@ pub fn load_global_config() -> Result<GlobalConfig, AppError> {
     }
 
     let contents = std::fs::read_to_string(&path)?;
-    serde_json::from_str(&contents).map_err(|e| AppError::Config(e.to_string()))
+    let config = serde_json::from_str(&contents).map_err(|e| {
+        error!("Failed to parse global config: {e}");
+        AppError::Config(e.to_string())
+    })?;
+
+    debug!("Loaded global config from {}", path.display());
+
+    Ok(config)
 }
 
 pub fn save_global_config(config: &GlobalConfig) -> Result<(), AppError> {
@@ -83,6 +103,7 @@ pub fn save_global_config(config: &GlobalConfig) -> Result<(), AppError> {
     let contents =
         serde_json::to_string_pretty(config).map_err(|e| AppError::Config(e.to_string()))?;
     std::fs::write(&path, contents)?;
+    info!("Saved global config to {}", path.display());
     Ok(())
 }
 
@@ -97,7 +118,14 @@ pub fn load_repo_config(repo_path: &str) -> Result<RepoConfig, AppError> {
     }
 
     let contents = std::fs::read_to_string(&path)?;
-    serde_json::from_str(&contents).map_err(|e| AppError::Config(e.to_string()))
+    let config = serde_json::from_str(&contents).map_err(|e| {
+        error!("Failed to parse repo config for {repo_path:?}: {e}");
+        AppError::Config(e.to_string())
+    })?;
+
+    debug!("Loaded repo config for {repo_path:?}");
+
+    Ok(config)
 }
 
 pub fn save_repo_config(repo_path: &str, config: &RepoConfig) -> Result<(), AppError> {
@@ -105,5 +133,6 @@ pub fn save_repo_config(repo_path: &str, config: &RepoConfig) -> Result<(), AppE
     let contents =
         serde_json::to_string_pretty(config).map_err(|e| AppError::Config(e.to_string()))?;
     std::fs::write(&path, contents)?;
+    info!("Saved repo config for {repo_path:?}");
     Ok(())
 }

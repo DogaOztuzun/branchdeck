@@ -1,5 +1,7 @@
 use crate::error::AppError;
-use crate::models::{FileStatus, RepoInfo, WorktreeInfo, WorktreePreview};
+use crate::models::{
+    BranchInfo, FileStatus, RepoInfo, TrackingInfo, WorktreeInfo, WorktreePreview,
+};
 use crate::services::{config, git};
 use std::path::PathBuf;
 use tauri_plugin_dialog::DialogExt;
@@ -66,8 +68,14 @@ pub fn create_worktree_cmd(
     repo_path: String,
     name: String,
     branch: Option<String>,
+    base_branch: Option<String>,
 ) -> Result<WorktreeInfo, AppError> {
-    git::create_worktree(&PathBuf::from(&repo_path), &name, branch.as_deref())
+    git::create_worktree(
+        &PathBuf::from(&repo_path),
+        &name,
+        branch.as_deref(),
+        base_branch.as_deref(),
+    )
 }
 
 #[tauri::command]
@@ -90,4 +98,19 @@ pub fn preview_worktree_cmd(repo_path: String, name: String) -> Result<WorktreeP
 #[allow(clippy::needless_pass_by_value)]
 pub fn get_repo_status(worktree_path: String) -> Result<Vec<FileStatus>, AppError> {
     git::get_status(&PathBuf::from(&worktree_path))
+}
+
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub fn list_branches_cmd(repo_path: String) -> Result<Vec<BranchInfo>, AppError> {
+    git::list_branches(&PathBuf::from(&repo_path))
+}
+
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub fn get_branch_tracking_cmd(
+    repo_path: String,
+    branch_name: String,
+) -> Result<Option<TrackingInfo>, AppError> {
+    git::get_branch_tracking(&PathBuf::from(&repo_path), &branch_name)
 }

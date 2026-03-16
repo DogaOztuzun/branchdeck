@@ -1,15 +1,18 @@
-import { createSignal, For, onMount, Show } from 'solid-js';
+import { openUrl } from '@tauri-apps/plugin-opener';
+import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { getRepoStore } from '../../lib/stores/repo';
 import type { RepoInfo, WorktreeInfo } from '../../types/git';
 import { ContextMenu } from '../ui/ContextMenu';
 import { AddWorktreeModal } from '../worktree/AddWorktreeModal';
+import { BranchWorktreeModal } from '../worktree/BranchWorktreeModal';
 import { DeleteWorktreeDialog } from '../worktree/DeleteWorktreeDialog';
 
 export function RepoSidebar() {
   const repoStore = getRepoStore();
   const [expandedRepos, setExpandedRepos] = createSignal<Set<string>>(new Set());
   const [addWorktreeRepo, setAddWorktreeRepo] = createSignal<string | null>(null);
+  const [branchWorktreeRepo, setBranchWorktreeRepo] = createSignal<string | null>(null);
   const [contextMenu, setContextMenu] = createSignal<{
     x: number;
     y: number;
@@ -28,6 +31,18 @@ export function RepoSidebar() {
       setExpandedRepos(new Set([repoStore.state.activeRepoPath]));
     }
   });
+
+  // Refresh branch tracking every 60s
+  const trackingInterval = setInterval(() => {
+    repoStore.refreshTracking();
+  }, 60_000);
+  onCleanup(() => clearInterval(trackingInterval));
+
+  // Refresh PR status every 300s (matches cache TTL)
+  const prInterval = setInterval(() => {
+    repoStore.refreshPrStatus();
+  }, 300_000);
+  onCleanup(() => clearInterval(prInterval));
 
   function toggleExpanded(repoPath: string) {
     setExpandedRepos((prev) => {
@@ -125,6 +140,55 @@ export function RepoSidebar() {
                             {wt.isMain ? '\u25CF' : '\u25CB'}
                           </span>
                           <span class="truncate">{wt.branch || wt.name}</span>
+                          {(() => {
+                            const tracking = repoStore.state.trackingByBranch[wt.branch];
+                            if (!tracking || (tracking.ahead === 0 && tracking.behind === 0))
+                              return null;
+                            return (
+                              <span class="ml-auto flex gap-1 text-[10px] shrink-0">
+                                {tracking.ahead > 0 && (
+                                  <span class="text-success">
+                                    {'\u2191'}
+                                    {tracking.ahead}
+                                  </span>
+                                )}
+                                {tracking.behind > 0 && (
+                                  <span class="text-error">
+                                    {'\u2193'}
+                                    {tracking.behind}
+                                  </span>
+                                )}
+                              </span>
+                            );
+                          })()}
+                          {(() => {
+                            const pr = repoStore.state.prByBranch[wt.branch];
+                            if (!pr) return null;
+                            const colors: Record<string, string> = {
+                              open: 'text-[#7aa2f7]',
+                              draft: 'text-[#565f89]',
+                              merged: 'text-[#bb9af7]',
+                              closed: 'text-[#f7768e]',
+                            };
+                            const colorClass = pr.isDraft
+                              ? colors.draft
+                              : (colors[pr.state] ?? 'text-text-muted');
+                            return (
+                              <button
+                                type="button"
+                                class={`ml-1 text-[10px] shrink-0 cursor-pointer hover:underline ${colorClass}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (pr.url) {
+                                    openUrl(pr.url);
+                                  }
+                                }}
+                                title={pr.title}
+                              >
+                                PR #{pr.number}
+                              </button>
+                            );
+                          })()}
                         </button>
                       )}
                     </For>
@@ -186,6 +250,18 @@ export function RepoSidebar() {
           }
         }}
       />
+      <BranchWorktreeModal
+        open={branchWorktreeRepo() !== null}
+        repoPath={branchWorktreeRepo() ?? ''}
+        onClose={() => setBranchWorktreeRepo(null)}
+        onCreate={(wt) => {
+          const repoPath = branchWorktreeRepo();
+          setBranchWorktreeRepo(null);
+          if (repoPath) {
+            repoStore.selectRepoAndWorktree(repoPath, wt.path);
+          }
+        }}
+      />
       <Show when={contextMenu()}>
         {(menu) => (
           <Portal>
@@ -193,6 +269,10 @@ export function RepoSidebar() {
               x={menu().x}
               y={menu().y}
               items={[
+                {
+                  label: 'Checkout Branch',
+                  onClick: () => setBranchWorktreeRepo(menu().repo.path),
+                },
                 {
                   label: 'Close Project',
                   variant: 'danger',

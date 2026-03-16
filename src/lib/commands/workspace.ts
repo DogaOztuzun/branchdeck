@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { error as logError } from '@tauri-apps/plugin-log';
 
 export type GlobalConfig = {
   window: { width: number; height: number; x: number; y: number };
@@ -13,18 +14,63 @@ export type RepoConfig = {
   sidebarCollapsed: boolean;
 };
 
+export type Preset = {
+  name: string;
+  command: string;
+  tabType: 'shell' | 'claude';
+  env: Record<string, string>;
+};
+
 export async function getAppConfig(): Promise<GlobalConfig> {
-  return await invoke<GlobalConfig>('get_app_config');
+  try {
+    return await invoke<GlobalConfig>('get_app_config');
+  } catch (e) {
+    logError(`getAppConfig failed: ${e}`);
+    throw e;
+  }
 }
 
 export async function saveAppConfig(config: GlobalConfig): Promise<void> {
-  await invoke('save_app_config', { config });
+  try {
+    await invoke('save_app_config', { config });
+  } catch (e) {
+    logError(`saveAppConfig failed: ${e}`);
+    throw e;
+  }
 }
 
 export async function getRepoConfig(repoPath: string): Promise<RepoConfig> {
-  return await invoke<RepoConfig>('get_repo_config', { repoPath });
+  try {
+    return await invoke<RepoConfig>('get_repo_config', { repoPath });
+  } catch (e) {
+    logError(`getRepoConfig failed: ${e}`);
+    throw e;
+  }
 }
 
 export async function saveRepoConfig(repoPath: string, config: RepoConfig): Promise<void> {
-  await invoke('save_repo_config_cmd', { repoPath, config });
+  try {
+    await invoke('save_repo_config_cmd', { repoPath, config });
+  } catch (e) {
+    logError(`saveRepoConfig failed: ${e}`);
+    throw e;
+  }
+}
+
+export async function getPresets(repoPath: string): Promise<Preset[]> {
+  try {
+    return await invoke<Preset[]>('get_presets', { repoPath });
+  } catch (e) {
+    logError(`getPresets failed: ${e}`);
+    throw e;
+  }
+}
+
+export async function savePresets(repoPath: string, presets: Preset[]): Promise<void> {
+  try {
+    await invoke('save_presets', { repoPath, presets });
+  } catch (e) {
+    logError(`savePresets failed: ${e}`);
+    throw e;
+  }
 }

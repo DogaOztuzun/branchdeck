@@ -36,3 +36,31 @@ pub struct FileStatus {
     pub path: String,
     pub status: String,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchInfo {
+    pub name: String,
+    pub is_remote: bool,
+    pub is_head: bool,
+    pub has_worktree: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackingInfo {
+    pub ahead: usize,
+    pub behind: usize,
+    pub upstream_name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PrInfo {
+    pub number: u64,
+    pub title: String,
+    pub state: String,
+    pub is_draft: bool,
+    pub url: String,
+    pub ci_status: Option<String>,
+}

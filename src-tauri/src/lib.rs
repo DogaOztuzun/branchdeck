@@ -5,6 +5,7 @@ mod services;
 
 use std::sync::Mutex;
 use tauri::Manager;
+use tauri_plugin_log::{Target, TargetKind};
 
 /// # Panics
 ///
@@ -16,6 +17,16 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .targets([
+                    Target::new(TargetKind::Stdout),
+                    Target::new(TargetKind::LogDir { file_name: None }),
+                ])
+                .level(log::LevelFilter::Info)
+                .level_for("branchdeck_lib", log::LevelFilter::Debug)
+                .build(),
+        )
         .manage(Mutex::new(services::terminal::TerminalService::new()))
         .invoke_handler(tauri::generate_handler![
             commands::terminal::create_terminal_session,
@@ -30,10 +41,16 @@ pub fn run() {
             commands::git::remove_worktree_cmd,
             commands::git::preview_worktree_cmd,
             commands::git::get_repo_status,
+            commands::git::list_branches_cmd,
+            commands::git::get_branch_tracking_cmd,
             commands::workspace::get_app_config,
             commands::workspace::save_app_config,
             commands::workspace::get_repo_config,
             commands::workspace::save_repo_config_cmd,
+            commands::workspace::get_presets,
+            commands::workspace::save_presets,
+            commands::github::get_pr_status,
+            commands::github::check_github_available,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {

@@ -13,6 +13,9 @@ pub enum AppError {
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+
+    #[error("GitHub error: {0}")]
+    GitHub(String),
 }
 
 // Tauri requires Serialize for error types returned from commands

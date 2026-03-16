@@ -1,14 +1,17 @@
 import { createStore, produce } from 'solid-js/store';
-import type { FileStatus, RepoInfo, WorktreeInfo } from '../../types/git';
+import type { FileStatus, RepoInfo, TrackingInfo, WorktreeInfo } from '../../types/git';
+import type { PrInfo } from '../../types/github';
 import {
   addRepository,
   createWorktree as createWorktreeCmd,
+  getBranchTracking,
   getRepoStatus,
   listRepositories,
   listWorktrees,
   removeRepository,
   removeWorktree as removeWorktreeCmd,
 } from '../commands/git';
+import { checkGithubAvailable, getPrStatus } from '../commands/github';
 import { getAppConfig, getRepoConfig, saveAppConfig, saveRepoConfig } from '../commands/workspace';
 
 type RepoState = {
@@ -17,6 +20,9 @@ type RepoState = {
   worktreesByRepo: Record<string, WorktreeInfo[]>;
   activeWorktreePath: string | null;
   statuses: FileStatus[];
+  trackingByBranch: Record<string, TrackingInfo | null>;
+  prByBranch: Record<string, PrInfo | null>;
+  githubAvailable: boolean;
 };
 
 function createRepoStore() {
@@ -26,6 +32,9 @@ function createRepoStore() {
     worktreesByRepo: {},
     activeWorktreePath: null,
     statuses: [],
+    trackingByBranch: {},
+    prByBranch: {},
+    githubAvailable: false,
   });
 
   function getActiveRepo(): RepoInfo | null {
@@ -45,6 +54,7 @@ function createRepoStore() {
   }
 
   async function restoreLastSession() {
+    checkGithubAvailable().then((available) => setState('githubAvailable', available));
     await loadRepos();
 
     const config = await getAppConfig();
@@ -56,6 +66,8 @@ function createRepoStore() {
     setState('activeRepoPath', lastRepo.path);
     const wts = await listWorktrees(lastRepo.path);
     setState('worktreesByRepo', lastRepo.path, wts);
+    loadBranchTracking(lastRepo.path);
+    loadPrStatus(lastRepo.path);
 
     const repoConfig = await getRepoConfig(lastRepo.path);
     const targetWt = repoConfig.lastWorktree
@@ -107,11 +119,52 @@ function createRepoStore() {
     persistState();
   }
 
+  async function loadBranchTracking(repoPath: string) {
+    const wts = state.worktreesByRepo[repoPath] ?? [];
+    const branches = wts.map((w) => w.branch).filter(Boolean);
+    for (const branch of branches) {
+      try {
+        const tracking = await getBranchTracking(repoPath, branch);
+        setState('trackingByBranch', branch, tracking);
+      } catch {
+        // Tracking is best-effort
+      }
+    }
+  }
+
+  async function refreshTracking() {
+    if (state.activeRepoPath) {
+      await loadBranchTracking(state.activeRepoPath);
+    }
+  }
+
+  async function loadPrStatus(repoPath: string) {
+    if (!state.githubAvailable) return;
+    const wts = state.worktreesByRepo[repoPath] ?? [];
+    const branches = wts.map((w) => w.branch).filter(Boolean);
+    for (const branch of branches) {
+      try {
+        const pr = await getPrStatus(repoPath, branch);
+        setState('prByBranch', branch, pr);
+      } catch {
+        // PR status is best-effort
+      }
+    }
+  }
+
+  async function refreshPrStatus() {
+    if (state.activeRepoPath) {
+      await loadPrStatus(state.activeRepoPath);
+    }
+  }
+
   async function ensureWorktreesLoaded(repoPath: string) {
     if (!state.worktreesByRepo[repoPath]) {
       const wts = await listWorktrees(repoPath);
       setState('worktreesByRepo', repoPath, wts);
     }
+    loadBranchTracking(repoPath);
+    loadPrStatus(repoPath);
   }
 
   async function selectRepo(repoPath: string) {
@@ -166,8 +219,13 @@ function createRepoStore() {
     persistState();
   }
 
-  async function createWorktree(repoPath: string, name: string, branch?: string) {
-    const wt = await createWorktreeCmd(repoPath, name, branch);
+  async function createWorktree(
+    repoPath: string,
+    name: string,
+    branch?: string,
+    baseBranch?: string,
+  ) {
+    const wt = await createWorktreeCmd(repoPath, name, branch, baseBranch);
     setState(
       produce((s) => {
         const existing = s.worktreesByRepo[repoPath] ?? [];
@@ -201,6 +259,10 @@ function createRepoStore() {
     selectRepoAndWorktree,
     createWorktree,
     refreshStatus,
+    loadBranchTracking,
+    refreshTracking,
+    loadPrStatus,
+    refreshPrStatus,
   };
 }
 
