@@ -1,6 +1,9 @@
-import { createMemo, For, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, Show } from 'solid-js';
+import type { Preset } from '../../lib/commands/workspace';
+import { getPresets } from '../../lib/commands/workspace';
 import { getRepoStore } from '../../lib/stores/repo';
 import { getTerminalStore } from '../../lib/stores/terminal';
+import { PresetManager } from './PresetManager';
 import { TabBar } from './TabBar';
 import { TerminalView } from './TerminalView';
 
@@ -9,6 +12,7 @@ export function TerminalArea() {
   const repoStore = getRepoStore();
 
   const worktreePath = () => repoStore.state.activeWorktreePath ?? '';
+  const repoPath = () => repoStore.state.activeRepoPath ?? '';
 
   const visibleTabs = createMemo(() =>
     terminalStore.state.tabs.filter((t) => t.worktreePath === worktreePath()),
@@ -17,6 +21,23 @@ export function TerminalArea() {
   const activeTabId = createMemo(
     () => terminalStore.state.activeTabByWorktree[worktreePath()] ?? null,
   );
+
+  const [presets, setPresets] = createSignal<Preset[]>([]);
+  const [presetManagerOpen, setPresetManagerOpen] = createSignal(false);
+  const [presetVersion, setPresetVersion] = createSignal(0);
+
+  createEffect(() => {
+    const repo = repoPath();
+    // Track presetVersion to reload when presets change
+    presetVersion();
+    if (repo) {
+      getPresets(repo)
+        .then((result) => setPresets(result))
+        .catch(() => setPresets([]));
+    } else {
+      setPresets([]);
+    }
+  });
 
   return (
     <div class="flex flex-col h-full">
@@ -27,6 +48,9 @@ export function TerminalArea() {
         onCloseTab={(id) => terminalStore.closeTab(id)}
         onNewShell={() => terminalStore.openShellTab(worktreePath())}
         onNewClaude={() => terminalStore.openClaudeTab(worktreePath())}
+        presets={presets()}
+        onRunPreset={(preset) => terminalStore.runPreset(worktreePath(), preset)}
+        onManagePresets={() => setPresetManagerOpen(true)}
       />
       <div class="flex-1 relative">
         {/* Empty state — shown above terminals, does not unmount them */}
@@ -67,6 +91,12 @@ export function TerminalArea() {
           )}
         </For>
       </div>
+      <PresetManager
+        open={presetManagerOpen()}
+        repoPath={repoPath()}
+        onClose={() => setPresetManagerOpen(false)}
+        onPresetsChanged={() => setPresetVersion((v) => v + 1)}
+      />
     </div>
   );
 }

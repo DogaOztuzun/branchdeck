@@ -1,4 +1,5 @@
 import { createSignal, For, Show } from 'solid-js';
+import type { Preset } from '../../lib/commands/workspace';
 import type { TabInfo } from '../../types/terminal';
 
 type TabBarProps = {
@@ -8,6 +9,9 @@ type TabBarProps = {
   onCloseTab: (tabId: string) => void;
   onNewShell: () => void;
   onNewClaude: () => void;
+  presets: Preset[];
+  onRunPreset: (preset: Preset) => void;
+  onManagePresets: () => void;
 };
 
 export function TabBar(props: TabBarProps) {
@@ -78,6 +82,35 @@ export function TabBar(props: TabBarProps) {
             >
               New Claude Code
               <span class="ml-2 text-text-muted">Ctrl+Shift+A</span>
+            </button>
+            <Show when={props.presets.length > 0}>
+              <div class="border-t border-border my-1" />
+              <For each={props.presets}>
+                {(preset) => (
+                  <button
+                    type="button"
+                    class="flex items-center gap-2 w-full text-left px-3 py-2 text-xs text-text hover:bg-bg cursor-pointer"
+                    onClick={() => {
+                      props.onRunPreset(preset);
+                      setMenuOpen(false);
+                    }}
+                  >
+                    <span>{preset.name}</span>
+                    <span class="ml-auto text-text-muted text-[10px]">{preset.tabType}</span>
+                  </button>
+                )}
+              </For>
+            </Show>
+            <div class="border-t border-border my-1" />
+            <button
+              type="button"
+              class="block w-full text-left px-3 py-2 text-xs text-text-muted hover:text-text hover:bg-bg cursor-pointer"
+              onClick={() => {
+                props.onManagePresets();
+                setMenuOpen(false);
+              }}
+            >
+              Manage Presets...
             </button>
           </div>
         </Show>

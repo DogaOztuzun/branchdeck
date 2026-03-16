@@ -1,6 +1,7 @@
 import { createStore, produce } from 'solid-js/store';
 import type { PtyEvent, TabInfo } from '../../types/terminal';
 import { closeTerminal, createTerminalSession, writeTerminal } from '../commands/terminal';
+import type { Preset } from '../commands/workspace';
 
 type TerminalState = {
   tabs: TabInfo[];
@@ -95,6 +96,49 @@ function createTerminalStore() {
     await writeTerminal(sessionId, encoder.encode('claude --dangerously-skip-permissions\n'));
   }
 
+  async function runPreset(worktreePath: string, preset: Preset) {
+    if (preset.tabType === 'claude') {
+      await openClaudeTab(worktreePath);
+      // The claude tab auto-writes the claude command. Now write the preset command after a short delay.
+      const tabs = getTabsForWorktree(worktreePath);
+      const lastTab = tabs[tabs.length - 1];
+      if (lastTab && preset.command) {
+        const encoder = new TextEncoder();
+        // Small delay to let claude code start
+        setTimeout(async () => {
+          await writeTerminal(lastTab.sessionId, encoder.encode(`${preset.command}\n`));
+        }, 500);
+      }
+    } else {
+      const tabId = crypto.randomUUID();
+      let resolvedSessionId = '';
+      const sessionId = await createTerminalSession(worktreePath, '', preset.env, (event) =>
+        handlePtyEvent(resolvedSessionId, event),
+      );
+      resolvedSessionId = sessionId;
+
+      const tab: TabInfo = {
+        id: tabId,
+        sessionId,
+        title: preset.name,
+        type: 'shell',
+        worktreePath,
+      };
+
+      setState(
+        produce((s) => {
+          s.tabs.push(tab);
+          s.activeTabByWorktree[worktreePath] = tabId;
+        }),
+      );
+
+      if (preset.command) {
+        const encoder = new TextEncoder();
+        await writeTerminal(sessionId, encoder.encode(`${preset.command}\n`));
+      }
+    }
+  }
+
   async function closeTab(tabId: string) {
     const tab = state.tabs.find((t) => t.id === tabId);
     if (!tab) return;
@@ -139,6 +183,7 @@ function createTerminalStore() {
     getActiveTabId,
     openShellTab,
     openClaudeTab,
+    runPreset,
     closeTab,
     setActiveTab,
     registerOutputHandler,

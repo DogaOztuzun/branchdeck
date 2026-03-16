@@ -29,6 +29,18 @@ pub struct RepoConfig {
     pub path: String,
     pub last_worktree: Option<String>,
     pub sidebar_collapsed: bool,
+    #[serde(default)]
+    pub presets: Vec<Preset>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Preset {
+    pub name: String,
+    pub command: String,
+    pub tab_type: String,
+    #[serde(default)]
+    pub env: std::collections::HashMap<String, String>,
 }
 
 impl Default for GlobalConfig {

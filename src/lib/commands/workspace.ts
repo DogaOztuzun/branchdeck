@@ -14,6 +14,13 @@ export type RepoConfig = {
   sidebarCollapsed: boolean;
 };
 
+export type Preset = {
+  name: string;
+  command: string;
+  tabType: 'shell' | 'claude';
+  env: Record<string, string>;
+};
+
 export async function getAppConfig(): Promise<GlobalConfig> {
   try {
     return await invoke<GlobalConfig>('get_app_config');
@@ -46,6 +53,24 @@ export async function saveRepoConfig(repoPath: string, config: RepoConfig): Prom
     await invoke('save_repo_config_cmd', { repoPath, config });
   } catch (e) {
     logError(`saveRepoConfig failed: ${e}`);
+    throw e;
+  }
+}
+
+export async function getPresets(repoPath: string): Promise<Preset[]> {
+  try {
+    return await invoke<Preset[]>('get_presets', { repoPath });
+  } catch (e) {
+    logError(`getPresets failed: ${e}`);
+    throw e;
+  }
+}
+
+export async function savePresets(repoPath: string, presets: Preset[]): Promise<void> {
+  try {
+    await invoke('save_presets', { repoPath, presets });
+  } catch (e) {
+    logError(`savePresets failed: ${e}`);
     throw e;
   }
 }
