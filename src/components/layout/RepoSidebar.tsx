@@ -1,4 +1,4 @@
-import { open } from '@tauri-apps/plugin-opener';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { getRepoStore } from '../../lib/stores/repo';
@@ -180,7 +180,7 @@ export function RepoSidebar() {
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (pr.url) {
-                                    open(pr.url);
+                                    openUrl(pr.url);
                                   }
                                 }}
                                 title={pr.title}
