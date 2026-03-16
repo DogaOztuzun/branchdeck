@@ -1,7 +1,7 @@
 use crate::error::AppError;
 use crate::models::{FileStatus, RepoInfo, WorktreeInfo, WorktreePreview};
 use git2::{Repository, StatusOptions};
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use std::path::Path;
 
 pub fn sanitize_worktree_name(name: &str) -> String {
@@ -109,8 +109,14 @@ pub fn list_worktrees(repo_path: &Path) -> Result<Vec<WorktreeInfo>, AppError> {
         e
     })?;
     for wt_name in worktrees.iter().flatten() {
-        let wt = repo.find_worktree(wt_name)?;
-        let wt_repo = Repository::open_from_worktree(&wt)?;
+        let wt = repo.find_worktree(wt_name).map_err(|e| {
+            error!("Failed to find worktree {wt_name:?}: {e}");
+            e
+        })?;
+        let wt_repo = Repository::open_from_worktree(&wt).map_err(|e| {
+            error!("Failed to open worktree repo {wt_name:?}: {e}");
+            e
+        })?;
 
         let branch = wt_repo
             .head()
@@ -128,7 +134,11 @@ pub fn list_worktrees(repo_path: &Path) -> Result<Vec<WorktreeInfo>, AppError> {
         });
     }
 
-    debug!("Listed {} worktrees for {}", result.len(), repo_path.display());
+    debug!(
+        "Listed {} worktrees for {}",
+        result.len(),
+        repo_path.display()
+    );
 
     Ok(result)
 }
@@ -160,7 +170,7 @@ pub fn create_worktree(
         .find_branch(&branch_name, git2::BranchType::Local)
         .is_ok()
     {
-        warn!("Branch {branch_name:?} already exists, reusing for worktree");
+        debug!("Branch {branch_name:?} already exists, reusing for worktree");
         format!("refs/heads/{branch_name}")
     } else {
         let new_branch = repo.branch(&branch_name, &head_commit, false)?;
@@ -179,7 +189,10 @@ pub fn create_worktree(
         Some(git2::WorktreeAddOptions::new().reference(Some(&reference))),
     )?;
 
-    info!("Created worktree {sanitized:?} on branch {branch_name:?} at {}", target_path.display());
+    info!(
+        "Created worktree {sanitized:?} on branch {branch_name:?} at {}",
+        target_path.display()
+    );
 
     Ok(WorktreeInfo {
         name: sanitized,
@@ -230,7 +243,10 @@ pub fn remove_worktree(
         }
     }
 
-    info!("Removed worktree {worktree_name:?} from {}", repo_path.display());
+    info!(
+        "Removed worktree {worktree_name:?} from {}",
+        repo_path.display()
+    );
 
     Ok(())
 }
@@ -299,7 +315,11 @@ pub fn get_status(worktree_path: &Path) -> Result<Vec<FileStatus>, AppError> {
         })
         .collect();
 
-    debug!("Got {} status entries for {}", result.len(), worktree_path.display());
+    debug!(
+        "Got {} status entries for {}",
+        result.len(),
+        worktree_path.display()
+    );
 
     Ok(result)
 }

@@ -45,6 +45,44 @@ cargo test                     # Rust tests
 - Services take dependencies as parameters, no global state
 - All errors via thiserror enums in `error.rs`
 
+### Logging
+All new service code must include structured logging via `tauri-plugin-log` (Rust) and `@tauri-apps/plugin-log` (frontend).
+
+**Rust services** — use `log` crate macros:
+- `info!()` — state-changing operations that succeed (create, delete, save)
+- `debug!()` — read operations, expected branches (list, load, branch reuse)
+- `error!()` — every failure path, including `.map_err()` on `?` propagation
+- `trace!()` — hot-path diagnostics only (per-keystroke, per-frame). Never `debug!` on hot paths
+
+```rust
+use log::{debug, error, info, trace};
+
+pub fn create_thing(name: &str) -> Result<Thing, AppError> {
+    let result = do_work(name).map_err(|e| {
+        error!("Failed to create thing {name:?}: {e}");
+        e
+    })?;
+    info!("Created thing {name:?} at {}", result.path.display());
+    Ok(result)
+}
+```
+
+**Frontend IPC wrappers** — wrap every `invoke()` call with try/catch + `logError`:
+```typescript
+import { error as logError } from '@tauri-apps/plugin-log';
+
+export async function doThing(id: string): Promise<Thing> {
+  try {
+    return await invoke<Thing>('do_thing', { id });
+  } catch (e) {
+    logError(`doThing failed: ${e}`);
+    throw e;
+  }
+}
+```
+
+**Log level config** is in `src-tauri/src/lib.rs`: global `Info`, crate-level `Debug`. Third-party noise stays at `Info`.
+
 ### Conventions
 - Conventional commits (`feat:`, `fix:`, `refactor:`, `docs:`, `chore:`)
 - No commented-out code

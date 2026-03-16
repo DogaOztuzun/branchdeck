@@ -1,6 +1,6 @@
 use crate::error::AppError;
 use crate::models::{PtySession, SessionId};
-use log::{debug, error, info};
+use log::{debug, error, info, trace};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -79,35 +79,26 @@ impl TerminalService {
     }
 
     pub fn write_to_session(&mut self, id: &str, data: &[u8]) -> Result<(), AppError> {
-        let session = self
-            .sessions
-            .get_mut(id)
-            .ok_or_else(|| {
-                error!("Write failed: session {id} not found");
-                AppError::Pty(format!("Session not found: {id}"))
-            })?;
+        let session = self.sessions.get_mut(id).ok_or_else(|| {
+            error!("Write failed: session {id} not found");
+            AppError::Pty(format!("Session not found: {id}"))
+        })?;
 
-        session
-            .writer
-            .write_all(data)
-            .map_err(|e| {
-                error!("Write failed for session {id}: {e}");
-                AppError::Pty(e.to_string())
-            })?;
+        session.writer.write_all(data).map_err(|e| {
+            error!("Write failed for session {id}: {e}");
+            AppError::Pty(e.to_string())
+        })?;
 
-        debug!("Wrote {} bytes to session {id}", data.len());
+        trace!("Wrote {} bytes to session {id}", data.len());
 
         Ok(())
     }
 
     pub fn resize_session(&mut self, id: &str, rows: u16, cols: u16) -> Result<(), AppError> {
-        let session = self
-            .sessions
-            .get(id)
-            .ok_or_else(|| {
-                error!("Resize failed: session {id} not found");
-                AppError::Pty(format!("Session not found: {id}"))
-            })?;
+        let session = self.sessions.get(id).ok_or_else(|| {
+            error!("Resize failed: session {id} not found");
+            AppError::Pty(format!("Session not found: {id}"))
+        })?;
 
         session
             .master
