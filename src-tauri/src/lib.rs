@@ -5,6 +5,7 @@ mod services;
 
 use std::sync::Mutex;
 use tauri::Manager;
+use tauri_plugin_log::{Target, TargetKind};
 
 /// # Panics
 ///
@@ -16,6 +17,16 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .targets([
+                    Target::new(TargetKind::Stdout),
+                    Target::new(TargetKind::LogDir { file_name: None }),
+                ])
+                .level(log::LevelFilter::Info)
+                .level_for("branchdeck_lib", log::LevelFilter::Debug)
+                .build(),
+        )
         .manage(Mutex::new(services::terminal::TerminalService::new()))
         .invoke_handler(tauri::generate_handler![
             commands::terminal::create_terminal_session,

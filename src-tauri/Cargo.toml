@@ -26,6 +26,8 @@ thiserror = "2"
 dirs = "6"
 sha2 = "0.10"
 uuid = { version = "1", features = ["v4"] }
+log = "0.4"
+tauri-plugin-log = "2"
 
 [lints.rust]
 unsafe_code = "deny"

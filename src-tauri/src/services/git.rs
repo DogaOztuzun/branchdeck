@@ -1,6 +1,7 @@
 use crate::error::AppError;
 use crate::models::{FileStatus, RepoInfo, WorktreeInfo, WorktreePreview};
 use git2::{Repository, StatusOptions};
+use log::{debug, error, info, warn};
 use std::path::Path;
 
 pub fn sanitize_worktree_name(name: &str) -> String {
@@ -69,6 +70,8 @@ pub fn validate_repo(path: &Path) -> Result<RepoInfo, AppError> {
         Err(e) => return Err(e.into()),
     };
 
+    debug!("Validated repo: {name} at {}", workdir.display());
+
     Ok(RepoInfo {
         name,
         path: workdir.to_path_buf(),
@@ -101,7 +104,10 @@ pub fn list_worktrees(repo_path: &Path) -> Result<Vec<WorktreeInfo>, AppError> {
     }
 
     // Add linked worktrees
-    let worktrees = repo.worktrees()?;
+    let worktrees = repo.worktrees().map_err(|e| {
+        error!("Failed to list worktrees for {}: {e}", repo_path.display());
+        e
+    })?;
     for wt_name in worktrees.iter().flatten() {
         let wt = repo.find_worktree(wt_name)?;
         let wt_repo = Repository::open_from_worktree(&wt)?;
@@ -122,6 +128,8 @@ pub fn list_worktrees(repo_path: &Path) -> Result<Vec<WorktreeInfo>, AppError> {
         });
     }
 
+    debug!("Listed {} worktrees for {}", result.len(), repo_path.display());
+
     Ok(result)
 }
 
@@ -132,6 +140,7 @@ pub fn create_worktree(
 ) -> Result<WorktreeInfo, AppError> {
     let sanitized = sanitize_worktree_name(name);
     if sanitized.is_empty() {
+        error!("Worktree name is empty after sanitization: {name:?}");
         return Err(AppError::Git(git2::Error::from_str(
             "Worktree name must contain at least one letter or number",
         )));
@@ -151,6 +160,7 @@ pub fn create_worktree(
         .find_branch(&branch_name, git2::BranchType::Local)
         .is_ok()
     {
+        warn!("Branch {branch_name:?} already exists, reusing for worktree");
         format!("refs/heads/{branch_name}")
     } else {
         let new_branch = repo.branch(&branch_name, &head_commit, false)?;
@@ -168,6 +178,8 @@ pub fn create_worktree(
         &target_path,
         Some(git2::WorktreeAddOptions::new().reference(Some(&reference))),
     )?;
+
+    info!("Created worktree {sanitized:?} on branch {branch_name:?} at {}", target_path.display());
 
     Ok(WorktreeInfo {
         name: sanitized,
@@ -218,6 +230,8 @@ pub fn remove_worktree(
         }
     }
 
+    info!("Removed worktree {worktree_name:?} from {}", repo_path.display());
+
     Ok(())
 }
 
@@ -252,6 +266,10 @@ pub fn preview_worktree(repo_path: &Path, name: &str) -> Result<WorktreePreview,
     };
     let path_exists = !sanitized.is_empty() && worktree_path.exists();
 
+    debug!(
+        "Preview worktree {sanitized:?}: branch_exists={branch_exists}, path_exists={path_exists}, worktree_exists={worktree_exists}"
+    );
+
     Ok(WorktreePreview {
         sanitized_name: sanitized,
         branch_name,
@@ -272,7 +290,7 @@ pub fn get_status(worktree_path: &Path) -> Result<Vec<FileStatus>, AppError> {
 
     let statuses = repo.statuses(Some(&mut opts))?;
 
-    let result = statuses
+    let result: Vec<FileStatus> = statuses
         .iter()
         .map(|entry| {
             let path = entry.path().unwrap_or("").to_string();
@@ -280,6 +298,8 @@ pub fn get_status(worktree_path: &Path) -> Result<Vec<FileStatus>, AppError> {
             FileStatus { path, status }
         })
         .collect();
+
+    debug!("Got {} status entries for {}", result.len(), worktree_path.display());
 
     Ok(result)
 }

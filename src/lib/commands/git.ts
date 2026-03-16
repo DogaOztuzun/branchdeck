@@ -1,20 +1,41 @@
 import { invoke } from '@tauri-apps/api/core';
+import { error as logError } from '@tauri-apps/plugin-log';
 import type { FileStatus, RepoInfo, WorktreeInfo, WorktreePreview } from '../../types/git';
 
 export async function addRepository(): Promise<RepoInfo | null> {
-  return await invoke<RepoInfo | null>('add_repository');
+  try {
+    return await invoke<RepoInfo | null>('add_repository');
+  } catch (e) {
+    logError(`addRepository failed: ${e}`);
+    throw e;
+  }
 }
 
 export async function listRepositories(): Promise<RepoInfo[]> {
-  return await invoke<RepoInfo[]>('list_repositories');
+  try {
+    return await invoke<RepoInfo[]>('list_repositories');
+  } catch (e) {
+    logError(`listRepositories failed: ${e}`);
+    throw e;
+  }
 }
 
 export async function removeRepository(repoPath: string): Promise<void> {
-  await invoke('remove_repository', { repoPath });
+  try {
+    await invoke('remove_repository', { repoPath });
+  } catch (e) {
+    logError(`removeRepository failed: ${e}`);
+    throw e;
+  }
 }
 
 export async function listWorktrees(repoPath: string): Promise<WorktreeInfo[]> {
-  return await invoke<WorktreeInfo[]>('list_worktrees_cmd', { repoPath });
+  try {
+    return await invoke<WorktreeInfo[]>('list_worktrees_cmd', { repoPath });
+  } catch (e) {
+    logError(`listWorktrees failed: ${e}`);
+    throw e;
+  }
 }
 
 export async function createWorktree(
@@ -22,7 +43,12 @@ export async function createWorktree(
   name: string,
   branch?: string,
 ): Promise<WorktreeInfo> {
-  return await invoke<WorktreeInfo>('create_worktree_cmd', { repoPath, name, branch });
+  try {
+    return await invoke<WorktreeInfo>('create_worktree_cmd', { repoPath, name, branch });
+  } catch (e) {
+    logError(`createWorktree failed: ${e}`);
+    throw e;
+  }
 }
 
 export async function removeWorktree(
@@ -30,13 +56,28 @@ export async function removeWorktree(
   worktreeName: string,
   deleteBranch: boolean,
 ): Promise<void> {
-  await invoke('remove_worktree_cmd', { repoPath, worktreeName, deleteBranch });
+  try {
+    await invoke('remove_worktree_cmd', { repoPath, worktreeName, deleteBranch });
+  } catch (e) {
+    logError(`removeWorktree failed: ${e}`);
+    throw e;
+  }
 }
 
 export async function previewWorktree(repoPath: string, name: string): Promise<WorktreePreview> {
-  return await invoke<WorktreePreview>('preview_worktree_cmd', { repoPath, name });
+  try {
+    return await invoke<WorktreePreview>('preview_worktree_cmd', { repoPath, name });
+  } catch (e) {
+    logError(`previewWorktree failed: ${e}`);
+    throw e;
+  }
 }
 
 export async function getRepoStatus(worktreePath: string): Promise<FileStatus[]> {
-  return await invoke<FileStatus[]>('get_repo_status', { worktreePath });
+  try {
+    return await invoke<FileStatus[]>('get_repo_status', { worktreePath });
+  } catch (e) {
+    logError(`getRepoStatus failed: ${e}`);
+    throw e;
+  }
 }

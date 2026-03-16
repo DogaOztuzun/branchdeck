@@ -1,5 +1,6 @@
 use crate::error::AppError;
 use crate::models::{PtySession, SessionId};
+use log::{debug, error, info};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -72,6 +73,8 @@ impl TerminalService {
 
         self.sessions.insert(id.clone(), session);
 
+        info!("Created terminal session {id} in {cwd}");
+
         Ok((id, reader))
     }
 
@@ -79,12 +82,20 @@ impl TerminalService {
         let session = self
             .sessions
             .get_mut(id)
-            .ok_or_else(|| AppError::Pty(format!("Session not found: {id}")))?;
+            .ok_or_else(|| {
+                error!("Write failed: session {id} not found");
+                AppError::Pty(format!("Session not found: {id}"))
+            })?;
 
         session
             .writer
             .write_all(data)
-            .map_err(|e| AppError::Pty(e.to_string()))?;
+            .map_err(|e| {
+                error!("Write failed for session {id}: {e}");
+                AppError::Pty(e.to_string())
+            })?;
+
+        debug!("Wrote {} bytes to session {id}", data.len());
 
         Ok(())
     }
@@ -93,7 +104,10 @@ impl TerminalService {
         let session = self
             .sessions
             .get(id)
-            .ok_or_else(|| AppError::Pty(format!("Session not found: {id}")))?;
+            .ok_or_else(|| {
+                error!("Resize failed: session {id} not found");
+                AppError::Pty(format!("Session not found: {id}"))
+            })?;
 
         session
             .master
@@ -103,7 +117,12 @@ impl TerminalService {
                 pixel_width: 0,
                 pixel_height: 0,
             })
-            .map_err(|e| AppError::Pty(e.to_string()))?;
+            .map_err(|e| {
+                error!("Resize failed for session {id}: {e}");
+                AppError::Pty(e.to_string())
+            })?;
+
+        debug!("Resized session {id} to {cols}x{rows}");
 
         Ok(())
     }
@@ -111,7 +130,11 @@ impl TerminalService {
     pub fn close_session(&mut self, id: &str) -> Result<Option<()>, AppError> {
         let session = self.sessions.remove(id);
         if let Some(mut s) = session {
-            s.child.kill().map_err(|e| AppError::Pty(e.to_string()))?;
+            s.child.kill().map_err(|e| {
+                error!("Failed to kill session {id}: {e}");
+                AppError::Pty(e.to_string())
+            })?;
+            info!("Closed terminal session {id}");
             Ok(Some(()))
         } else {
             Ok(None)
@@ -119,9 +142,11 @@ impl TerminalService {
     }
 
     pub fn close_all_sessions(&mut self) {
+        let count = self.sessions.len();
         let ids: Vec<String> = self.sessions.keys().cloned().collect();
         for id in ids {
             let _ = self.close_session(&id);
         }
+        info!("Closed all {count} terminal sessions");
     }
 }
