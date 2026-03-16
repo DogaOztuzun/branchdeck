@@ -49,6 +49,8 @@ pub fn run() {
             commands::workspace::save_repo_config_cmd,
             commands::workspace::get_presets,
             commands::workspace::save_presets,
+            commands::github::get_pr_status,
+            commands::github::check_github_available,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {

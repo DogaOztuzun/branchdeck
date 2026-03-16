@@ -1,3 +1,4 @@
+import { open } from '@tauri-apps/plugin-opener';
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { getRepoStore } from '../../lib/stores/repo';
@@ -36,6 +37,12 @@ export function RepoSidebar() {
     repoStore.refreshTracking();
   }, 60_000);
   onCleanup(() => clearInterval(trackingInterval));
+
+  // Refresh PR status every 300s (matches cache TTL)
+  const prInterval = setInterval(() => {
+    repoStore.refreshPrStatus();
+  }, 300_000);
+  onCleanup(() => clearInterval(prInterval));
 
   function toggleExpanded(repoPath: string) {
     setExpandedRepos((prev) => {
@@ -152,6 +159,34 @@ export function RepoSidebar() {
                                   </span>
                                 )}
                               </span>
+                            );
+                          })()}
+                          {(() => {
+                            const pr = repoStore.state.prByBranch[wt.branch];
+                            if (!pr) return null;
+                            const colors: Record<string, string> = {
+                              open: 'text-[#7aa2f7]',
+                              draft: 'text-[#565f89]',
+                              merged: 'text-[#bb9af7]',
+                              closed: 'text-[#f7768e]',
+                            };
+                            const colorClass = pr.isDraft
+                              ? colors.draft
+                              : (colors[pr.state] ?? 'text-text-muted');
+                            return (
+                              <button
+                                type="button"
+                                class={`ml-1 text-[10px] shrink-0 cursor-pointer hover:underline ${colorClass}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (pr.url) {
+                                    open(pr.url);
+                                  }
+                                }}
+                                title={pr.title}
+                              >
+                                PR #{pr.number}
+                              </button>
                             );
                           })()}
                         </button>

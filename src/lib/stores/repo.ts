@@ -1,5 +1,6 @@
 import { createStore, produce } from 'solid-js/store';
 import type { FileStatus, RepoInfo, TrackingInfo, WorktreeInfo } from '../../types/git';
+import type { PrInfo } from '../../types/github';
 import {
   addRepository,
   createWorktree as createWorktreeCmd,
@@ -10,6 +11,7 @@ import {
   removeRepository,
   removeWorktree as removeWorktreeCmd,
 } from '../commands/git';
+import { checkGithubAvailable, getPrStatus } from '../commands/github';
 import { getAppConfig, getRepoConfig, saveAppConfig, saveRepoConfig } from '../commands/workspace';
 
 type RepoState = {
@@ -19,6 +21,8 @@ type RepoState = {
   activeWorktreePath: string | null;
   statuses: FileStatus[];
   trackingByBranch: Record<string, TrackingInfo | null>;
+  prByBranch: Record<string, PrInfo | null>;
+  githubAvailable: boolean;
 };
 
 function createRepoStore() {
@@ -29,6 +33,8 @@ function createRepoStore() {
     activeWorktreePath: null,
     statuses: [],
     trackingByBranch: {},
+    prByBranch: {},
+    githubAvailable: false,
   });
 
   function getActiveRepo(): RepoInfo | null {
@@ -48,6 +54,7 @@ function createRepoStore() {
   }
 
   async function restoreLastSession() {
+    checkGithubAvailable().then((available) => setState('githubAvailable', available));
     await loadRepos();
 
     const config = await getAppConfig();
@@ -60,6 +67,7 @@ function createRepoStore() {
     const wts = await listWorktrees(lastRepo.path);
     setState('worktreesByRepo', lastRepo.path, wts);
     loadBranchTracking(lastRepo.path);
+    loadPrStatus(lastRepo.path);
 
     const repoConfig = await getRepoConfig(lastRepo.path);
     const targetWt = repoConfig.lastWorktree
@@ -130,12 +138,33 @@ function createRepoStore() {
     }
   }
 
+  async function loadPrStatus(repoPath: string) {
+    if (!state.githubAvailable) return;
+    const wts = state.worktreesByRepo[repoPath] ?? [];
+    const branches = wts.map((w) => w.branch).filter(Boolean);
+    for (const branch of branches) {
+      try {
+        const pr = await getPrStatus(repoPath, branch);
+        setState('prByBranch', branch, pr);
+      } catch {
+        // PR status is best-effort
+      }
+    }
+  }
+
+  async function refreshPrStatus() {
+    if (state.activeRepoPath) {
+      await loadPrStatus(state.activeRepoPath);
+    }
+  }
+
   async function ensureWorktreesLoaded(repoPath: string) {
     if (!state.worktreesByRepo[repoPath]) {
       const wts = await listWorktrees(repoPath);
       setState('worktreesByRepo', repoPath, wts);
     }
     loadBranchTracking(repoPath);
+    loadPrStatus(repoPath);
   }
 
   async function selectRepo(repoPath: string) {
@@ -232,6 +261,8 @@ function createRepoStore() {
     refreshStatus,
     loadBranchTracking,
     refreshTracking,
+    loadPrStatus,
+    refreshPrStatus,
   };
 }
 

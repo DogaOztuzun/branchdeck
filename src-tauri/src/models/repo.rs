@@ -53,3 +53,14 @@ pub struct TrackingInfo {
     pub behind: usize,
     pub upstream_name: String,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PrInfo {
+    pub number: u64,
+    pub title: String,
+    pub state: String,
+    pub is_draft: bool,
+    pub url: String,
+    pub ci_status: Option<String>,
+}
