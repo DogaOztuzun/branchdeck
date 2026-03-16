@@ -12,12 +12,42 @@ on:
           - patch
           - minor
           - major
+      dry_run:
+        description: 'Dry run (skip push and release)'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
+  preflight:
+    name: Preflight checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify on main branch
+        run: |
+          BRANCH="${GITHUB_REF#refs/heads/}"
+          if [ "$BRANCH" != "main" ]; then
+            echo "::error::Release must be run from main branch (current: $BRANCH)"
+            exit 1
+          fi
+      - name: Verify clean working tree
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::Working tree is dirty"
+            exit 1
+          fi
+
   version:
+    name: Bump version
+    needs: preflight
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.bump.outputs.version }}
@@ -26,6 +56,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get current version
         id: current
@@ -43,33 +74,45 @@ jobs:
           VERSION="${major}.${minor}.${patch}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "Bumping to ${VERSION}"
+          echo "## Version bump: ${{ steps.current.outputs.version }} → ${VERSION}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check tag does not exist
+        run: |
+          TAG="${{ steps.bump.outputs.tag }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG already exists"
+            exit 1
+          fi
 
       - uses: oven-sh/setup-bun@v2
 
       - name: Update version in all files
         run: |
           VERSION="${{ steps.bump.outputs.version }}"
-          # package.json
           jq ".version = \"${VERSION}\"" package.json > tmp.json && mv tmp.json package.json
-          # src-tauri/tauri.conf.json
           jq ".version = \"${VERSION}\"" src-tauri/tauri.conf.json > tmp.json && mv tmp.json src-tauri/tauri.conf.json
-          # src-tauri/Cargo.toml
           sed -i "0,/^version = /s/^version = .*/version = \"${VERSION}\"/" src-tauri/Cargo.toml
-          # Update Cargo.lock
           cd src-tauri && cargo update -p branchdeck --precise "${VERSION}" 2>/dev/null || cargo generate-lockfile
 
-      - name: Commit version bump
+      - name: Commit and tag
+        if: ${{ inputs.dry_run == false }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
+          git diff --cached --quiet && { echo "::error::No version changes detected"; exit 1; }
           git commit -m "chore: release v${{ steps.bump.outputs.version }}"
           git tag "${{ steps.bump.outputs.tag }}"
-          git push origin main --tags
+          git push origin HEAD:main "${{ steps.bump.outputs.tag }}"
+
+      - name: Dry run summary
+        if: ${{ inputs.dry_run == true }}
+        run: echo "## Dry run — would release ${{ steps.bump.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
 
   build:
+    name: Build & release
     needs: version
+    if: ${{ inputs.dry_run == false }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -83,19 +126,17 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-
 
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
-
-      - name: Lint check
-        run: bun run check
-
-      - name: Rust checks
-        working-directory: src-tauri
-        run: |
-          cargo fmt --check
-          cargo clippy --all-targets -- -D warnings
-          cargo test
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
