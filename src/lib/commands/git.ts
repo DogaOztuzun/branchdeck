@@ -1,6 +1,12 @@
 import { invoke } from '@tauri-apps/api/core';
 import { error as logError } from '@tauri-apps/plugin-log';
-import type { FileStatus, RepoInfo, WorktreeInfo, WorktreePreview } from '../../types/git';
+import type {
+  BranchInfo,
+  FileStatus,
+  RepoInfo,
+  WorktreeInfo,
+  WorktreePreview,
+} from '../../types/git';
 
 export async function addRepository(): Promise<RepoInfo | null> {
   try {
@@ -42,9 +48,15 @@ export async function createWorktree(
   repoPath: string,
   name: string,
   branch?: string,
+  baseBranch?: string,
 ): Promise<WorktreeInfo> {
   try {
-    return await invoke<WorktreeInfo>('create_worktree_cmd', { repoPath, name, branch });
+    return await invoke<WorktreeInfo>('create_worktree_cmd', {
+      repoPath,
+      name,
+      branch,
+      baseBranch,
+    });
   } catch (e) {
     logError(`createWorktree failed: ${e}`);
     throw e;
@@ -69,6 +81,15 @@ export async function previewWorktree(repoPath: string, name: string): Promise<W
     return await invoke<WorktreePreview>('preview_worktree_cmd', { repoPath, name });
   } catch (e) {
     logError(`previewWorktree failed: ${e}`);
+    throw e;
+  }
+}
+
+export async function listBranches(repoPath: string): Promise<BranchInfo[]> {
+  try {
+    return await invoke<BranchInfo[]>('list_branches_cmd', { repoPath });
+  } catch (e) {
+    logError(`listBranches failed: ${e}`);
     throw e;
   }
 }

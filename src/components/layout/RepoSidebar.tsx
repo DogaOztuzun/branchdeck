@@ -4,12 +4,14 @@ import { getRepoStore } from '../../lib/stores/repo';
 import type { RepoInfo, WorktreeInfo } from '../../types/git';
 import { ContextMenu } from '../ui/ContextMenu';
 import { AddWorktreeModal } from '../worktree/AddWorktreeModal';
+import { BranchWorktreeModal } from '../worktree/BranchWorktreeModal';
 import { DeleteWorktreeDialog } from '../worktree/DeleteWorktreeDialog';
 
 export function RepoSidebar() {
   const repoStore = getRepoStore();
   const [expandedRepos, setExpandedRepos] = createSignal<Set<string>>(new Set());
   const [addWorktreeRepo, setAddWorktreeRepo] = createSignal<string | null>(null);
+  const [branchWorktreeRepo, setBranchWorktreeRepo] = createSignal<string | null>(null);
   const [contextMenu, setContextMenu] = createSignal<{
     x: number;
     y: number;
@@ -186,6 +188,18 @@ export function RepoSidebar() {
           }
         }}
       />
+      <BranchWorktreeModal
+        open={branchWorktreeRepo() !== null}
+        repoPath={branchWorktreeRepo() ?? ''}
+        onClose={() => setBranchWorktreeRepo(null)}
+        onCreate={(wt) => {
+          const repoPath = branchWorktreeRepo();
+          setBranchWorktreeRepo(null);
+          if (repoPath) {
+            repoStore.selectRepoAndWorktree(repoPath, wt.path);
+          }
+        }}
+      />
       <Show when={contextMenu()}>
         {(menu) => (
           <Portal>
@@ -193,6 +207,10 @@ export function RepoSidebar() {
               x={menu().x}
               y={menu().y}
               items={[
+                {
+                  label: 'Checkout Branch',
+                  onClick: () => setBranchWorktreeRepo(menu().repo.path),
+                },
                 {
                   label: 'Close Project',
                   variant: 'danger',

@@ -21,6 +21,13 @@ export type WorktreePreview = {
   worktreeExists: boolean;
 };
 
+export type BranchInfo = {
+  name: string;
+  isRemote: boolean;
+  isHead: boolean;
+  hasWorktree: boolean;
+};
+
 export type FileStatus = {
   path: string;
   status: string;

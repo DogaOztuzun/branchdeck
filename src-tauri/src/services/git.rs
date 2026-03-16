@@ -1,6 +1,6 @@
 use crate::error::AppError;
-use crate::models::{FileStatus, RepoInfo, WorktreeInfo, WorktreePreview};
-use git2::{Repository, StatusOptions};
+use crate::models::{BranchInfo, FileStatus, RepoInfo, WorktreeInfo, WorktreePreview};
+use git2::{BranchType, Repository, StatusOptions};
 use log::{debug, error, info};
 use std::path::Path;
 
@@ -147,6 +147,7 @@ pub fn create_worktree(
     repo_path: &Path,
     name: &str,
     branch: Option<&str>,
+    base_branch: Option<&str>,
 ) -> Result<WorktreeInfo, AppError> {
     let sanitized = sanitize_worktree_name(name);
     if sanitized.is_empty() {
@@ -164,16 +165,24 @@ pub fn create_worktree(
 
     let branch_name = branch.map_or_else(|| sanitized.clone(), String::from);
 
-    // Create the branch from HEAD if it doesn't exist
-    let head_commit = repo.head()?.peel_to_commit()?;
-    let branch_ref = if repo
-        .find_branch(&branch_name, git2::BranchType::Local)
-        .is_ok()
-    {
+    // Resolve the base commit: use base_branch if provided, otherwise HEAD
+    let base_commit = if let Some(base) = base_branch {
+        repo.find_branch(base, BranchType::Local)
+            .map_err(|e| {
+                error!("Base branch {base:?} not found: {e}");
+                e
+            })?
+            .get()
+            .peel_to_commit()?
+    } else {
+        repo.head()?.peel_to_commit()?
+    };
+
+    let branch_ref = if repo.find_branch(&branch_name, BranchType::Local).is_ok() {
         debug!("Branch {branch_name:?} already exists, reusing for worktree");
         format!("refs/heads/{branch_name}")
     } else {
-        let new_branch = repo.branch(&branch_name, &head_commit, false)?;
+        let new_branch = repo.branch(&branch_name, &base_commit, false)?;
         let ref_name = new_branch
             .into_reference()
             .name()
@@ -295,6 +304,101 @@ pub fn preview_worktree(repo_path: &Path, name: &str) -> Result<WorktreePreview,
         path_exists,
         worktree_exists,
     })
+}
+
+pub fn list_branches(repo_path: &Path) -> Result<Vec<BranchInfo>, AppError> {
+    let repo = Repository::open(repo_path)?;
+
+    // Collect branch names that are currently checked out in worktrees
+    let mut worktree_branches = std::collections::HashSet::new();
+
+    // Main worktree branch
+    if let Ok(head) = repo.head() {
+        if let Some(name) = head.shorthand() {
+            worktree_branches.insert(name.to_string());
+        }
+    }
+
+    // Linked worktree branches
+    if let Ok(worktrees) = repo.worktrees() {
+        for wt_name in worktrees.iter().flatten() {
+            if let Ok(wt) = repo.find_worktree(wt_name) {
+                if let Ok(wt_repo) = Repository::open_from_worktree(&wt) {
+                    if let Ok(head) = wt_repo.head() {
+                        if let Some(name) = head.shorthand() {
+                            worktree_branches.insert(name.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let mut branches = Vec::new();
+
+    // Local branches
+    for branch_result in repo.branches(Some(BranchType::Local)).map_err(|e| {
+        error!(
+            "Failed to list local branches for {}: {e}",
+            repo_path.display()
+        );
+        e
+    })? {
+        let (branch, _) = branch_result?;
+        let name = branch.name()?.unwrap_or("unknown").to_string();
+        let is_head = branch.is_head();
+        let has_worktree = worktree_branches.contains(&name);
+
+        branches.push(BranchInfo {
+            name,
+            is_remote: false,
+            is_head,
+            has_worktree,
+        });
+    }
+
+    // Remote branches
+    for branch_result in repo.branches(Some(BranchType::Remote)).map_err(|e| {
+        error!(
+            "Failed to list remote branches for {}: {e}",
+            repo_path.display()
+        );
+        e
+    })? {
+        let (branch, _) = branch_result?;
+        let name = branch.name()?.unwrap_or("unknown").to_string();
+
+        // Filter out origin/HEAD
+        if name.ends_with("/HEAD") {
+            continue;
+        }
+
+        // Check if the local equivalent is already in a worktree
+        let local_name = name.split('/').skip(1).collect::<Vec<_>>().join("/");
+        let has_worktree = worktree_branches.contains(&local_name);
+
+        branches.push(BranchInfo {
+            name,
+            is_remote: true,
+            is_head: false,
+            has_worktree,
+        });
+    }
+
+    // Sort: locals first, then alphabetically within each group
+    branches.sort_by(|a, b| {
+        a.is_remote
+            .cmp(&b.is_remote)
+            .then_with(|| a.name.cmp(&b.name))
+    });
+
+    debug!(
+        "Listed {} branches for {}",
+        branches.len(),
+        repo_path.display()
+    );
+
+    Ok(branches)
 }
 
 pub fn get_status(worktree_path: &Path) -> Result<Vec<FileStatus>, AppError> {

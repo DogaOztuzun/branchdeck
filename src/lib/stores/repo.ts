@@ -166,8 +166,13 @@ function createRepoStore() {
     persistState();
   }
 
-  async function createWorktree(repoPath: string, name: string, branch?: string) {
-    const wt = await createWorktreeCmd(repoPath, name, branch);
+  async function createWorktree(
+    repoPath: string,
+    name: string,
+    branch?: string,
+    baseBranch?: string,
+  ) {
+    const wt = await createWorktreeCmd(repoPath, name, branch, baseBranch);
     setState(
       produce((s) => {
         const existing = s.worktreesByRepo[repoPath] ?? [];

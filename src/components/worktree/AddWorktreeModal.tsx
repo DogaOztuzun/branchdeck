@@ -1,8 +1,8 @@
 import { Dialog } from '@kobalte/core';
-import { createEffect, createMemo, createSignal, onCleanup, Show } from 'solid-js';
-import { previewWorktree } from '../../lib/commands/git';
+import { createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
+import { listBranches, previewWorktree } from '../../lib/commands/git';
 import { getRepoStore } from '../../lib/stores/repo';
-import type { WorktreeInfo, WorktreePreview } from '../../types/git';
+import type { BranchInfo, WorktreeInfo, WorktreePreview } from '../../types/git';
 
 type AddWorktreeModalProps = {
   open: boolean;
@@ -17,6 +17,8 @@ export function AddWorktreeModal(props: AddWorktreeModalProps) {
   const [preview, setPreview] = createSignal<WorktreePreview | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   const [creating, setCreating] = createSignal(false);
+  const [branches, setBranches] = createSignal<BranchInfo[]>([]);
+  const [baseBranch, setBaseBranch] = createSignal<string>('');
 
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
   let requestId = 0;
@@ -28,7 +30,16 @@ export function AddWorktreeModal(props: AddWorktreeModalProps) {
       setPreview(null);
       setError(null);
       setCreating(false);
+      setBranches([]);
+      setBaseBranch('');
       requestId = 0;
+      listBranches(props.repoPath)
+        .then((result) => {
+          setBranches(result);
+          const head = result.find((b) => b.isHead);
+          if (head) setBaseBranch(head.name);
+        })
+        .catch(() => {});
     } else {
       clearTimeout(debounceTimer);
     }
@@ -78,6 +89,8 @@ export function AddWorktreeModal(props: AddWorktreeModalProps) {
     return hasConflict();
   });
 
+  const localBranches = createMemo(() => branches().filter((b) => !b.isRemote));
+
   async function handleCreate(e: SubmitEvent) {
     e.preventDefault();
     if (isCreateDisabled()) return;
@@ -88,7 +101,8 @@ export function AddWorktreeModal(props: AddWorktreeModalProps) {
     setCreating(true);
     setError(null);
     try {
-      const wt = await repoStore.createWorktree(props.repoPath, p.sanitizedName);
+      const base = baseBranch() || undefined;
+      const wt = await repoStore.createWorktree(props.repoPath, p.sanitizedName, undefined, base);
       props.onCreate(wt);
     } catch (e) {
       setError(String(e));
@@ -119,10 +133,29 @@ export function AddWorktreeModal(props: AddWorktreeModalProps) {
               class="w-full px-3 py-1.5 text-xs bg-bg border border-border rounded text-text placeholder:text-text-muted focus:outline-none focus:border-primary"
             />
 
+            <Show when={localBranches().length > 0}>
+              <div class="mt-2">
+                <label class="text-xs text-text-muted" for="base-branch-select">
+                  Base branch
+                </label>
+                <select
+                  id="base-branch-select"
+                  value={baseBranch()}
+                  onChange={(e) => setBaseBranch(e.currentTarget.value)}
+                  style={{ 'background-color': 'var(--color-bg)', color: 'var(--color-text)' }}
+                  class="w-full mt-1 px-3 py-1.5 text-xs border border-border rounded focus:outline-none focus:border-primary appearance-none [&>option]:bg-bg [&>option]:text-text"
+                >
+                  <For each={localBranches()}>
+                    {(branch) => <option value={branch.name}>{branch.name}</option>}
+                  </For>
+                </select>
+              </div>
+            </Show>
+
             <div class="mt-3 space-y-1.5 text-xs">
               <div class="flex gap-2">
                 <span class="text-text-muted">Base:</span>
-                <span class="text-text">{preview()?.baseBranch ?? '—'}</span>
+                <span class="text-text">{baseBranch() || preview()?.baseBranch || '—'}</span>
               </div>
               <div class="flex gap-2">
                 <span class="text-text-muted">Branch:</span>
