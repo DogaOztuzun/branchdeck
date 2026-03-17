@@ -74,18 +74,21 @@ async fn handle_connection(
     let (reader, mut writer) = stream.into_split();
     let mut buf_reader = BufReader::new(reader);
 
-    let (is_post_hook, content_length) = read_request_head(&mut buf_reader).await?;
+    let head = read_request_head(&mut buf_reader).await?;
 
-    if !is_post_hook {
+    if !head.is_post_hook {
         return respond(&mut writer, RESPONSE_400).await;
     }
-    if content_length > MAX_PAYLOAD_BYTES {
-        warn!("Hook payload too large: {content_length} bytes (max {MAX_PAYLOAD_BYTES})");
+    if head.content_length > MAX_PAYLOAD_BYTES {
+        warn!(
+            "Hook payload too large: {} bytes (max {MAX_PAYLOAD_BYTES})",
+            head.content_length
+        );
         return respond(&mut writer, RESPONSE_400).await;
     }
 
     // Read body
-    let mut body = vec![0u8; content_length];
+    let mut body = vec![0u8; head.content_length];
     buf_reader
         .read_exact(&mut body)
         .await
@@ -100,11 +103,8 @@ async fn handle_connection(
         }
     };
 
-    // Convert to Event and publish
-    let tab_id = payload
-        .branchdeck_tab_id
-        .clone()
-        .unwrap_or_else(|| "unknown".to_string());
+    // Tab/session IDs come from HTTP headers (injected by notify.sh)
+    let tab_id = head.tab_id.unwrap_or_else(|| "unknown".to_string());
     let session_id = payload.session_id.clone();
     let ts = now_ms();
 
@@ -116,9 +116,15 @@ async fn handle_connection(
     respond(&mut writer, RESPONSE_200).await
 }
 
+struct RequestHead {
+    is_post_hook: bool,
+    content_length: usize,
+    tab_id: Option<String>,
+}
+
 async fn read_request_head(
     reader: &mut BufReader<tokio::net::tcp::OwnedReadHalf>,
-) -> Result<(bool, usize), String> {
+) -> Result<RequestHead, String> {
     let mut request_line = String::new();
     reader
         .read_line(&mut request_line)
@@ -127,6 +133,7 @@ async fn read_request_head(
 
     let is_post_hook = request_line.starts_with("POST /hook");
     let mut content_length: usize = 0;
+    let mut tab_id: Option<String> = None;
 
     loop {
         let mut line = String::new();
@@ -145,10 +152,22 @@ async fn read_request_head(
             if let Ok(len) = val.trim().parse::<usize>() {
                 content_length = len;
             }
+        } else if lower.starts_with("x-branchdeck-tab-id:") {
+            // Read original (non-lowered) value after the header name
+            if let Some(val) = trimmed.get("x-branchdeck-tab-id:".len()..) {
+                let v = val.trim();
+                if !v.is_empty() {
+                    tab_id = Some(v.to_string());
+                }
+            }
         }
     }
 
-    Ok((is_post_hook, content_length))
+    Ok(RequestHead {
+        is_post_hook,
+        content_length,
+        tab_id,
+    })
 }
 
 async fn respond(

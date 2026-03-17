@@ -9,11 +9,11 @@ PORT="${BRANCHDECK_PORT:-13370}"
 TAB_ID="${BRANCHDECK_TAB_ID:-}"
 SESSION_ID="${BRANCHDECK_SESSION_ID:-}"
 PAYLOAD=$(cat)
-# Inject routing context by replacing the closing } with additional fields
-BODY="${PAYLOAD%\}},\"branchdeck_tab_id\":\"${TAB_ID}\",\"branchdeck_session_id\":\"${SESSION_ID}\"}"
 curl -s -X POST "http://127.0.0.1:${PORT}/hook" \
   -H "Content-Type: application/json" \
-  -d "$BODY" --max-time 2 > /dev/null 2>&1 || true
+  -H "X-Branchdeck-Tab-Id: ${TAB_ID}" \
+  -H "X-Branchdeck-Session-Id: ${SESSION_ID}" \
+  -d "$PAYLOAD" --max-time 2 > /dev/null 2>&1 || true
 "#;
 
 const HOOK_EVENTS: &[&str] = &[

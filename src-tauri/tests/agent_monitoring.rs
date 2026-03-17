@@ -179,17 +179,17 @@ async fn hook_receiver_end_to_end() {
 
     ready_rx.await.unwrap().unwrap();
 
-    // Send a SessionStart hook payload via HTTP
+    // Send a SessionStart hook payload via HTTP (tab ID in header)
     let payload = serde_json::json!({
         "session_id": "test-sess",
         "hook_event_name": "SessionStart",
-        "model": "sonnet",
-        "branchdeck_tab_id": "tab-42"
+        "model": "sonnet"
     });
 
     let client = reqwest::Client::new();
     let resp = client
         .post(format!("http://127.0.0.1:{port}/hook"))
+        .header("X-Branchdeck-Tab-Id", "tab-42")
         .json(&payload)
         .send()
         .await
@@ -217,18 +217,18 @@ async fn hook_receiver_end_to_end() {
         panic!("Expected SessionStart, got {event:?}");
     }
 
-    // Send a PreToolUse with file path extraction
+    // Send a PreToolUse with file path extraction (tab ID in header)
     let tool_payload = serde_json::json!({
         "session_id": "test-sess",
         "hook_event_name": "PreToolUse",
         "tool_name": "Read",
         "tool_input": { "file_path": "/src/lib.rs" },
-        "tool_use_id": "tu-abc",
-        "branchdeck_tab_id": "tab-42"
+        "tool_use_id": "tu-abc"
     });
 
     let resp = client
         .post(format!("http://127.0.0.1:{port}/hook"))
+        .header("X-Branchdeck-Tab-Id", "tab-42")
         .json(&tool_payload)
         .send()
         .await
