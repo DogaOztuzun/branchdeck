@@ -16,6 +16,9 @@ pub enum AppError {
 
     #[error("GitHub error: {0}")]
     GitHub(String),
+
+    #[error("Agent monitoring error: {0}")]
+    Agent(String),
 }
 
 // Tauri requires Serialize for error types returned from commands

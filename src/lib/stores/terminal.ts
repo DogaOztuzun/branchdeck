@@ -67,10 +67,15 @@ function createTerminalStore() {
     );
   }
 
-  async function openClaudeTab(worktreePath: string) {
-    const tabId = crypto.randomUUID();
+  async function openClaudeTab(worktreePath: string, tabId?: string) {
+    const id = tabId ?? crypto.randomUUID();
     let resolvedSessionId = '';
-    const env = { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1' };
+    const env: Record<string, string> = {
+      CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
+      BRANCHDECK_PORT: '13370',
+      BRANCHDECK_TAB_ID: id,
+      BRANCHDECK_SESSION_ID: crypto.randomUUID(),
+    };
 
     const sessionId = await createTerminalSession(worktreePath, '', env, (event) =>
       handlePtyEvent(resolvedSessionId, event),
@@ -78,7 +83,7 @@ function createTerminalStore() {
     resolvedSessionId = sessionId;
 
     const tab: TabInfo = {
-      id: tabId,
+      id,
       sessionId,
       title: 'Claude Code',
       type: 'claude',
@@ -88,7 +93,7 @@ function createTerminalStore() {
     setState(
       produce((s) => {
         s.tabs.push(tab);
-        s.activeTabByWorktree[worktreePath] = tabId;
+        s.activeTabByWorktree[worktreePath] = id;
       }),
     );
 

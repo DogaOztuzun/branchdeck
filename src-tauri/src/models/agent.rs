@@ -1,0 +1,137 @@
+use serde::{Deserialize, Serialize};
+
+pub type EpochMs = u64;
+
+#[must_use]
+#[allow(clippy::cast_possible_truncation)]
+pub fn now_ms() -> EpochMs {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as u64)
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum Event {
+    SessionStart {
+        session_id: String,
+        tab_id: String,
+        model: Option<String>,
+        ts: EpochMs,
+    },
+    ToolStart {
+        session_id: String,
+        agent_id: Option<String>,
+        tab_id: String,
+        tool_name: String,
+        tool_use_id: String,
+        file_path: Option<String>,
+        ts: EpochMs,
+    },
+    ToolEnd {
+        session_id: String,
+        agent_id: Option<String>,
+        tab_id: String,
+        tool_name: String,
+        tool_use_id: String,
+        file_path: Option<String>,
+        ts: EpochMs,
+    },
+    SubagentStart {
+        session_id: String,
+        agent_id: String,
+        agent_type: String,
+        tab_id: String,
+        ts: EpochMs,
+    },
+    SubagentStop {
+        session_id: String,
+        agent_id: String,
+        agent_type: String,
+        tab_id: String,
+        ts: EpochMs,
+    },
+    SessionStop {
+        session_id: String,
+        tab_id: String,
+        ts: EpochMs,
+    },
+    Notification {
+        session_id: String,
+        tab_id: String,
+        title: Option<String>,
+        message: String,
+        ts: EpochMs,
+    },
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum AgentStatus {
+    Active,
+    Idle,
+    Stopped,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentState {
+    pub session_id: String,
+    pub agent_id: Option<String>,
+    pub agent_type: Option<String>,
+    pub tab_id: String,
+    pub status: AgentStatus,
+    pub current_tool: Option<String>,
+    pub current_file: Option<String>,
+    pub started_at: EpochMs,
+    pub last_activity: EpochMs,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileAccess {
+    pub path: String,
+    pub last_tool: String,
+    pub last_agent: String,
+    pub last_access: EpochMs,
+    pub access_count: u32,
+    pub was_modified: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentDefinition {
+    pub name: String,
+    pub description: String,
+    pub model: Option<String>,
+    pub tools: Vec<String>,
+    pub permission_mode: Option<String>,
+    pub file_path: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct HookPayload {
+    pub session_id: String,
+    pub hook_event_name: String,
+    #[serde(default)]
+    pub tool_name: Option<String>,
+    #[serde(default)]
+    pub tool_input: Option<serde_json::Value>,
+    #[serde(default)]
+    pub tool_use_id: Option<String>,
+    #[serde(default)]
+    pub agent_id: Option<String>,
+    #[serde(default)]
+    pub agent_type: Option<String>,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub branchdeck_tab_id: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub branchdeck_session_id: Option<String>,
+}
