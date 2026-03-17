@@ -16,32 +16,35 @@ export function TeamSidebar() {
 
   createEffect(() => {
     const repo = repoPath();
-    if (repo) {
-      listAgentDefinitions(repo)
-        .then((defs) => setDefinitions(defs))
-        .catch(() => setDefinitions([]));
-    } else {
+    const wt = worktreePath();
+    if (!repo) {
       setDefinitions([]);
+      return;
     }
+    // Scan both repo root and active worktree for agent definitions
+    const paths = [repo];
+    if (wt && wt !== repo) paths.push(wt);
+    Promise.all(paths.map((p) => listAgentDefinitions(p).catch(() => [])))
+      .then((results) => {
+        const seen = new Set<string>();
+        const merged: AgentDefinition[] = [];
+        for (const defs of results) {
+          for (const def of defs) {
+            if (!seen.has(def.name)) {
+              seen.add(def.name);
+              merged.push(def);
+            }
+          }
+        }
+        setDefinitions(merged);
+      })
+      .catch(() => setDefinitions([]));
   });
 
   function launchAgent(def: AgentDefinition) {
     const wt = worktreePath();
     if (!wt) return;
-
-    const tabId = crypto.randomUUID();
-    terminalStore.openClaudeTab(wt, tabId);
-
-    // After a short delay, send the agent command
-    setTimeout(async () => {
-      const tabs = terminalStore.state.tabs;
-      const tab = tabs.find((t) => t.id === tabId);
-      if (tab) {
-        const encoder = new TextEncoder();
-        const { writeTerminal } = await import('../../lib/commands/terminal');
-        await writeTerminal(tab.sessionId, encoder.encode(`/agent ${def.name}\n`));
-      }
-    }, 1000);
+    terminalStore.openAgentTab(wt, def.name);
   }
 
   const activeAgents = () => {
