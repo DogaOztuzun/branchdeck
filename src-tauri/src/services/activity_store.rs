@@ -66,6 +66,7 @@ impl StoreInner {
             agent.last_activity = ts;
         }
         if let Some(path) = file_path {
+            upsert_file_access(&mut self.files, path, tool_name, &key, ts);
             if tool_name == "Write" || tool_name == "Edit" {
                 if let Some(file) = self.files.get_mut(path) {
                     file.was_modified = true;

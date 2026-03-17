@@ -191,7 +191,11 @@ function createRepoStore() {
   }
 
   async function selectRepoAndWorktree(repoPath: string, worktreePath: string) {
+    if (state.activeRepoPath && state.activeRepoPath !== repoPath) {
+      removeAgentHooks(state.activeRepoPath).catch(() => {});
+    }
     setState('activeRepoPath', repoPath);
+    installAgentHooks(repoPath).catch(() => {});
     setActiveWorktree(worktreePath);
   }
 
