@@ -3,6 +3,7 @@ import { getLayoutStore } from '../../lib/stores/layout';
 import { TerminalArea } from '../terminal/TerminalArea';
 import { ChangesSidebar } from './ChangesSidebar';
 import { RepoSidebar } from './RepoSidebar';
+import { TeamSidebar } from './TeamSidebar';
 
 export function Shell() {
   const layout = getLayoutStore();
@@ -22,8 +23,20 @@ export function Shell() {
           <RepoSidebar />
         </Panel>
         <ResizeHandle class="w-1 bg-border hover:bg-primary transition-colors cursor-col-resize" />
-        <Panel id="terminal" initialSize={64} minSize={30} class="h-full">
+        <Panel id="terminal" initialSize={50} minSize={30} class="h-full">
           <TerminalArea />
+        </Panel>
+        <ResizeHandle class="w-1 bg-border hover:bg-primary transition-colors cursor-col-resize" />
+        <Panel
+          id="team-sidebar"
+          initialSize={14}
+          minSize={10}
+          collapsible
+          class="h-full"
+          onCollapse={() => layout.setTeamSidebarOpen(false)}
+          onExpand={() => layout.setTeamSidebarOpen(true)}
+        >
+          <TeamSidebar />
         </Panel>
         <ResizeHandle class="w-1 bg-border hover:bg-primary transition-colors cursor-col-resize" />
         <Panel

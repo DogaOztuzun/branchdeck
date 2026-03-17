@@ -4,9 +4,11 @@ import type { PanelGroupAPI } from 'solid-resizable-panels';
 const [panelApi, setPanelApi] = createSignal<PanelGroupAPI | null>(null);
 const [repoSidebarOpen, setRepoSidebarOpen] = createSignal(true);
 const [changesSidebarOpen, setChangesSidebarOpen] = createSignal(true);
+const [teamSidebarOpen, setTeamSidebarOpen] = createSignal(false);
 
 const REPO_SIDEBAR_ID = 'repo-sidebar';
 const CHANGES_SIDEBAR_ID = 'changes-sidebar';
+const TEAM_SIDEBAR_ID = 'team-sidebar';
 const DEFAULT_SIDEBAR_SIZE = 18;
 
 export function getLayoutStore() {
@@ -36,6 +38,19 @@ export function getLayoutStore() {
       } else {
         api.expand(CHANGES_SIDEBAR_ID, DEFAULT_SIDEBAR_SIZE);
         setChangesSidebarOpen(true);
+      }
+    },
+    teamSidebarOpen,
+    setTeamSidebarOpen,
+    toggleTeamSidebar() {
+      const api = panelApi();
+      if (!api) return;
+      if (teamSidebarOpen()) {
+        api.collapse(TEAM_SIDEBAR_ID);
+        setTeamSidebarOpen(false);
+      } else {
+        api.expand(TEAM_SIDEBAR_ID, DEFAULT_SIDEBAR_SIZE);
+        setTeamSidebarOpen(true);
       }
     },
   };
