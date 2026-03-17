@@ -223,8 +223,12 @@ pub async fn get_pr_for_branch(
                 "Fetched {} check runs for {cache_key} (sha {sha})",
                 list.check_runs.len()
             );
+            // Deduplicate by name — GitHub returns multiple runs for re-runs;
+            // keep only the latest (first seen, since API returns newest first)
+            let mut seen = std::collections::HashSet::new();
             list.check_runs
                 .iter()
+                .filter(|cr| seen.insert(cr.name.clone()))
                 .map(|cr| CheckRunInfo {
                     name: cr.name.clone(),
                     conclusion: cr.conclusion.clone(),

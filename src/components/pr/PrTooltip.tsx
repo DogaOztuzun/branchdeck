@@ -7,6 +7,7 @@ type PrTooltipProps = {
   pr: PrInfo;
   anchorEl: HTMLElement;
   onClose: () => void;
+  onHover?: () => void;
 };
 
 function stateColor(state: string, isDraft: boolean): string {
@@ -67,6 +68,9 @@ function checkIcon(
 } {
   if (status === 'completed') {
     if (conclusion === 'success') return { char: '\u2713', color: '#9ece6a' };
+    if (conclusion === 'skipped') return { char: '\u2192', color: '#565f89' };
+    if (conclusion === 'neutral') return { char: '\u2014', color: '#565f89' };
+    if (conclusion === 'cancelled') return { char: '\u25CB', color: '#565f89' };
     return { char: '\u2715', color: '#f7768e' };
   }
   if (status === 'in_progress') return { char: '\u2022', color: '#e0af68' };
@@ -78,10 +82,12 @@ export function PrTooltip(props: PrTooltipProps) {
   const [checksExpanded, setChecksExpanded] = createSignal(false);
 
   let leaveTimer: ReturnType<typeof setTimeout> | undefined;
+  let mounted = true;
 
   function startLeaveTimer() {
+    if (leaveTimer !== undefined) clearTimeout(leaveTimer);
     leaveTimer = setTimeout(() => {
-      props.onClose();
+      if (mounted) props.onClose();
     }, 200);
   }
 
@@ -90,6 +96,7 @@ export function PrTooltip(props: PrTooltipProps) {
       clearTimeout(leaveTimer);
       leaveTimer = undefined;
     }
+    if (mounted) props.onHover?.();
   }
 
   onMount(() => {
@@ -112,13 +119,20 @@ export function PrTooltip(props: PrTooltipProps) {
   });
 
   onCleanup(() => {
-    cancelLeaveTimer();
+    mounted = false;
+    if (leaveTimer !== undefined) {
+      clearTimeout(leaveTimer);
+      leaveTimer = undefined;
+    }
     props.anchorEl.removeEventListener('mouseenter', cancelLeaveTimer);
     props.anchorEl.removeEventListener('mouseleave', startLeaveTimer);
   });
 
+  const skippedConclusions = new Set(['skipped', 'neutral', 'cancelled']);
+  const activeChecks = () =>
+    props.pr.checks.filter((c) => !skippedConclusions.has(c.conclusion ?? ''));
   const passedChecks = () =>
-    props.pr.checks.filter((c) => c.status === 'completed' && c.conclusion === 'success').length;
+    activeChecks().filter((c) => c.status === 'completed' && c.conclusion === 'success').length;
 
   const diffStats = () => {
     if (props.pr.additions === null && props.pr.deletions === null) return null;
@@ -209,7 +223,7 @@ export function PrTooltip(props: PrTooltipProps) {
                 class="cursor-pointer text-muted hover:text-foreground"
                 onClick={() => setChecksExpanded((v) => !v)}
               >
-                {passedChecks()}/{props.pr.checks.length} checks passed{' '}
+                {passedChecks()}/{activeChecks().length} checks passed{' '}
                 {checksExpanded() ? '\u25B4' : '\u25BE'}
               </button>
               {checksExpanded() && (

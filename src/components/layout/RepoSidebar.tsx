@@ -9,6 +9,82 @@ import { AddWorktreeModal } from '../worktree/AddWorktreeModal';
 import { BranchWorktreeModal } from '../worktree/BranchWorktreeModal';
 import { DeleteWorktreeDialog } from '../worktree/DeleteWorktreeDialog';
 
+const PR_COLORS: Record<string, string> = {
+  open: '#7aa2f7',
+  draft: '#565f89',
+  merged: '#bb9af7',
+  closed: '#f7768e',
+};
+
+function PrBadge(props: {
+  repoPath: string;
+  branch: string;
+  onHoverStart: (pr: PrInfo, el: HTMLElement) => void;
+  onHoverEnd: () => void;
+}) {
+  const repoStore = getRepoStore();
+
+  // Reactive derivations — re-compute when store changes without recreating DOM
+  const pr = () => repoStore.getPrForBranch(props.repoPath, props.branch);
+
+  const prColor = () => {
+    const p = pr();
+    if (!p) return '#565f89';
+    return p.isDraft ? PR_COLORS.draft : (PR_COLORS[p.state] ?? '#565f89');
+  };
+
+  const reviewIcon = () => {
+    const p = pr();
+    if (!p) return null;
+    if (p.reviewDecision === 'approved') return { char: '\u2713', color: '#9ece6a' };
+    if (p.reviewDecision === 'changes_requested') return { char: '!', color: '#f7768e' };
+    if (p.reviews.length > 0) return { char: '\u25CF', color: '#e0af68' };
+    return null;
+  };
+
+  const checksIcon = () => {
+    const p = pr();
+    if (!p || p.checks.length === 0) return null;
+    const nonBlocking = new Set(['success', 'skipped', 'neutral', 'cancelled']);
+    const allPassed = p.checks.every(
+      (c) => c.status === 'completed' && nonBlocking.has(c.conclusion ?? ''),
+    );
+    const anyFailed = p.checks.some(
+      (c) => c.status === 'completed' && !nonBlocking.has(c.conclusion ?? ''),
+    );
+    const anyRunning = p.checks.some((c) => c.status === 'in_progress');
+    if (allPassed) return { char: '\u2713', color: '#9ece6a' };
+    if (anyFailed) return { char: '\u2715', color: '#f7768e' };
+    if (anyRunning) return { char: '\u2022', color: '#e0af68' };
+    return { char: '\u25CB', color: '#565f89' };
+  };
+
+  return (
+    <Show when={pr()}>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: tooltip hover trigger */}
+      <span
+        class="ml-1 flex items-center gap-0.5 text-[10px] shrink-0"
+        onMouseEnter={(e) => {
+          const p = pr();
+          if (p) props.onHoverStart(p, e.currentTarget as HTMLElement);
+        }}
+        onMouseLeave={() => props.onHoverEnd()}
+      >
+        <span style={{ color: prColor() }}>{'\u25CF'}</span>
+        {(() => {
+          const ri = reviewIcon();
+          return ri ? <span style={{ color: ri.color }}>{ri.char}</span> : null;
+        })()}
+        {(() => {
+          const ci = checksIcon();
+          return ci ? <span style={{ color: ci.color }}>{ci.char}</span> : null;
+        })()}
+        <span style={{ color: prColor() }}>#{pr()?.number}</span>
+      </span>
+    </Show>
+  );
+}
+
 export function RepoSidebar() {
   const repoStore = getRepoStore();
   const [expandedRepos, setExpandedRepos] = createSignal<Set<string>>(new Set());
@@ -202,75 +278,20 @@ export function RepoSidebar() {
                               </span>
                             );
                           })()}
-                          {(() => {
-                            const pr = repoStore.getPrForBranch(repo.path, wt.branch);
-                            if (!pr) return null;
-                            const colors: Record<string, string> = {
-                              open: '#7aa2f7',
-                              draft: '#565f89',
-                              merged: '#bb9af7',
-                              closed: '#f7768e',
-                            };
-                            const prColor = pr.isDraft
-                              ? colors.draft
-                              : (colors[pr.state] ?? '#565f89');
-
-                            // Review status icon
-                            const reviewIcon = () => {
-                              if (pr.reviewDecision === 'approved')
-                                return { char: '\u2713', color: '#9ece6a' };
-                              if (pr.reviewDecision === 'changes_requested')
-                                return { char: '!', color: '#f7768e' };
-                              if (pr.reviews.length > 0)
-                                return { char: '\u25CF', color: '#e0af68' };
-                              return null;
-                            };
-
-                            // Checks summary icon
-                            const checksIcon = () => {
-                              if (pr.checks.length === 0) return null;
-                              const allPassed = pr.checks.every(
-                                (c) => c.status === 'completed' && c.conclusion === 'success',
-                              );
-                              const anyFailed = pr.checks.some(
-                                (c) => c.status === 'completed' && c.conclusion === 'failure',
-                              );
-                              const anyRunning = pr.checks.some((c) => c.status === 'in_progress');
-                              if (allPassed) return { char: '\u2713', color: '#9ece6a' };
-                              if (anyFailed) return { char: '\u2715', color: '#f7768e' };
-                              if (anyRunning) return { char: '\u2022', color: '#e0af68' };
-                              return { char: '\u25CB', color: '#565f89' };
-                            };
-
-                            const ri = reviewIcon();
-                            const ci = checksIcon();
-
-                            return (
-                              // biome-ignore lint/a11y/noStaticElementInteractions: tooltip hover trigger
-                              <span
-                                class="ml-1 flex items-center gap-0.5 text-[10px] shrink-0"
-                                onMouseEnter={(e) => {
-                                  if (prLeaveTimer !== undefined) {
-                                    clearTimeout(prLeaveTimer);
-                                    prLeaveTimer = undefined;
-                                  }
-                                  setHoveredPr({ pr, anchorEl: e.currentTarget as HTMLElement });
-                                }}
-                                onMouseLeave={() => {
-                                  prLeaveTimer = setTimeout(() => setHoveredPr(null), 200);
-                                }}
-                              >
-                                {/* PR state dot */}
-                                <span style={{ color: prColor }}>{'\u25CF'}</span>
-                                {/* Review icon */}
-                                {ri && <span style={{ color: ri.color }}>{ri.char}</span>}
-                                {/* Checks icon */}
-                                {ci && <span style={{ color: ci.color }}>{ci.char}</span>}
-                                {/* PR number */}
-                                <span style={{ color: prColor }}>#{pr.number}</span>
-                              </span>
-                            );
-                          })()}
+                          <PrBadge
+                            repoPath={repo.path}
+                            branch={wt.branch}
+                            onHoverStart={(pr, el) => {
+                              if (prLeaveTimer !== undefined) {
+                                clearTimeout(prLeaveTimer);
+                                prLeaveTimer = undefined;
+                              }
+                              setHoveredPr({ pr, anchorEl: el });
+                            }}
+                            onHoverEnd={() => {
+                              prLeaveTimer = setTimeout(() => setHoveredPr(null), 200);
+                            }}
+                          />
                         </button>
                       )}
                     </For>
@@ -384,15 +405,23 @@ export function RepoSidebar() {
           </Portal>
         )}
       </Show>
-      <Show when={hoveredPr()}>
-        {(hovered) => (
+      {(() => {
+        const hovered = hoveredPr();
+        if (!hovered) return null;
+        return (
           <PrTooltip
-            pr={hovered().pr}
-            anchorEl={hovered().anchorEl}
+            pr={hovered.pr}
+            anchorEl={hovered.anchorEl}
             onClose={() => setHoveredPr(null)}
+            onHover={() => {
+              if (prLeaveTimer !== undefined) {
+                clearTimeout(prLeaveTimer);
+                prLeaveTimer = undefined;
+              }
+            }}
           />
-        )}
-      </Show>
+        );
+      })()}
     </div>
   );
 }
