@@ -9,6 +9,12 @@ pub struct TerminalService {
     sessions: HashMap<SessionId, PtySession>,
 }
 
+impl Default for TerminalService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TerminalService {
     #[must_use]
     pub fn new() -> Self {
@@ -17,6 +23,8 @@ impl TerminalService {
         }
     }
 
+    /// # Errors
+    /// Returns `AppError` if the PTY cannot be opened or the shell cannot be spawned.
     pub fn create_session(
         &mut self,
         cwd: &str,
@@ -78,6 +86,8 @@ impl TerminalService {
         Ok((id, reader))
     }
 
+    /// # Errors
+    /// Returns `AppError` if the session is not found or the write fails.
     pub fn write_to_session(&mut self, id: &str, data: &[u8]) -> Result<(), AppError> {
         let session = self.sessions.get_mut(id).ok_or_else(|| {
             error!("Write failed: session {id} not found");
@@ -94,6 +104,8 @@ impl TerminalService {
         Ok(())
     }
 
+    /// # Errors
+    /// Returns `AppError` if the session is not found or the resize fails.
     pub fn resize_session(&mut self, id: &str, rows: u16, cols: u16) -> Result<(), AppError> {
         let session = self.sessions.get(id).ok_or_else(|| {
             error!("Resize failed: session {id} not found");
@@ -118,6 +130,8 @@ impl TerminalService {
         Ok(())
     }
 
+    /// # Errors
+    /// Returns `AppError` if the session process cannot be killed.
     pub fn close_session(&mut self, id: &str) -> Result<Option<()>, AppError> {
         let session = self.sessions.remove(id);
         if let Some(mut s) = session {

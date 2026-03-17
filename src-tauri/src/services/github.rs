@@ -15,6 +15,7 @@ fn cache() -> &'static Mutex<HashMap<String, (Instant, Option<PrInfo>)>> {
 
 const CACHE_TTL: Duration = Duration::from_secs(300);
 
+#[must_use]
 pub fn parse_github_remote(remote_url: &str) -> Option<(String, String)> {
     // SSH: git@github.com:owner/repo.git
     if let Some(rest) = remote_url.strip_prefix("git@github.com:") {
@@ -36,6 +37,8 @@ pub fn parse_github_remote(remote_url: &str) -> Option<(String, String)> {
     None
 }
 
+/// # Errors
+/// Returns `AppError` if the `gh` CLI is not available or authentication fails.
 pub async fn resolve_github_token() -> Result<String, AppError> {
     let output = tokio::process::Command::new("gh")
         .args(["auth", "token"])
@@ -59,6 +62,8 @@ pub async fn resolve_github_token() -> Result<String, AppError> {
     Ok(token)
 }
 
+/// # Errors
+/// Returns `AppError` if authentication or the GitHub API request fails.
 pub async fn get_pr_for_branch(
     owner: &str,
     repo: &str,

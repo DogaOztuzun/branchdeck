@@ -1,6 +1,8 @@
 import { createSignal, For, Show } from 'solid-js';
 import type { Preset } from '../../lib/commands/workspace';
+import type { TabAgentInfo } from '../../lib/stores/agent';
 import type { TabInfo } from '../../types/terminal';
+import { AgentBadge } from './AgentBadge';
 
 type TabBarProps = {
   tabs: TabInfo[];
@@ -12,6 +14,7 @@ type TabBarProps = {
   presets: Preset[];
   onRunPreset: (preset: Preset) => void;
   onManagePresets: () => void;
+  getTabAgent: (tabId: string) => TabAgentInfo | undefined;
 };
 
 export function TabBar(props: TabBarProps) {
@@ -35,6 +38,9 @@ export function TabBar(props: TabBarProps) {
                 onClick={() => props.onSelectTab(tab.id)}
               >
                 <span>{tab.title}</span>
+                <Show when={tab.type === 'claude'}>
+                  <AgentBadge agent={props.getTabAgent(tab.id)} />
+                </Show>
               </button>
               <button
                 type="button"

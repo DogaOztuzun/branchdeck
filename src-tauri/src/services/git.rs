@@ -6,6 +6,7 @@ use git2::{BranchType, Repository, StatusOptions};
 use log::{debug, error, info};
 use std::path::Path;
 
+#[must_use]
 pub fn sanitize_worktree_name(name: &str) -> String {
     let sanitized: String = name
         .chars()
@@ -51,6 +52,8 @@ pub fn sanitize_worktree_name(name: &str) -> String {
     result.to_string()
 }
 
+/// # Errors
+/// Returns `AppError` if the path is not a valid git repository.
 pub fn validate_repo(path: &Path) -> Result<RepoInfo, AppError> {
     let repo = Repository::discover(path)?;
 
@@ -81,6 +84,8 @@ pub fn validate_repo(path: &Path) -> Result<RepoInfo, AppError> {
     })
 }
 
+/// # Errors
+/// Returns `AppError` if the repository cannot be opened or worktrees cannot be listed.
 pub fn list_worktrees(repo_path: &Path) -> Result<Vec<WorktreeInfo>, AppError> {
     let repo = Repository::open(repo_path)?;
     let mut result = Vec::new();
@@ -145,6 +150,8 @@ pub fn list_worktrees(repo_path: &Path) -> Result<Vec<WorktreeInfo>, AppError> {
     Ok(result)
 }
 
+/// # Errors
+/// Returns `AppError` if the worktree cannot be created or the branch operation fails.
 pub fn create_worktree(
     repo_path: &Path,
     name: &str,
@@ -213,6 +220,8 @@ pub fn create_worktree(
     })
 }
 
+/// # Errors
+/// Returns `AppError` if the worktree cannot be pruned or removed.
 pub fn remove_worktree(
     repo_path: &Path,
     worktree_name: &str,
@@ -262,6 +271,8 @@ pub fn remove_worktree(
     Ok(())
 }
 
+/// # Errors
+/// Returns `AppError` if the repository cannot be opened.
 pub fn preview_worktree(repo_path: &Path, name: &str) -> Result<WorktreePreview, AppError> {
     let sanitized = sanitize_worktree_name(name);
     let branch_name = sanitized.clone();
@@ -308,6 +319,8 @@ pub fn preview_worktree(repo_path: &Path, name: &str) -> Result<WorktreePreview,
     })
 }
 
+/// # Errors
+/// Returns `AppError` if the repository cannot be opened or branches cannot be listed.
 pub fn list_branches(repo_path: &Path) -> Result<Vec<BranchInfo>, AppError> {
     let repo = Repository::open(repo_path)?;
 
@@ -403,6 +416,8 @@ pub fn list_branches(repo_path: &Path) -> Result<Vec<BranchInfo>, AppError> {
     Ok(branches)
 }
 
+/// # Errors
+/// Returns `AppError` if the repository cannot be opened or status cannot be retrieved.
 pub fn get_status(worktree_path: &Path) -> Result<Vec<FileStatus>, AppError> {
     let repo = Repository::open(worktree_path)?;
 
@@ -430,6 +445,8 @@ pub fn get_status(worktree_path: &Path) -> Result<Vec<FileStatus>, AppError> {
     Ok(result)
 }
 
+/// # Errors
+/// Returns `AppError` if the repository cannot be opened or tracking info cannot be resolved.
 pub fn get_branch_tracking(
     repo_path: &Path,
     branch_name: &str,

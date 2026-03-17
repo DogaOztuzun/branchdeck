@@ -59,6 +59,8 @@ impl Default for GlobalConfig {
     }
 }
 
+/// # Errors
+/// Returns `AppError` if the config directory cannot be determined or created.
 pub fn config_dir() -> Result<PathBuf, AppError> {
     let dir = dirs::config_dir()
         .ok_or_else(|| AppError::Config("Could not determine config directory".to_string()))?
@@ -71,6 +73,8 @@ pub fn config_dir() -> Result<PathBuf, AppError> {
     Ok(dir)
 }
 
+/// # Errors
+/// Returns `AppError` if the config directory cannot be resolved.
 pub fn repo_config_path(repo_path: &str) -> Result<PathBuf, AppError> {
     let mut hasher = Sha256::new();
     hasher.update(repo_path.as_bytes());
@@ -80,6 +84,8 @@ pub fn repo_config_path(repo_path: &str) -> Result<PathBuf, AppError> {
     Ok(dir.join(format!("{hash}.json")))
 }
 
+/// # Errors
+/// Returns `AppError` if the config file cannot be read or parsed.
 pub fn load_global_config() -> Result<GlobalConfig, AppError> {
     let path = config_dir()?.join("config.json");
 
@@ -98,6 +104,8 @@ pub fn load_global_config() -> Result<GlobalConfig, AppError> {
     Ok(config)
 }
 
+/// # Errors
+/// Returns `AppError` if the config file cannot be serialized or written.
 pub fn save_global_config(config: &GlobalConfig) -> Result<(), AppError> {
     let path = config_dir()?.join("config.json");
     let contents =
@@ -107,6 +115,8 @@ pub fn save_global_config(config: &GlobalConfig) -> Result<(), AppError> {
     Ok(())
 }
 
+/// # Errors
+/// Returns `AppError` if the repo config file cannot be read or parsed.
 pub fn load_repo_config(repo_path: &str) -> Result<RepoConfig, AppError> {
     let path = repo_config_path(repo_path)?;
 
@@ -128,6 +138,8 @@ pub fn load_repo_config(repo_path: &str) -> Result<RepoConfig, AppError> {
     Ok(config)
 }
 
+/// # Errors
+/// Returns `AppError` if the repo config file cannot be serialized or written.
 pub fn save_repo_config(repo_path: &str, config: &RepoConfig) -> Result<(), AppError> {
     let path = repo_config_path(repo_path)?;
     let contents =

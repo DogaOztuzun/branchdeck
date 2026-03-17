@@ -1,6 +1,7 @@
 import { createStore, produce } from 'solid-js/store';
 import type { FileStatus, RepoInfo, TrackingInfo, WorktreeInfo } from '../../types/git';
 import type { PrInfo } from '../../types/github';
+import { installAgentHooks, removeAgentHooks } from '../commands/agent';
 import {
   addRepository,
   createWorktree as createWorktreeCmd,
@@ -64,6 +65,7 @@ function createRepoStore() {
     if (!lastRepo) return;
 
     setState('activeRepoPath', lastRepo.path);
+    installAgentHooks(lastRepo.path).catch(() => {});
     const wts = await listWorktrees(lastRepo.path);
     setState('worktreesByRepo', lastRepo.path, wts);
     loadBranchTracking(lastRepo.path);
@@ -104,6 +106,7 @@ function createRepoStore() {
   }
 
   async function removeRepo(repoPath: string) {
+    removeAgentHooks(repoPath).catch(() => {});
     await removeRepository(repoPath);
     setState(
       produce((s) => {
@@ -168,7 +171,13 @@ function createRepoStore() {
   }
 
   async function selectRepo(repoPath: string) {
+    // Remove hooks from previously active repo
+    if (state.activeRepoPath && state.activeRepoPath !== repoPath) {
+      removeAgentHooks(state.activeRepoPath).catch(() => {});
+    }
     setState('activeRepoPath', repoPath);
+    // Install hooks for newly selected repo
+    installAgentHooks(repoPath).catch(() => {});
     await ensureWorktreesLoaded(repoPath);
     const wts = state.worktreesByRepo[repoPath] ?? [];
     const main = wts.find((w) => w.isMain);
@@ -182,7 +191,11 @@ function createRepoStore() {
   }
 
   async function selectRepoAndWorktree(repoPath: string, worktreePath: string) {
+    if (state.activeRepoPath && state.activeRepoPath !== repoPath) {
+      removeAgentHooks(state.activeRepoPath).catch(() => {});
+    }
     setState('activeRepoPath', repoPath);
+    installAgentHooks(repoPath).catch(() => {});
     setActiveWorktree(worktreePath);
   }
 
