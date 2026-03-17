@@ -6,6 +6,9 @@ use std::path::Path;
 /// Scans `.claude/agents/*.md` files in the given repo and returns parsed agent definitions.
 ///
 /// Files that fail to parse are logged and skipped.
+///
+/// # Errors
+/// Returns `AppError` if the agents directory cannot be read.
 pub fn scan_agent_definitions(repo_path: &str) -> Result<Vec<AgentDefinition>, AppError> {
     let agents_dir = Path::new(repo_path).join(".claude/agents");
 

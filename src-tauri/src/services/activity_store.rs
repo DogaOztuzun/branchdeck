@@ -122,6 +122,12 @@ pub struct ActivityStore {
     inner: Arc<Mutex<StoreInner>>,
 }
 
+impl Default for ActivityStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ActivityStore {
     #[must_use]
     pub fn new() -> Self {

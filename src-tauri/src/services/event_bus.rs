@@ -7,6 +7,12 @@ pub struct EventBus {
     tx: broadcast::Sender<Event>,
 }
 
+impl Default for EventBus {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EventBus {
     #[must_use]
     pub fn new() -> Self {
@@ -14,6 +20,7 @@ impl EventBus {
         Self { tx }
     }
 
+    #[must_use]
     pub fn publish(&self, event: Event) -> usize {
         self.tx.send(event).unwrap_or(0)
     }

@@ -110,7 +110,7 @@ async fn handle_connection(
 
     if let Some(event) = payload_to_event(&payload, &session_id, &tab_id, ts) {
         debug!("Publishing event for session {session_id}, tab {tab_id}");
-        event_bus.publish(event);
+        let _ = event_bus.publish(event);
     }
 
     respond(&mut writer, RESPONSE_200).await

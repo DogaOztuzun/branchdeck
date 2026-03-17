@@ -15,7 +15,7 @@ use branchdeck_lib::services::event_bus::EventBus;
 use branchdeck_lib::services::hook_config;
 use branchdeck_lib::services::hook_receiver;
 
-/// Test: EventBus pub/sub delivers events to subscribers.
+/// Test: `EventBus` pub/sub delivers events to subscribers.
 #[tokio::test]
 async fn event_bus_pubsub() {
     let bus = EventBus::new();
@@ -28,7 +28,7 @@ async fn event_bus_pubsub() {
         ts: 1000,
     };
 
-    bus.publish(event.clone());
+    let _ = bus.publish(event.clone());
 
     let received = tokio::time::timeout(Duration::from_millis(100), rx.recv())
         .await
@@ -42,7 +42,7 @@ async fn event_bus_pubsub() {
     }
 }
 
-/// Test: ActivityStore tracks agent state through session lifecycle.
+/// Test: `ActivityStore` tracks agent state through session lifecycle.
 #[tokio::test]
 async fn activity_store_lifecycle() {
     let bus = EventBus::new();
@@ -53,7 +53,7 @@ async fn activity_store_lifecycle() {
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // Session start
-    bus.publish(Event::SessionStart {
+    let _ = bus.publish(Event::SessionStart {
         session_id: "sess-1".into(),
         tab_id: "tab-1".into(),
         model: None,
@@ -67,7 +67,7 @@ async fn activity_store_lifecycle() {
     assert_eq!(agents[0].session_id, "sess-1");
 
     // Tool start
-    bus.publish(Event::ToolStart {
+    let _ = bus.publish(Event::ToolStart {
         session_id: "sess-1".into(),
         agent_id: None,
         tab_id: "tab-1".into(),
@@ -89,7 +89,7 @@ async fn activity_store_lifecycle() {
     assert!(!files[0].was_modified);
 
     // Tool end (Write marks file as modified)
-    bus.publish(Event::ToolEnd {
+    let _ = bus.publish(Event::ToolEnd {
         session_id: "sess-1".into(),
         agent_id: None,
         tab_id: "tab-1".into(),
@@ -105,7 +105,7 @@ async fn activity_store_lifecycle() {
     assert!(agents[0].current_tool.is_none());
 
     // Session stop
-    bus.publish(Event::SessionStop {
+    let _ = bus.publish(Event::SessionStop {
         session_id: "sess-1".into(),
         tab_id: "tab-1".into(),
         ts: 4000,
@@ -124,14 +124,14 @@ async fn activity_store_subagents() {
     store.start_subscriber(&bus);
     tokio::time::sleep(Duration::from_millis(10)).await;
 
-    bus.publish(Event::SessionStart {
+    let _ = bus.publish(Event::SessionStart {
         session_id: "sess-1".into(),
         tab_id: "tab-1".into(),
         model: None,
         ts: 1000,
     });
 
-    bus.publish(Event::SubagentStart {
+    let _ = bus.publish(Event::SubagentStart {
         session_id: "sess-1".into(),
         agent_id: "sub-1".into(),
         agent_type: "Explore".into(),
@@ -148,7 +148,7 @@ async fn activity_store_subagents() {
     assert_eq!(sub.agent_type.as_deref(), Some("Explore"));
     assert_eq!(sub.status, AgentStatus::Active);
 
-    bus.publish(Event::SubagentStop {
+    let _ = bus.publish(Event::SubagentStop {
         session_id: "sess-1".into(),
         agent_id: "sub-1".into(),
         agent_type: "Explore".into(),
@@ -387,9 +387,11 @@ fn agent_scanner_real_files() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-/// Test: ensure_notify_script creates an executable script.
+/// Test: `ensure_notify_script` creates an executable script.
 #[test]
 fn notify_script_creation() {
+    use std::os::unix::fs::PermissionsExt;
+
     let result = hook_config::ensure_notify_script();
     assert!(result.is_ok());
 
@@ -402,7 +404,6 @@ fn notify_script_creation() {
     assert!(contents.contains("curl"));
 
     // Check executable permission
-    use std::os::unix::fs::PermissionsExt;
     let mode = std::fs::metadata(&path).unwrap().permissions().mode();
     assert!(mode & 0o111 != 0, "Script should be executable");
 }

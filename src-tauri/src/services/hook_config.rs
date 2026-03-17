@@ -28,6 +28,9 @@ const HOOK_EVENTS: &[&str] = &[
 
 /// Generates the `notify.sh` helper script in the Branchdeck config directory
 /// and returns its absolute path.
+///
+/// # Errors
+/// Returns `AppError` if the hooks directory cannot be created, the script cannot be written, or permissions fail.
 pub fn ensure_notify_script() -> Result<PathBuf, AppError> {
     let hooks_dir = crate::services::config::config_dir()?.join("hooks");
 
@@ -71,6 +74,9 @@ pub fn ensure_notify_script() -> Result<PathBuf, AppError> {
 
 /// Installs hooks at user level (`~/.claude/settings.json`).
 /// Works for all repos and worktrees.
+///
+/// # Errors
+/// Returns `AppError` if the settings file cannot be read, parsed, or written.
 pub fn install_hooks_user_level(script_path: &Path) -> Result<(), AppError> {
     let home = dirs::home_dir()
         .ok_or_else(|| AppError::Agent("Could not determine home directory".to_string()))?;
@@ -88,6 +94,9 @@ pub fn install_hooks_user_level(script_path: &Path) -> Result<(), AppError> {
 }
 
 /// Removes hooks from user level (`~/.claude/settings.json`).
+///
+/// # Errors
+/// Returns `AppError` if the settings file cannot be read, parsed, or written.
 pub fn remove_hooks_user_level(script_path: &Path) -> Result<(), AppError> {
     let home = dirs::home_dir()
         .ok_or_else(|| AppError::Agent("Could not determine home directory".to_string()))?;
@@ -98,6 +107,9 @@ pub fn remove_hooks_user_level(script_path: &Path) -> Result<(), AppError> {
 }
 
 /// Installs hooks at project level (`{repo}/.claude/settings.json`).
+///
+/// # Errors
+/// Returns `AppError` if the settings file cannot be created, read, or written.
 pub fn install_hooks(repo_path: &str, script_path: &Path) -> Result<(), AppError> {
     let claude_dir = Path::new(repo_path).join(".claude");
     if !claude_dir.exists() {
@@ -113,6 +125,9 @@ pub fn install_hooks(repo_path: &str, script_path: &Path) -> Result<(), AppError
 }
 
 /// Removes hooks from project level (`{repo}/.claude/settings.json`).
+///
+/// # Errors
+/// Returns `AppError` if the settings file cannot be read, parsed, or written.
 pub fn remove_hooks(repo_path: &str, script_path: &Path) -> Result<(), AppError> {
     let settings_path = Path::new(repo_path).join(".claude").join("settings.json");
     remove_hooks_at(&settings_path, script_path)?;
@@ -156,7 +171,7 @@ fn install_hooks_at(settings_path: &Path, script_path: &Path) -> Result<(), AppE
             entry
                 .get("hooks")
                 .and_then(serde_json::Value::as_array)
-                .map_or(false, |hooks| {
+                .is_some_and(|hooks| {
                     hooks.iter().any(|h| {
                         h.get("command").and_then(serde_json::Value::as_str) == Some(&script_cmd)
                     })
@@ -203,7 +218,7 @@ fn remove_hooks_at(settings_path: &Path, script_path: &Path) -> Result<(), AppEr
                     let is_ours = entry
                         .get("hooks")
                         .and_then(serde_json::Value::as_array)
-                        .map_or(false, |hooks| {
+                        .is_some_and(|hooks| {
                             hooks.iter().any(|h| {
                                 h.get("command").and_then(serde_json::Value::as_str)
                                     == Some(&script_cmd)
