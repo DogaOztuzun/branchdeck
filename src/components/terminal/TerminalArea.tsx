@@ -1,8 +1,10 @@
-import { createEffect, createMemo, createSignal, For, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import type { Preset } from '../../lib/commands/workspace';
 import { getPresets } from '../../lib/commands/workspace';
+import { getAgentStore } from '../../lib/stores/agent';
 import { getRepoStore } from '../../lib/stores/repo';
 import { getTerminalStore } from '../../lib/stores/terminal';
+import { AgentActivity } from './AgentActivity';
 import { PresetManager } from './PresetManager';
 import { TabBar } from './TabBar';
 import { TerminalView } from './TerminalView';
@@ -10,6 +12,7 @@ import { TerminalView } from './TerminalView';
 export function TerminalArea() {
   const terminalStore = getTerminalStore();
   const repoStore = getRepoStore();
+  const agentStore = getAgentStore();
 
   const worktreePath = () => repoStore.state.activeWorktreePath ?? '';
   const repoPath = () => repoStore.state.activeRepoPath ?? '';
@@ -25,6 +28,23 @@ export function TerminalArea() {
   const [presets, setPresets] = createSignal<Preset[]>([]);
   const [presetManagerOpen, setPresetManagerOpen] = createSignal(false);
   const [presetVersion, setPresetVersion] = createSignal(0);
+  const [activityVisible, setActivityVisible] = createSignal(false);
+
+  const hasClaudeTab = createMemo(() => visibleTabs().some((t) => t.type === 'claude'));
+
+  const activeTabLog = createMemo(() => {
+    const tabId = activeTabId();
+    if (!tabId) return [];
+    return agentStore.getLogForTab(tabId);
+  });
+
+  onMount(() => {
+    agentStore.startListening();
+  });
+
+  onCleanup(() => {
+    agentStore.stopListening();
+  });
 
   createEffect(() => {
     const repo = repoPath();
@@ -51,6 +71,7 @@ export function TerminalArea() {
         presets={presets()}
         onRunPreset={(preset) => terminalStore.runPreset(worktreePath(), preset)}
         onManagePresets={() => setPresetManagerOpen(true)}
+        getTabAgent={(tabId) => agentStore.getTabAgent(tabId)}
       />
       <div class="flex-1 relative">
         {/* Empty state — shown above terminals, does not unmount them */}
@@ -91,6 +112,18 @@ export function TerminalArea() {
           )}
         </For>
       </div>
+      <Show when={hasClaudeTab()}>
+        <div class="flex items-center border-t border-border bg-surface px-2">
+          <button
+            type="button"
+            class="px-2 py-0.5 text-[10px] text-text-muted hover:text-text cursor-pointer"
+            onClick={() => setActivityVisible((v) => !v)}
+          >
+            {activityVisible() ? '\u25BC' : '\u25B6'} Activity
+          </button>
+        </div>
+      </Show>
+      <AgentActivity entries={activeTabLog()} visible={activityVisible() && hasClaudeTab()} />
       <PresetManager
         open={presetManagerOpen()}
         repoPath={repoPath()}

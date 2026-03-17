@@ -2,6 +2,7 @@ import { createStore, produce } from 'solid-js/store';
 import type { PtyEvent, TabInfo } from '../../types/terminal';
 import { closeTerminal, createTerminalSession, writeTerminal } from '../commands/terminal';
 import type { Preset } from '../commands/workspace';
+import { getAgentStore } from './agent';
 
 type TerminalState = {
   tabs: TabInfo[];
@@ -152,6 +153,9 @@ function createTerminalStore() {
 
     await closeTerminal(tab.sessionId);
     outputHandlers.delete(tab.sessionId);
+    if (tab.type === 'claude') {
+      getAgentStore().removeTab(tab.id);
+    }
 
     setState(
       produce((s) => {

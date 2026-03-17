@@ -1,0 +1,47 @@
+import { Show } from 'solid-js';
+import type { TabAgentInfo } from '../../lib/stores/agent';
+
+type AgentBadgeProps = {
+  agent: TabAgentInfo | undefined;
+};
+
+function statusColor(status: string): string {
+  switch (status) {
+    case 'active':
+      return 'bg-success';
+    case 'idle':
+      return 'bg-warning';
+    case 'stopped':
+      return 'bg-text-muted';
+    default:
+      return 'bg-text-muted';
+  }
+}
+
+function shortPath(filePath: string): string {
+  const parts = filePath.split('/');
+  return parts.length > 1 ? parts[parts.length - 1] : filePath;
+}
+
+export function AgentBadge(props: AgentBadgeProps) {
+  return (
+    <Show when={props.agent}>
+      {(agent) => (
+        <span class="inline-flex items-center gap-1 ml-1.5">
+          <span class={`w-1.5 h-1.5 rounded-full ${statusColor(agent().status)}`} />
+          <Show when={agent().currentTool}>
+            <span class="text-text-muted text-[10px] max-w-24 truncate">
+              {agent().currentTool}
+              <Show when={agent().currentFile}>
+                {(file) => <span class="opacity-60"> {shortPath(file())}</span>}
+              </Show>
+            </span>
+          </Show>
+          <Show when={agent().subagentCount > 0}>
+            <span class="text-info text-[10px]">+{agent().subagentCount}</span>
+          </Show>
+        </span>
+      )}
+    </Show>
+  );
+}
