@@ -368,6 +368,7 @@ dependencies = [
 name = "branchdeck"
 version = "0.2.0"
 dependencies = [
+ "chrono",
  "dirs",
  "git2",
  "log",

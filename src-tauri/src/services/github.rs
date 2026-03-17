@@ -1,6 +1,6 @@
 use crate::error::AppError;
-use crate::models::PrInfo;
-use log::{debug, error};
+use crate::models::{CheckRunInfo, PrInfo, ReviewInfo};
+use log::{debug, error, info};
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -13,7 +13,108 @@ fn cache() -> &'static Mutex<HashMap<String, (Instant, Option<PrInfo>)>> {
     PR_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-const CACHE_TTL: Duration = Duration::from_secs(300);
+static CLIENT_CACHE: std::sync::OnceLock<Mutex<Option<(Instant, octocrab::Octocrab)>>> =
+    std::sync::OnceLock::new();
+
+fn client_cache() -> &'static Mutex<Option<(Instant, octocrab::Octocrab)>> {
+    CLIENT_CACHE.get_or_init(|| Mutex::new(None))
+}
+
+const CACHE_TTL: Duration = Duration::from_secs(30);
+const CLIENT_TTL: Duration = Duration::from_secs(300);
+
+async fn get_client() -> Result<octocrab::Octocrab, AppError> {
+    // Check for a cached client (brief lock, no await)
+    if let Ok(guard) = client_cache().lock() {
+        if let Some((ts, ref client)) = *guard {
+            if ts.elapsed() < CLIENT_TTL {
+                debug!("Using cached octocrab client");
+                return Ok(client.clone());
+            }
+        }
+    }
+
+    let token = resolve_github_token().await?;
+    let client = octocrab::Octocrab::builder()
+        .personal_token(token)
+        .build()
+        .map_err(|e| {
+            error!("Failed to build octocrab client: {e}");
+            AppError::GitHub(e.to_string())
+        })?;
+
+    // Cache the new client (brief lock, no await)
+    if let Ok(mut guard) = client_cache().lock() {
+        *guard = Some((Instant::now(), client.clone()));
+    }
+
+    info!("Created new octocrab client");
+    Ok(client)
+}
+
+fn infer_check_status_from_fields(
+    conclusion: Option<&String>,
+    started_at: Option<&chrono::DateTime<chrono::Utc>>,
+) -> String {
+    if conclusion.is_some() {
+        "completed".to_string()
+    } else if started_at.is_some() {
+        "in_progress".to_string()
+    } else {
+        "queued".to_string()
+    }
+}
+
+fn infer_check_status(check_run: &octocrab::models::checks::CheckRun) -> String {
+    infer_check_status_from_fields(check_run.conclusion.as_ref(), check_run.started_at.as_ref())
+}
+
+fn review_state_to_string(state: octocrab::models::pulls::ReviewState) -> String {
+    use octocrab::models::pulls::ReviewState;
+    match state {
+        ReviewState::Approved => "approved".to_string(),
+        ReviewState::ChangesRequested => "changes_requested".to_string(),
+        ReviewState::Commented => "commented".to_string(),
+        ReviewState::Dismissed => "dismissed".to_string(),
+        ReviewState::Pending => "pending".to_string(),
+        ReviewState::Open => "open".to_string(),
+        _ => "unknown".to_string(),
+    }
+}
+
+fn derive_review_decision(reviews: &[ReviewInfo]) -> Option<String> {
+    // Group by user, keep latest per user (by submitted_at)
+    let mut latest_by_user: HashMap<&str, &ReviewInfo> = HashMap::new();
+    for review in reviews {
+        let dominated = latest_by_user
+            .get(review.user.as_str())
+            .is_some_and(
+                |existing| match (&existing.submitted_at, &review.submitted_at) {
+                    (Some(a), Some(b)) => b > a,
+                    (None, Some(_)) => true,
+                    _ => false,
+                },
+            );
+        if dominated || !latest_by_user.contains_key(review.user.as_str()) {
+            latest_by_user.insert(&review.user, review);
+        }
+    }
+
+    // Filter out "commented" and "dismissed"
+    let meaningful: Vec<&str> = latest_by_user
+        .values()
+        .map(|r| r.state.as_str())
+        .filter(|s| *s != "commented" && *s != "dismissed")
+        .collect();
+
+    if meaningful.contains(&"changes_requested") {
+        Some("changes_requested".to_string())
+    } else if meaningful.contains(&"approved") {
+        Some("approved".to_string())
+    } else {
+        None
+    }
+}
 
 #[must_use]
 pub fn parse_github_remote(remote_url: &str) -> Option<(String, String)> {
@@ -64,6 +165,7 @@ pub async fn resolve_github_token() -> Result<String, AppError> {
 
 /// # Errors
 /// Returns `AppError` if authentication or the GitHub API request fails.
+#[allow(clippy::too_many_lines)]
 pub async fn get_pr_for_branch(
     owner: &str,
     repo: &str,
@@ -81,13 +183,9 @@ pub async fn get_pr_for_branch(
         }
     }
 
-    let token = resolve_github_token().await?;
-    let octocrab = octocrab::Octocrab::builder()
-        .personal_token(token)
-        .build()
-        .map_err(|e| AppError::GitHub(e.to_string()))?;
+    let client = get_client().await?;
 
-    let pulls = octocrab
+    let pulls = client
         .pulls(owner, repo)
         .list()
         .head(format!("{owner}:{branch}"))
@@ -100,39 +198,272 @@ pub async fn get_pr_for_branch(
             AppError::GitHub(e.to_string())
         })?;
 
-    let pr_info = pulls.items.first().map(|pr| {
-        let state = if pr.merged_at.is_some() {
-            "merged".to_string()
-        } else {
-            match pr.state {
-                Some(octocrab::models::IssueState::Open) => "open".to_string(),
-                Some(octocrab::models::IssueState::Closed) => "closed".to_string(),
-                _ => "unknown".to_string(),
-            }
-        };
-
-        PrInfo {
-            number: pr.number,
-            title: pr.title.clone().unwrap_or_default(),
-            state,
-            is_draft: pr.draft.unwrap_or(false),
-            url: pr
-                .html_url
-                .as_ref()
-                .map_or_else(String::new, std::string::ToString::to_string),
-            ci_status: None,
+    let Some(pr) = pulls.items.first() else {
+        // No PR found — cache the None result
+        if let Ok(mut c) = cache().lock() {
+            c.insert(cache_key.clone(), (Instant::now(), None));
         }
-    });
+        debug!("No PR found for {cache_key}");
+        return Ok(None);
+    };
+
+    let state = if pr.merged_at.is_some() {
+        "merged".to_string()
+    } else {
+        match pr.state {
+            Some(octocrab::models::IssueState::Open) => "open".to_string(),
+            Some(octocrab::models::IssueState::Closed) => "closed".to_string(),
+            _ => "unknown".to_string(),
+        }
+    };
+
+    // Fetch check runs for the head SHA
+    let sha = pr.head.sha.clone();
+    let checks = match client
+        .checks(owner, repo)
+        .list_check_runs_for_git_ref(octocrab::params::repos::Commitish(sha.clone()))
+        .send()
+        .await
+    {
+        Ok(list) => {
+            debug!(
+                "Fetched {} check runs for {cache_key} (sha {sha})",
+                list.check_runs.len()
+            );
+            // Deduplicate by name — GitHub returns multiple runs for re-runs;
+            // keep only the latest (first seen, since API returns newest first)
+            let mut seen = std::collections::HashSet::new();
+            list.check_runs
+                .iter()
+                .filter(|cr| seen.insert(cr.name.clone()))
+                .map(|cr| CheckRunInfo {
+                    name: cr.name.clone(),
+                    conclusion: cr.conclusion.clone(),
+                    status: infer_check_status(cr),
+                    details_url: cr.details_url.clone(),
+                })
+                .collect::<Vec<_>>()
+        }
+        Err(e) => {
+            error!("Failed to fetch check runs for {cache_key}: {e}");
+            Vec::new()
+        }
+    };
+
+    // Fetch reviews
+    let reviews: Vec<ReviewInfo> = match client
+        .get::<Vec<octocrab::models::pulls::Review>, _, _>(
+            format!("/repos/{owner}/{repo}/pulls/{}/reviews", pr.number),
+            None::<&()>,
+        )
+        .await
+    {
+        Ok(review_list) => {
+            debug!("Fetched {} reviews for {cache_key}", review_list.len());
+            review_list
+                .iter()
+                .map(|r| ReviewInfo {
+                    user: r.user.as_ref().map(|u| u.login.clone()).unwrap_or_default(),
+                    state: r
+                        .state
+                        .map_or_else(|| "pending".to_string(), review_state_to_string),
+                    submitted_at: r.submitted_at.map(|t| t.to_rfc3339()),
+                })
+                .collect()
+        }
+        Err(e) => {
+            error!("Failed to fetch reviews for {cache_key}: {e}");
+            Vec::new()
+        }
+    };
+
+    let review_decision = derive_review_decision(&reviews);
+
+    let pr_info = PrInfo {
+        number: pr.number,
+        title: pr.title.clone().unwrap_or_default(),
+        state,
+        is_draft: pr.draft.unwrap_or(false),
+        url: pr
+            .html_url
+            .as_ref()
+            .map_or_else(String::new, std::string::ToString::to_string),
+        checks,
+        reviews,
+        additions: pr.additions,
+        deletions: pr.deletions,
+        review_decision,
+    };
 
     // Update cache
     if let Ok(mut c) = cache().lock() {
-        c.insert(cache_key.clone(), (Instant::now(), pr_info.clone()));
+        c.insert(cache_key.clone(), (Instant::now(), Some(pr_info.clone())));
     }
 
-    debug!(
-        "Fetched PR for {cache_key}: {:?}",
-        pr_info.as_ref().map(|p| p.number)
+    info!(
+        "Fetched PR #{} for {cache_key} (checks={}, reviews={})",
+        pr_info.number,
+        pr_info.checks.len(),
+        pr_info.reviews.len()
     );
 
-    Ok(pr_info)
+    Ok(Some(pr_info))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::ReviewInfo;
+
+    #[test]
+    fn test_parse_github_remote_ssh() {
+        let result = parse_github_remote("git@github.com:owner/repo.git");
+        assert_eq!(result, Some(("owner".to_string(), "repo".to_string())));
+    }
+
+    #[test]
+    fn test_parse_github_remote_https() {
+        let result = parse_github_remote("https://github.com/owner/repo.git");
+        assert_eq!(result, Some(("owner".to_string(), "repo".to_string())));
+    }
+
+    #[test]
+    fn test_parse_github_remote_https_no_suffix() {
+        let result = parse_github_remote("https://github.com/owner/repo");
+        assert_eq!(result, Some(("owner".to_string(), "repo".to_string())));
+    }
+
+    #[test]
+    fn test_parse_github_remote_non_github() {
+        let result = parse_github_remote("https://gitlab.com/owner/repo.git");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_parse_github_remote_invalid() {
+        let result = parse_github_remote("not-a-url");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_derive_review_decision_single_approved() {
+        let reviews = vec![ReviewInfo {
+            user: "alice".to_string(),
+            state: "approved".to_string(),
+            submitted_at: Some("2026-01-15T10:00:00Z".to_string()),
+        }];
+        assert_eq!(
+            derive_review_decision(&reviews),
+            Some("approved".to_string())
+        );
+    }
+
+    #[test]
+    fn test_derive_review_decision_changes_requested_wins() {
+        let reviews = vec![
+            ReviewInfo {
+                user: "alice".to_string(),
+                state: "approved".to_string(),
+                submitted_at: Some("2026-01-15T10:00:00Z".to_string()),
+            },
+            ReviewInfo {
+                user: "bob".to_string(),
+                state: "changes_requested".to_string(),
+                submitted_at: Some("2026-01-15T11:00:00Z".to_string()),
+            },
+        ];
+        assert_eq!(
+            derive_review_decision(&reviews),
+            Some("changes_requested".to_string())
+        );
+    }
+
+    #[test]
+    fn test_derive_review_decision_only_commented() {
+        let reviews = vec![ReviewInfo {
+            user: "alice".to_string(),
+            state: "commented".to_string(),
+            submitted_at: Some("2026-01-15T10:00:00Z".to_string()),
+        }];
+        assert_eq!(derive_review_decision(&reviews), None);
+    }
+
+    #[test]
+    fn test_derive_review_decision_empty() {
+        let reviews: Vec<ReviewInfo> = vec![];
+        assert_eq!(derive_review_decision(&reviews), None);
+    }
+
+    #[test]
+    fn test_review_state_to_string_maps_correctly() {
+        use octocrab::models::pulls::ReviewState;
+        assert_eq!(review_state_to_string(ReviewState::Approved), "approved");
+        assert_eq!(
+            review_state_to_string(ReviewState::ChangesRequested),
+            "changes_requested"
+        );
+        assert_eq!(review_state_to_string(ReviewState::Commented), "commented");
+        assert_eq!(review_state_to_string(ReviewState::Dismissed), "dismissed");
+        assert_eq!(review_state_to_string(ReviewState::Pending), "pending");
+    }
+
+    #[test]
+    fn test_infer_check_status_completed() {
+        let conclusion = Some("success".to_string());
+        let started_at = Some(chrono::Utc::now());
+        assert_eq!(
+            infer_check_status_from_fields(conclusion.as_ref(), started_at.as_ref()),
+            "completed"
+        );
+    }
+
+    #[test]
+    fn test_infer_check_status_in_progress() {
+        let conclusion = None;
+        let started_at = Some(chrono::Utc::now());
+        assert_eq!(
+            infer_check_status_from_fields(conclusion.as_ref(), started_at.as_ref()),
+            "in_progress"
+        );
+    }
+
+    #[test]
+    fn test_infer_check_status_queued() {
+        let conclusion = None;
+        let started_at = None;
+        assert_eq!(
+            infer_check_status_from_fields(conclusion.as_ref(), started_at.as_ref()),
+            "queued"
+        );
+    }
+
+    #[test]
+    fn test_infer_check_status_completed_failure() {
+        let conclusion = Some("failure".to_string());
+        let started_at = None;
+        assert_eq!(
+            infer_check_status_from_fields(conclusion.as_ref(), started_at.as_ref()),
+            "completed"
+        );
+    }
+
+    #[test]
+    fn test_derive_review_decision_latest_per_user() {
+        let reviews = vec![
+            ReviewInfo {
+                user: "alice".to_string(),
+                state: "changes_requested".to_string(),
+                submitted_at: Some("2026-01-15T10:00:00Z".to_string()),
+            },
+            ReviewInfo {
+                user: "alice".to_string(),
+                state: "approved".to_string(),
+                submitted_at: Some("2026-01-15T12:00:00Z".to_string()),
+            },
+        ];
+        assert_eq!(
+            derive_review_decision(&reviews),
+            Some("approved".to_string())
+        );
+    }
 }
