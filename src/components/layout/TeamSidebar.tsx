@@ -5,7 +5,7 @@ import { getRepoStore } from '../../lib/stores/repo';
 import { getTerminalStore } from '../../lib/stores/terminal';
 import { statusColor } from '../../lib/utils';
 import type { AgentDefinition } from '../../types/agent';
-import { FileGrid } from '../terminal/FileGrid';
+import { FileGrid } from './FileGrid';
 
 export function TeamSidebar() {
   const repoStore = getRepoStore();
@@ -71,7 +71,7 @@ export function TeamSidebar() {
       {/* File Grid */}
       <Show when={worktreePath()}>
         <div class="border-b border-border">
-          <FileGrid worktreePath={worktreePath()} visible={true} />
+          <FileGrid worktreePath={worktreePath()} />
         </div>
       </Show>
 

@@ -6,7 +6,6 @@ import type { FileAccess } from '../../types/agent';
 
 type FileGridProps = {
   worktreePath: string;
-  visible: boolean;
 };
 
 type FileState = 'active' | 'modified' | 'read' | 'changed';
@@ -21,6 +20,19 @@ function dotColor(state: FileState): string {
       return 'bg-info';
     case 'changed':
       return 'bg-text-muted';
+  }
+}
+
+function dotTextColor(state: FileState): string {
+  switch (state) {
+    case 'active':
+      return 'text-success';
+    case 'modified':
+      return 'text-warning';
+    case 'read':
+      return 'text-info';
+    case 'changed':
+      return 'text-text-muted';
   }
 }
 
@@ -67,18 +79,33 @@ export function FileGrid(props: FileGridProps) {
     y: number;
   } | null>(null);
 
+  // Track write events to trigger git status refresh
+  const writeCount = createMemo(
+    () =>
+      agentStore.state.log.filter(
+        (e) => e.kind === 'toolEnd' && (e.toolName === 'Write' || e.toolName === 'Edit'),
+      ).length,
+  );
+
+  let fetchGeneration = 0;
   createEffect(() => {
-    if (props.worktreePath && props.visible) {
-      getRepoStatus(props.worktreePath)
-        .then((statuses) => {
-          const map = new Map<string, string>();
-          for (const s of statuses) {
-            map.set(s.path, s.status);
-          }
-          setChangedFiles(map);
-        })
-        .catch(() => setChangedFiles(new Map()));
-    }
+    const wt = props.worktreePath;
+    // Re-fetch when worktree changes or agent writes a file
+    writeCount();
+    if (!wt) return;
+    const gen = ++fetchGeneration;
+    getRepoStatus(wt)
+      .then((statuses) => {
+        if (gen !== fetchGeneration) return;
+        const map = new Map<string, string>();
+        for (const s of statuses) {
+          map.set(s.path, s.status);
+        }
+        setChangedFiles(map);
+      })
+      .catch(() => {
+        if (gen === fetchGeneration) setChangedFiles(new Map());
+      });
   });
 
   const fileAccessMap = createMemo(() => {
@@ -159,73 +186,65 @@ export function FileGrid(props: FileGridProps) {
   });
 
   return (
-    <Show when={props.visible}>
-      <div class="overflow-y-auto max-h-52 p-2">
-        <Show
-          when={entries().length > 0}
-          fallback={
-            <div class="text-[10px] text-text-muted text-center py-2">No file activity</div>
-          }
-        >
-          <div class="flex items-center justify-between mb-1.5 px-0.5">
-            <span class="text-[10px] uppercase text-text-muted tracking-wider">Files</span>
-            <span class="text-[10px] text-text-muted">{entries().length}</span>
-          </div>
-          <div class="flex flex-wrap gap-[3px] items-center">
-            <For each={entries()}>
-              {(entry) => {
-                const heat = () => heatLevel(entry);
-                return (
-                  <span
-                    role="img"
-                    aria-label={entry.path}
-                    class={`inline-block rounded-sm transition-all duration-300 ${DOT_SIZES[heat()]} ${dotColor(entry.state)} ${entry.state === 'active' ? 'animate-pulse' : ''}`}
-                    onMouseEnter={(e) => setHoveredFile({ entry, x: e.clientX, y: e.clientY })}
-                    onMouseLeave={() => setHoveredFile(null)}
-                  />
-                );
-              }}
-            </For>
-          </div>
+    <div class="overflow-y-auto max-h-52 p-2">
+      <Show
+        when={entries().length > 0}
+        fallback={<div class="text-[10px] text-text-muted text-center py-2">No file activity</div>}
+      >
+        <div class="flex items-center justify-between mb-1.5 px-0.5">
+          <span class="text-[10px] uppercase text-text-muted tracking-wider">Files</span>
+          <span class="text-[10px] text-text-muted">{entries().length}</span>
+        </div>
+        <div class="flex flex-wrap gap-[3px] items-center">
+          <For each={entries()}>
+            {(entry) => {
+              const heat = () => heatLevel(entry);
+              return (
+                <span
+                  role="img"
+                  aria-label={entry.path}
+                  class={`inline-block rounded-sm transition-all duration-300 ${DOT_SIZES[heat()]} ${dotColor(entry.state)} ${entry.state === 'active' ? 'animate-pulse' : ''}`}
+                  onMouseEnter={(e) => setHoveredFile({ entry, x: e.clientX, y: e.clientY })}
+                  onMouseLeave={() => setHoveredFile(null)}
+                />
+              );
+            }}
+          </For>
+        </div>
 
-          {/* Tooltip */}
-          <Show when={hoveredFile()}>
-            {(hovered) => (
-              <div
-                class="fixed z-50 px-2 py-1.5 bg-surface border border-border rounded shadow-lg text-xs max-w-72 pointer-events-none"
-                style={{
-                  left: `${hovered().x + 12}px`,
-                  top: `${hovered().y - 8}px`,
-                }}
-              >
-                <div class="text-text truncate font-mono text-[11px]">
-                  {shortPath(hovered().entry.path, 2)}
-                </div>
-                <div
-                  class={`text-[10px] mt-0.5 ${dotColor(hovered().entry.state).replace('bg-', 'text-')}`}
-                >
-                  {stateLabel(hovered().entry.state)}
-                </div>
-                <Show when={hovered().entry.gitStatus}>
-                  <div class="text-[10px] text-text-muted">Git: {hovered().entry.gitStatus}</div>
-                </Show>
-                <Show when={hovered().entry.access}>
-                  {(access) => (
-                    <div class="text-[10px] text-text-muted mt-0.5">
-                      {access().lastTool} ({access().accessCount}x)
-                    </div>
-                  )}
-                </Show>
-                <Show when={hovered().entry.agentCount > 1}>
-                  <div class="text-[10px] text-info mt-0.5">
-                    {hovered().entry.agentCount} agents
-                  </div>
-                </Show>
+        {/* Tooltip */}
+        <Show when={hoveredFile()}>
+          {(hovered) => (
+            <div
+              class="fixed z-50 px-2 py-1.5 bg-surface border border-border rounded shadow-lg text-xs max-w-72 pointer-events-none"
+              style={{
+                left: `${hovered().x + 12}px`,
+                top: `${hovered().y - 8}px`,
+              }}
+            >
+              <div class="text-text truncate font-mono text-[11px]">
+                {shortPath(hovered().entry.path, 2)}
               </div>
-            )}
-          </Show>
+              <div class={`text-[10px] mt-0.5 ${dotTextColor(hovered().entry.state)}`}>
+                {stateLabel(hovered().entry.state)}
+              </div>
+              <Show when={hovered().entry.gitStatus}>
+                <div class="text-[10px] text-text-muted">Git: {hovered().entry.gitStatus}</div>
+              </Show>
+              <Show when={hovered().entry.access}>
+                {(access) => (
+                  <div class="text-[10px] text-text-muted mt-0.5">
+                    {access().lastTool} ({access().accessCount}x)
+                  </div>
+                )}
+              </Show>
+              <Show when={hovered().entry.agentCount > 1}>
+                <div class="text-[10px] text-info mt-0.5">{hovered().entry.agentCount} agents</div>
+              </Show>
+            </div>
+          )}
         </Show>
-      </div>
-    </Show>
+      </Show>
+    </div>
   );
 }

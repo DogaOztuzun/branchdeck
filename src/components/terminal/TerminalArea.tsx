@@ -43,6 +43,7 @@ export function TerminalArea() {
   });
 
   onMount(() => {
+    agentStore.setTabFilter((tabId) => terminalStore.state.tabs.some((t) => t.id === tabId));
     agentStore.startListening();
   });
 
