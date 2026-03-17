@@ -5,6 +5,7 @@ import { getRepoStore } from '../../lib/stores/repo';
 import { getTerminalStore } from '../../lib/stores/terminal';
 import { statusColor } from '../../lib/utils';
 import type { AgentDefinition } from '../../types/agent';
+import { FileGrid } from '../terminal/FileGrid';
 
 export function TeamSidebar() {
   const repoStore = getRepoStore();
@@ -66,6 +67,13 @@ export function TeamSidebar() {
       <div class="px-3 py-2 border-b border-border">
         <span class="text-xs font-bold uppercase text-text-muted tracking-wider">Team</span>
       </div>
+
+      {/* File Grid */}
+      <Show when={worktreePath()}>
+        <div class="border-b border-border">
+          <FileGrid worktreePath={worktreePath()} visible={true} compact={true} />
+        </div>
+      </Show>
 
       {/* Active Agents */}
       <Show when={activeAgents().length > 0}>

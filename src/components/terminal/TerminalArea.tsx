@@ -5,7 +5,6 @@ import { getAgentStore } from '../../lib/stores/agent';
 import { getRepoStore } from '../../lib/stores/repo';
 import { getTerminalStore } from '../../lib/stores/terminal';
 import { AgentActivity } from './AgentActivity';
-import { FileGrid } from './FileGrid';
 import { PresetManager } from './PresetManager';
 import { TabBar } from './TabBar';
 import { TerminalView } from './TerminalView';
@@ -30,7 +29,6 @@ export function TerminalArea() {
   const [presetManagerOpen, setPresetManagerOpen] = createSignal(false);
   const [presetVersion, setPresetVersion] = createSignal(0);
   const [activityVisible, setActivityVisible] = createSignal(false);
-  const [showFileGrid, setShowFileGrid] = createSignal(false);
 
   const hasClaudeTab = createMemo(() => visibleTabs().some((t) => t.type === 'claude'));
 
@@ -54,7 +52,6 @@ export function TerminalArea() {
 
   createEffect(() => {
     const repo = repoPath();
-    // Track presetVersion to reload when presets change
     presetVersion();
     if (repo) {
       getPresets(repo)
@@ -80,10 +77,7 @@ export function TerminalArea() {
         getTabAgent={(tabId) => agentStore.getTabAgent(tabId)}
       />
       <div class="flex-1 relative">
-        {/* File Grid overlay */}
-        <FileGrid worktreePath={worktreePath()} visible={showFileGrid()} />
-        {/* Empty state — shown above terminals, does not unmount them */}
-        <Show when={visibleTabs().length === 0 && !showFileGrid()}>
+        <Show when={visibleTabs().length === 0}>
           <div class="absolute inset-0 flex flex-col items-center justify-center text-text-muted z-10">
             <div class="text-sm mb-4">
               {worktreePath() ? 'No terminal open' : 'Select a repository to start'}
@@ -110,20 +104,17 @@ export function TerminalArea() {
             </Show>
           </div>
         </Show>
-        {/* All terminals always mounted — visibility controlled per-terminal */}
         <For each={terminalStore.state.tabs}>
           {(tab) => (
             <TerminalView
               sessionId={tab.sessionId}
-              visible={
-                !showFileGrid() && tab.worktreePath === worktreePath() && activeTabId() === tab.id
-              }
+              visible={tab.worktreePath === worktreePath() && activeTabId() === tab.id}
             />
           )}
         </For>
       </div>
-      <div class="flex items-center border-t border-border bg-surface px-2 gap-2">
-        <Show when={hasClaudeTab()}>
+      <Show when={hasClaudeTab()}>
+        <div class="flex items-center border-t border-border bg-surface px-2">
           <button
             type="button"
             class="px-2 py-0.5 text-[10px] text-text-muted hover:text-text cursor-pointer"
@@ -131,17 +122,8 @@ export function TerminalArea() {
           >
             {activityVisible() ? '\u25BC' : '\u25B6'} Activity
           </button>
-        </Show>
-        <Show when={worktreePath()}>
-          <button
-            type="button"
-            class={`px-2 py-0.5 text-[10px] cursor-pointer ${showFileGrid() ? 'text-primary' : 'text-text-muted hover:text-text'}`}
-            onClick={() => setShowFileGrid((v) => !v)}
-          >
-            {'\u25A6'} Files
-          </button>
-        </Show>
-      </div>
+        </div>
+      </Show>
       <AgentActivity entries={agentLog()} visible={activityVisible() && hasClaudeTab()} />
       <PresetManager
         open={presetManagerOpen()}

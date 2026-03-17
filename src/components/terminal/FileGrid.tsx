@@ -6,6 +6,7 @@ import type { FileAccess } from '../../types/agent';
 type FileGridProps = {
   worktreePath: string;
   visible: boolean;
+  compact?: boolean;
 };
 
 type FileDotStatus = 'idle' | 'read' | 'modified' | 'active';
@@ -50,9 +51,11 @@ function groupByDirectory(files: string[]): Map<string, string[]> {
 export function FileGrid(props: FileGridProps) {
   const agentStore = getAgentStore();
   const [repoFiles, setRepoFiles] = createSignal<string[]>([]);
-  const [hoveredFile, setHoveredFile] = createSignal<{ path: string; x: number; y: number } | null>(
-    null,
-  );
+  const [hoveredFile, setHoveredFile] = createSignal<{
+    path: string;
+    x: number;
+    y: number;
+  } | null>(null);
 
   createEffect(() => {
     if (props.worktreePath && props.visible) {
@@ -66,7 +69,6 @@ export function FileGrid(props: FileGridProps) {
     const map = new Map<string, FileAccess>();
     for (const f of agentStore.state.log) {
       if (f.filePath) {
-        // Normalize: strip worktree prefix to get relative path
         const rel = f.filePath.startsWith(props.worktreePath)
           ? f.filePath.substring(props.worktreePath.length).replace(/^\//, '')
           : f.filePath;
@@ -110,29 +112,46 @@ export function FileGrid(props: FileGridProps) {
 
   const grouped = createMemo(() => groupByDirectory(repoFiles()));
 
+  const fileCount = createMemo(() => repoFiles().length);
+  const touchedCount = createMemo(() => fileAccessMap().size);
+
   const hoveredAccess = createMemo(() => {
     const h = hoveredFile();
     if (!h) return null;
     return fileAccessMap().get(h.path) ?? null;
   });
 
+  const compact = () => props.compact ?? false;
+  const dotSize = () => (compact() ? 'w-2 h-2' : 'w-2.5 h-2.5');
+  const gapSize = () => (compact() ? 'gap-[2px]' : 'gap-[3px]');
+
   return (
     <Show when={props.visible}>
-      <div class="h-full overflow-y-auto bg-bg p-3">
+      <div class={compact() ? 'overflow-y-auto max-h-48 p-2' : 'h-full overflow-y-auto bg-bg p-3'}>
         <Show
           when={repoFiles().length > 0}
-          fallback={
-            <div class="text-xs text-text-muted text-center py-8">No files in repository index</div>
-          }
+          fallback={<div class="text-xs text-text-muted text-center py-4">No files in index</div>}
         >
-          <div class="space-y-2">
+          {/* Compact: file count summary */}
+          <Show when={compact()}>
+            <div class="flex items-center justify-between mb-1.5 px-0.5">
+              <span class="text-[10px] uppercase text-text-muted tracking-wider">Files</span>
+              <span class="text-[10px] text-text-muted">
+                {touchedCount()}/{fileCount()}
+              </span>
+            </div>
+          </Show>
+
+          <div class={compact() ? 'space-y-1' : 'space-y-2'}>
             <For each={[...grouped().entries()]}>
               {([dir, files]) => (
                 <div>
-                  <div class="text-[10px] text-text-muted mb-0.5 truncate" title={dir}>
-                    {dir}
-                  </div>
-                  <div class="flex flex-wrap gap-[3px]">
+                  <Show when={!compact()}>
+                    <div class="text-[10px] text-text-muted mb-0.5 truncate" title={dir}>
+                      {dir}
+                    </div>
+                  </Show>
+                  <div class={`flex flex-wrap ${gapSize()}`}>
                     <For each={files}>
                       {(file) => {
                         const fullPath = dir === '.' ? file : `${dir}/${file}`;
@@ -142,7 +161,7 @@ export function FileGrid(props: FileGridProps) {
                           <span
                             role="img"
                             aria-label={fullPath}
-                            class={`inline-block w-2.5 h-2.5 rounded-sm ${dotColor(status())}`}
+                            class={`inline-block rounded-sm ${dotSize()} ${dotColor(status())}`}
                             title={fullPath}
                             onMouseEnter={(e) =>
                               setHoveredFile({ path: fullPath, x: e.clientX, y: e.clientY })
