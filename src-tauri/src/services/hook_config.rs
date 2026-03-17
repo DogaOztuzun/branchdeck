@@ -126,7 +126,12 @@ fn install_hooks_at(settings_path: &Path, script_path: &Path) -> Result<(), AppE
     let mut settings = load_settings(settings_path)?;
 
     let script_cmd = script_path.to_string_lossy().to_string();
-    let hook_entry = serde_json::json!({"type": "command", "command": script_cmd});
+    // Claude Code hook format: {"matcher": "", "hooks": [{"type": "command", "command": "..."}]}
+    // Empty matcher matches all tools/events
+    let matcher_entry = serde_json::json!({
+        "matcher": "",
+        "hooks": [{"type": "command", "command": script_cmd}]
+    });
 
     let hooks = settings
         .as_object_mut()
@@ -148,11 +153,18 @@ fn install_hooks_at(settings_path: &Path, script_path: &Path) -> Result<(), AppE
             .ok_or_else(|| AppError::Agent(format!("hooks.{event} is not an array")))?;
 
         let already_present = entries.iter().any(|entry| {
-            entry.get("command").and_then(serde_json::Value::as_str) == Some(&script_cmd)
+            entry
+                .get("hooks")
+                .and_then(serde_json::Value::as_array)
+                .map_or(false, |hooks| {
+                    hooks.iter().any(|h| {
+                        h.get("command").and_then(serde_json::Value::as_str) == Some(&script_cmd)
+                    })
+                })
         });
 
         if !already_present {
-            entries.push(hook_entry.clone());
+            entries.push(matcher_entry.clone());
         }
     }
 
@@ -187,7 +199,17 @@ fn remove_hooks_at(settings_path: &Path, script_path: &Path) -> Result<(), AppEr
                 .and_then(serde_json::Value::as_array_mut)
             {
                 arr.retain(|entry| {
-                    entry.get("command").and_then(serde_json::Value::as_str) != Some(&script_cmd)
+                    // Check new format: {"matcher": "", "hooks": [{"command": "..."}]}
+                    let is_ours = entry
+                        .get("hooks")
+                        .and_then(serde_json::Value::as_array)
+                        .map_or(false, |hooks| {
+                            hooks.iter().any(|h| {
+                                h.get("command").and_then(serde_json::Value::as_str)
+                                    == Some(&script_cmd)
+                            })
+                        });
+                    !is_ours
                 });
                 if arr.is_empty() {
                     empty_events.push((*event).to_string());

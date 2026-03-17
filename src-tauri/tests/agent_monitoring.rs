@@ -318,6 +318,16 @@ fn hook_config_install_remove() {
     assert!(hooks.contains_key("Stop"));
     assert_eq!(hooks.len(), 7);
 
+    // Verify new format: each entry has matcher + hooks array
+    let session_arr = hooks["SessionStart"].as_array().unwrap();
+    assert_eq!(session_arr.len(), 1);
+    let entry = &session_arr[0];
+    assert_eq!(entry["matcher"].as_str(), Some(""));
+    assert!(entry["hooks"].as_array().unwrap()[0]["command"]
+        .as_str()
+        .unwrap()
+        .contains("notify.sh"));
+
     // Verify idempotency — install again, no duplicates
     hook_config::install_hooks(repo_str, &script_path).unwrap();
     let settings: serde_json::Value =
@@ -331,7 +341,10 @@ fn hook_config_install_remove() {
     // Settings file should exist but have no hooks key
     let settings: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(&settings_path).unwrap()).unwrap();
-    assert!(settings.get("hooks").is_none(), "hooks key should be removed");
+    assert!(
+        settings.get("hooks").is_none(),
+        "hooks key should be removed"
+    );
 
     let _ = std::fs::remove_dir_all(&tmp);
 }
