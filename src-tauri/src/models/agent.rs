@@ -13,12 +13,14 @@ pub fn now_ms() -> EpochMs {
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum Event {
+    #[serde(rename_all = "camelCase")]
     SessionStart {
         session_id: String,
         tab_id: String,
         model: Option<String>,
         ts: EpochMs,
     },
+    #[serde(rename_all = "camelCase")]
     ToolStart {
         session_id: String,
         agent_id: Option<String>,
@@ -28,6 +30,7 @@ pub enum Event {
         file_path: Option<String>,
         ts: EpochMs,
     },
+    #[serde(rename_all = "camelCase")]
     ToolEnd {
         session_id: String,
         agent_id: Option<String>,
@@ -37,6 +40,7 @@ pub enum Event {
         file_path: Option<String>,
         ts: EpochMs,
     },
+    #[serde(rename_all = "camelCase")]
     SubagentStart {
         session_id: String,
         agent_id: String,
@@ -44,6 +48,7 @@ pub enum Event {
         tab_id: String,
         ts: EpochMs,
     },
+    #[serde(rename_all = "camelCase")]
     SubagentStop {
         session_id: String,
         agent_id: String,
@@ -51,11 +56,13 @@ pub enum Event {
         tab_id: String,
         ts: EpochMs,
     },
+    #[serde(rename_all = "camelCase")]
     SessionStop {
         session_id: String,
         tab_id: String,
         ts: EpochMs,
     },
+    #[serde(rename_all = "camelCase")]
     Notification {
         session_id: String,
         tab_id: String,
