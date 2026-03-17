@@ -180,7 +180,6 @@ export function FileGrid(props: FileGridProps) {
                     role="img"
                     aria-label={entry.path}
                     class={`inline-block rounded-sm transition-all duration-300 ${DOT_SIZES[heat()]} ${dotColor(entry.state)} ${entry.state === 'active' ? 'animate-pulse' : ''}`}
-                    title={entry.path}
                     onMouseEnter={(e) => setHoveredFile({ entry, x: e.clientX, y: e.clientY })}
                     onMouseLeave={() => setHoveredFile(null)}
                   />
