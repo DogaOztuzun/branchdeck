@@ -38,7 +38,30 @@ export function TopBar() {
           <span class="text-xs text-info">{repoStore.getActiveWorktree()?.branch}</span>
         </Show>
       </Show>
-      <div class="ml-auto">
+      <div class="ml-auto flex items-center gap-1">
+        <button
+          type="button"
+          class="p-1.5 text-text-muted hover:text-text cursor-pointer rounded hover:bg-bg/50"
+          aria-label="Toggle team"
+          title="Toggle team sidebar"
+          onClick={() => layout.toggleTeamSidebar()}
+        >
+          <svg
+            aria-hidden="true"
+            width="18"
+            height="18"
+            viewBox="0 0 18 18"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <circle cx="6" cy="6" r="2.5" />
+            <circle cx="12" cy="6" r="2.5" />
+            <circle cx="9" cy="13" r="2.5" />
+          </svg>
+        </button>
         <button
           type="button"
           class="p-1.5 text-text-muted hover:text-text cursor-pointer rounded hover:bg-bg/50"

@@ -68,8 +68,12 @@ function createTerminalStore() {
     );
   }
 
-  async function openClaudeTab(worktreePath: string, tabId?: string) {
-    const id = tabId ?? crypto.randomUUID();
+  async function createClaudeSession(
+    worktreePath: string,
+    title: string,
+    command: string,
+  ): Promise<string> {
+    const id = crypto.randomUUID();
     let resolvedSessionId = '';
     const env: Record<string, string> = {
       CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
@@ -86,7 +90,7 @@ function createTerminalStore() {
     const tab: TabInfo = {
       id,
       sessionId,
-      title: 'Claude Code',
+      title,
       type: 'claude',
       worktreePath,
     };
@@ -99,7 +103,24 @@ function createTerminalStore() {
     );
 
     const encoder = new TextEncoder();
-    await writeTerminal(sessionId, encoder.encode('claude --dangerously-skip-permissions\n'));
+    await writeTerminal(sessionId, encoder.encode(`${command}\n`));
+    return id;
+  }
+
+  async function openClaudeTab(worktreePath: string) {
+    return createClaudeSession(
+      worktreePath,
+      'Claude Code',
+      'claude --dangerously-skip-permissions',
+    );
+  }
+
+  async function openAgentTab(worktreePath: string, agentName: string) {
+    return createClaudeSession(
+      worktreePath,
+      agentName,
+      `claude --agent ${agentName} --dangerously-skip-permissions`,
+    );
   }
 
   async function runPreset(worktreePath: string, preset: Preset) {
@@ -192,6 +213,7 @@ function createTerminalStore() {
     getActiveTabId,
     openShellTab,
     openClaudeTab,
+    openAgentTab,
     runPreset,
     closeTab,
     setActiveTab,
