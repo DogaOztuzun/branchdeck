@@ -38,7 +38,15 @@ function createAgentStore() {
   let logCounter = 0;
   let listenPromise: Promise<() => void> | null = null;
 
+  let isKnownTab: ((tabId: string) => boolean) | null = null;
+
+  function setTabFilter(fn: (tabId: string) => boolean) {
+    isKnownTab = fn;
+  }
+
   function handleEvent(event: AgentEvent) {
+    if (isKnownTab && !isKnownTab(event.tabId)) return;
+
     batch(() => {
       const entry: AgentLogEntry = {
         id: `${++logCounter}`,
@@ -142,6 +150,7 @@ function createAgentStore() {
     state,
     startListening,
     stopListening,
+    setTabFilter,
     removeTab,
     getTabAgent,
     getLogForTab,

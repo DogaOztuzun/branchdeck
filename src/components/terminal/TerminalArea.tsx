@@ -43,6 +43,7 @@ export function TerminalArea() {
   });
 
   onMount(() => {
+    agentStore.setTabFilter((tabId) => terminalStore.state.tabs.some((t) => t.id === tabId));
     agentStore.startListening();
   });
 
@@ -52,7 +53,6 @@ export function TerminalArea() {
 
   createEffect(() => {
     const repo = repoPath();
-    // Track presetVersion to reload when presets change
     presetVersion();
     if (repo) {
       getPresets(repo)
@@ -78,7 +78,6 @@ export function TerminalArea() {
         getTabAgent={(tabId) => agentStore.getTabAgent(tabId)}
       />
       <div class="flex-1 relative">
-        {/* Empty state — shown above terminals, does not unmount them */}
         <Show when={visibleTabs().length === 0}>
           <div class="absolute inset-0 flex flex-col items-center justify-center text-text-muted z-10">
             <div class="text-sm mb-4">
@@ -106,7 +105,6 @@ export function TerminalArea() {
             </Show>
           </div>
         </Show>
-        {/* All terminals always mounted — visibility controlled per-terminal */}
         <For each={terminalStore.state.tabs}>
           {(tab) => (
             <TerminalView
