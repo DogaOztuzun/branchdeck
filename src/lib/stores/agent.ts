@@ -2,6 +2,7 @@ import { listen } from '@tauri-apps/api/event';
 import { batch } from 'solid-js';
 import { createStore, produce } from 'solid-js/store';
 import type { AgentEvent, AgentStatus } from '../../types/agent';
+import { getTerminalStore } from './terminal';
 
 const MAX_LOG_ENTRIES = 200;
 
@@ -39,6 +40,10 @@ function createAgentStore() {
   let listenPromise: Promise<() => void> | null = null;
 
   function handleEvent(event: AgentEvent) {
+    // Ignore events from Claude sessions not launched by Branchdeck
+    const knownTabs = getTerminalStore().state.tabs;
+    if (!knownTabs.some((t) => t.id === event.tabId)) return;
+
     batch(() => {
       const entry: AgentLogEntry = {
         id: `${++logCounter}`,
