@@ -37,11 +37,25 @@ function stateLabel(state: FileState): string {
   }
 }
 
+// Heat score determines dot size: 0=base, 1=medium, 2=large, 3=xl
+function heatLevel(entry: FileEntry): number {
+  if (!entry.access) return 0;
+  let heat = 0;
+  if (entry.access.accessCount >= 3) heat += 1;
+  if (entry.access.accessCount >= 8) heat += 1;
+  if (entry.agentCount > 1) heat += 1;
+  if (entry.state === 'active') heat += 1;
+  return Math.min(heat, 3);
+}
+
+const DOT_SIZES = ['w-2 h-2', 'w-2.5 h-2.5', 'w-3 h-3', 'w-3.5 h-3.5'];
+
 type FileEntry = {
   path: string;
   state: FileState;
   access: FileAccess | null;
   gitStatus: string | null;
+  agentCount: number;
 };
 
 export function FileGrid(props: FileGridProps) {
@@ -53,7 +67,6 @@ export function FileGrid(props: FileGridProps) {
     y: number;
   } | null>(null);
 
-  // Load git status (changed files in worktree)
   createEffect(() => {
     if (props.worktreePath && props.visible) {
       getRepoStatus(props.worktreePath)
@@ -68,9 +81,8 @@ export function FileGrid(props: FileGridProps) {
     }
   });
 
-  // Build file access map from agent events
   const fileAccessMap = createMemo(() => {
-    const map = new Map<string, FileAccess>();
+    const map = new Map<string, FileAccess & { agents: Set<string> }>();
     for (const f of agentStore.state.log) {
       if (f.filePath) {
         const rel = f.filePath.startsWith(props.worktreePath)
@@ -80,16 +92,18 @@ export function FileGrid(props: FileGridProps) {
           map.set(rel, {
             path: rel,
             lastTool: f.toolName ?? '',
-            lastAgent: f.agentId ?? '',
+            lastAgent: f.agentId ?? f.tabId ?? '',
             lastAccess: f.ts,
             accessCount: 1,
             wasModified: f.kind === 'toolEnd' && (f.toolName === 'Write' || f.toolName === 'Edit'),
+            agents: new Set([f.tabId]),
           });
         } else {
           const existing = map.get(rel);
           if (existing) {
             existing.accessCount += 1;
             existing.lastAccess = f.ts;
+            existing.agents.add(f.tabId);
             if (f.toolName) existing.lastTool = f.toolName;
             if (f.kind === 'toolEnd' && (f.toolName === 'Write' || f.toolName === 'Edit')) {
               existing.wasModified = true;
@@ -101,45 +115,46 @@ export function FileGrid(props: FileGridProps) {
     return map;
   });
 
-  // Currently active files (agent is working on right now)
   const activeFiles = createMemo(() => {
-    const active = new Set<string>();
+    const active = new Map<string, number>();
     for (const [, info] of Object.entries(agentStore.state.agentsByTab)) {
       if (info.currentFile) {
         const rel = info.currentFile.startsWith(props.worktreePath)
           ? info.currentFile.substring(props.worktreePath.length).replace(/^\//, '')
           : info.currentFile;
-        active.add(rel);
+        active.set(rel, (active.get(rel) ?? 0) + 1);
       }
     }
     return active;
   });
 
-  // Merge: git changed files + agent-touched files → deduplicated list
   const entries = createMemo(() => {
     const result = new Map<string, FileEntry>();
 
-    // Git changed files
     for (const [path, status] of changedFiles()) {
-      result.set(path, { path, state: 'changed', access: null, gitStatus: status });
+      result.set(path, { path, state: 'changed', access: null, gitStatus: status, agentCount: 0 });
     }
 
-    // Agent-touched files (may overlap with git changes)
     for (const [path, access] of fileAccessMap()) {
-      const existing = result.get(path);
-      const isActive = activeFiles().has(path);
+      const activeCount = activeFiles().get(path) ?? 0;
+      const isActive = activeCount > 0;
       const state: FileState = isActive ? 'active' : access.wasModified ? 'modified' : 'read';
+      const agentCount = access.agents.size;
+      const existing = result.get(path);
       if (existing) {
         existing.state = state;
         existing.access = access;
+        existing.agentCount = agentCount;
       } else {
-        result.set(path, { path, state, access, gitStatus: null });
+        result.set(path, { path, state, access, gitStatus: null, agentCount });
       }
     }
 
     return [...result.values()].sort((a, b) => {
       const order: Record<FileState, number> = { active: 0, modified: 1, read: 2, changed: 3 };
-      return order[a.state] - order[b.state] || a.path.localeCompare(b.path);
+      const stateCompare = order[a.state] - order[b.state];
+      if (stateCompare !== 0) return stateCompare;
+      return heatLevel(b) - heatLevel(a) || a.path.localeCompare(b.path);
     });
   });
 
@@ -156,18 +171,21 @@ export function FileGrid(props: FileGridProps) {
             <span class="text-[10px] uppercase text-text-muted tracking-wider">Files</span>
             <span class="text-[10px] text-text-muted">{entries().length}</span>
           </div>
-          <div class="flex flex-wrap gap-[3px]">
+          <div class="flex flex-wrap gap-[3px] items-center">
             <For each={entries()}>
-              {(entry) => (
-                <span
-                  role="img"
-                  aria-label={entry.path}
-                  class={`inline-block w-2.5 h-2.5 rounded-sm ${dotColor(entry.state)}`}
-                  title={entry.path}
-                  onMouseEnter={(e) => setHoveredFile({ entry, x: e.clientX, y: e.clientY })}
-                  onMouseLeave={() => setHoveredFile(null)}
-                />
-              )}
+              {(entry) => {
+                const heat = () => heatLevel(entry);
+                return (
+                  <span
+                    role="img"
+                    aria-label={entry.path}
+                    class={`inline-block rounded-sm transition-all duration-300 ${DOT_SIZES[heat()]} ${dotColor(entry.state)} ${entry.state === 'active' ? 'animate-pulse' : ''}`}
+                    title={entry.path}
+                    onMouseEnter={(e) => setHoveredFile({ entry, x: e.clientX, y: e.clientY })}
+                    onMouseLeave={() => setHoveredFile(null)}
+                  />
+                );
+              }}
             </For>
           </div>
 
@@ -198,6 +216,11 @@ export function FileGrid(props: FileGridProps) {
                       {access().lastTool} ({access().accessCount}x)
                     </div>
                   )}
+                </Show>
+                <Show when={hovered().entry.agentCount > 1}>
+                  <div class="text-[10px] text-info mt-0.5">
+                    {hovered().entry.agentCount} agents
+                  </div>
                 </Show>
               </div>
             )}
