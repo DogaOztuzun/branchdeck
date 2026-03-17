@@ -114,3 +114,9 @@ pub fn get_branch_tracking_cmd(
 ) -> Result<Option<TrackingInfo>, AppError> {
     git::get_branch_tracking(&PathBuf::from(&repo_path), &branch_name)
 }
+
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub fn list_repo_files_cmd(worktree_path: String) -> Result<Vec<String>, AppError> {
+    git::list_repo_files(&PathBuf::from(&worktree_path))
+}

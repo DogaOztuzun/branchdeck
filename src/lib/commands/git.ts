@@ -115,3 +115,12 @@ export async function getRepoStatus(worktreePath: string): Promise<FileStatus[]>
     throw e;
   }
 }
+
+export async function listRepoFiles(worktreePath: string): Promise<string[]> {
+  try {
+    return await invoke<string[]>('list_repo_files_cmd', { worktreePath });
+  } catch (e) {
+    logError(`listRepoFiles failed: ${e}`);
+    throw e;
+  }
+}

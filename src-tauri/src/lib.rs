@@ -106,6 +106,7 @@ pub fn run() {
             commands::git::get_repo_status,
             commands::git::list_branches_cmd,
             commands::git::get_branch_tracking_cmd,
+            commands::git::list_repo_files_cmd,
             // Workspace
             commands::workspace::get_app_config,
             commands::workspace::save_app_config,
