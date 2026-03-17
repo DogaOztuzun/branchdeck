@@ -52,14 +52,21 @@ async fn get_client() -> Result<octocrab::Octocrab, AppError> {
     Ok(client)
 }
 
-fn infer_check_status(check_run: &octocrab::models::checks::CheckRun) -> String {
-    if check_run.conclusion.is_some() {
+fn infer_check_status_from_fields(
+    conclusion: Option<&String>,
+    started_at: Option<&chrono::DateTime<chrono::Utc>>,
+) -> String {
+    if conclusion.is_some() {
         "completed".to_string()
-    } else if check_run.started_at.is_some() {
+    } else if started_at.is_some() {
         "in_progress".to_string()
     } else {
         "queued".to_string()
     }
+}
+
+fn infer_check_status(check_run: &octocrab::models::checks::CheckRun) -> String {
+    infer_check_status_from_fields(check_run.conclusion.as_ref(), check_run.started_at.as_ref())
 }
 
 fn review_state_to_string(state: octocrab::models::pulls::ReviewState) -> String {
@@ -398,6 +405,46 @@ mod tests {
         assert_eq!(review_state_to_string(ReviewState::Commented), "commented");
         assert_eq!(review_state_to_string(ReviewState::Dismissed), "dismissed");
         assert_eq!(review_state_to_string(ReviewState::Pending), "pending");
+    }
+
+    #[test]
+    fn test_infer_check_status_completed() {
+        let conclusion = Some("success".to_string());
+        let started_at = Some(chrono::Utc::now());
+        assert_eq!(
+            infer_check_status_from_fields(conclusion.as_ref(), started_at.as_ref()),
+            "completed"
+        );
+    }
+
+    #[test]
+    fn test_infer_check_status_in_progress() {
+        let conclusion = None;
+        let started_at = Some(chrono::Utc::now());
+        assert_eq!(
+            infer_check_status_from_fields(conclusion.as_ref(), started_at.as_ref()),
+            "in_progress"
+        );
+    }
+
+    #[test]
+    fn test_infer_check_status_queued() {
+        let conclusion = None;
+        let started_at = None;
+        assert_eq!(
+            infer_check_status_from_fields(conclusion.as_ref(), started_at.as_ref()),
+            "queued"
+        );
+    }
+
+    #[test]
+    fn test_infer_check_status_completed_failure() {
+        let conclusion = Some("failure".to_string());
+        let started_at = None;
+        assert_eq!(
+            infer_check_status_from_fields(conclusion.as_ref(), started_at.as_ref()),
+            "completed"
+        );
     }
 
     #[test]

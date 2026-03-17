@@ -71,14 +71,12 @@ function PrBadge(props: {
         onMouseLeave={() => props.onHoverEnd()}
       >
         <span style={{ color: prColor() }}>{'\u25CF'}</span>
-        {(() => {
-          const ri = reviewIcon();
-          return ri ? <span style={{ color: ri.color }}>{ri.char}</span> : null;
-        })()}
-        {(() => {
-          const ci = checksIcon();
-          return ci ? <span style={{ color: ci.color }}>{ci.char}</span> : null;
-        })()}
+        <Show when={reviewIcon()}>
+          {(ri) => <span style={{ color: ri().color }}>{ri().char}</span>}
+        </Show>
+        <Show when={checksIcon()}>
+          {(ci) => <span style={{ color: ci().color }}>{ci().char}</span>}
+        </Show>
         <span style={{ color: prColor() }}>#{pr()?.number}</span>
       </span>
     </Show>

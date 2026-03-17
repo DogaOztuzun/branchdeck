@@ -29,6 +29,7 @@ uuid = { version = "1", features = ["v4"] }
 log = "0.4"
 tauri-plugin-log = "2"
 octocrab = "0.44"
+chrono = { version = "0.4.44", features = ["clock"] }
 
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json"] }

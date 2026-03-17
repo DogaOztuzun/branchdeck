@@ -172,21 +172,6 @@ function createRepoStore() {
     }
   }
 
-  async function refreshInactivePrStatus() {
-    const repoPaths = Object.keys(state.worktreesByRepo);
-    for (const repoPath of repoPaths) {
-      if (repoPath === state.activeRepoPath) continue;
-      await loadPrStatus(repoPath);
-    }
-  }
-
-  async function refreshAllPrStatus() {
-    const repoPaths = Object.keys(state.worktreesByRepo);
-    for (const repoPath of repoPaths) {
-      await loadPrStatus(repoPath);
-    }
-  }
-
   async function ensureWorktreesLoaded(repoPath: string) {
     if (!state.worktreesByRepo[repoPath]) {
       const wts = await listWorktrees(repoPath);
@@ -303,8 +288,6 @@ function createRepoStore() {
     getPrForBranch,
     loadPrStatus,
     refreshPrStatus,
-    refreshInactivePrStatus,
-    refreshAllPrStatus,
   };
 }
 
