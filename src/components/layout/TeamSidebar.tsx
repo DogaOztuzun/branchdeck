@@ -71,7 +71,7 @@ export function TeamSidebar() {
       {/* File Grid */}
       <Show when={worktreePath()}>
         <div class="border-b border-border">
-          <FileGrid worktreePath={worktreePath()} visible={true} compact={true} />
+          <FileGrid worktreePath={worktreePath()} visible={true} />
         </div>
       </Show>
 

@@ -1,70 +1,74 @@
 import { createEffect, createMemo, createSignal, For, Show } from 'solid-js';
-import { listRepoFiles } from '../../lib/commands/git';
+import { getRepoStatus } from '../../lib/commands/git';
 import { getAgentStore } from '../../lib/stores/agent';
+import { shortPath } from '../../lib/utils';
 import type { FileAccess } from '../../types/agent';
 
 type FileGridProps = {
   worktreePath: string;
   visible: boolean;
-  compact?: boolean;
 };
 
-type FileDotStatus = 'idle' | 'read' | 'modified' | 'active';
+type FileState = 'active' | 'modified' | 'read' | 'changed';
 
-function dotColor(status: FileDotStatus): string {
-  switch (status) {
+function dotColor(state: FileState): string {
+  switch (state) {
     case 'active':
       return 'bg-success';
     case 'modified':
       return 'bg-warning';
     case 'read':
       return 'bg-info';
-    default:
-      return 'bg-border';
+    case 'changed':
+      return 'bg-text-muted';
   }
 }
 
-function getFileStatus(
-  path: string,
-  fileMap: Map<string, FileAccess>,
-  activeFiles: Set<string>,
-): FileDotStatus {
-  if (activeFiles.has(path)) return 'active';
-  const access = fileMap.get(path);
-  if (!access) return 'idle';
-  if (access.wasModified) return 'modified';
-  return 'read';
+function stateLabel(state: FileState): string {
+  switch (state) {
+    case 'active':
+      return 'Agent active';
+    case 'modified':
+      return 'Modified by agent';
+    case 'read':
+      return 'Read by agent';
+    case 'changed':
+      return 'Changed in branch';
+  }
 }
 
-function groupByDirectory(files: string[]): Map<string, string[]> {
-  const groups = new Map<string, string[]>();
-  for (const file of files) {
-    const lastSlash = file.lastIndexOf('/');
-    const dir = lastSlash >= 0 ? file.substring(0, lastSlash) : '.';
-    const name = lastSlash >= 0 ? file.substring(lastSlash + 1) : file;
-    if (!groups.has(dir)) groups.set(dir, []);
-    groups.get(dir)?.push(name);
-  }
-  return groups;
-}
+type FileEntry = {
+  path: string;
+  state: FileState;
+  access: FileAccess | null;
+  gitStatus: string | null;
+};
 
 export function FileGrid(props: FileGridProps) {
   const agentStore = getAgentStore();
-  const [repoFiles, setRepoFiles] = createSignal<string[]>([]);
+  const [changedFiles, setChangedFiles] = createSignal<Map<string, string>>(new Map());
   const [hoveredFile, setHoveredFile] = createSignal<{
-    path: string;
+    entry: FileEntry;
     x: number;
     y: number;
   } | null>(null);
 
+  // Load git status (changed files in worktree)
   createEffect(() => {
     if (props.worktreePath && props.visible) {
-      listRepoFiles(props.worktreePath)
-        .then((files) => setRepoFiles(files))
-        .catch(() => setRepoFiles([]));
+      getRepoStatus(props.worktreePath)
+        .then((statuses) => {
+          const map = new Map<string, string>();
+          for (const s of statuses) {
+            map.set(s.path, s.status);
+          }
+          setChangedFiles(map);
+        })
+        .catch(() => setChangedFiles(new Map()));
     }
   });
 
+  // Build file access map from agent events
   const fileAccessMap = createMemo(() => {
     const map = new Map<string, FileAccess>();
     for (const f of agentStore.state.log) {
@@ -97,6 +101,7 @@ export function FileGrid(props: FileGridProps) {
     return map;
   });
 
+  // Currently active files (agent is working on right now)
   const activeFiles = createMemo(() => {
     const active = new Set<string>();
     for (const [, info] of Object.entries(agentStore.state.agentsByTab)) {
@@ -110,69 +115,58 @@ export function FileGrid(props: FileGridProps) {
     return active;
   });
 
-  const grouped = createMemo(() => groupByDirectory(repoFiles()));
+  // Merge: git changed files + agent-touched files → deduplicated list
+  const entries = createMemo(() => {
+    const result = new Map<string, FileEntry>();
 
-  const fileCount = createMemo(() => repoFiles().length);
-  const touchedCount = createMemo(() => fileAccessMap().size);
+    // Git changed files
+    for (const [path, status] of changedFiles()) {
+      result.set(path, { path, state: 'changed', access: null, gitStatus: status });
+    }
 
-  const hoveredAccess = createMemo(() => {
-    const h = hoveredFile();
-    if (!h) return null;
-    return fileAccessMap().get(h.path) ?? null;
+    // Agent-touched files (may overlap with git changes)
+    for (const [path, access] of fileAccessMap()) {
+      const existing = result.get(path);
+      const isActive = activeFiles().has(path);
+      const state: FileState = isActive ? 'active' : access.wasModified ? 'modified' : 'read';
+      if (existing) {
+        existing.state = state;
+        existing.access = access;
+      } else {
+        result.set(path, { path, state, access, gitStatus: null });
+      }
+    }
+
+    return [...result.values()].sort((a, b) => {
+      const order: Record<FileState, number> = { active: 0, modified: 1, read: 2, changed: 3 };
+      return order[a.state] - order[b.state] || a.path.localeCompare(b.path);
+    });
   });
-
-  const compact = () => props.compact ?? false;
-  const dotSize = () => (compact() ? 'w-2 h-2' : 'w-2.5 h-2.5');
-  const gapSize = () => (compact() ? 'gap-[2px]' : 'gap-[3px]');
 
   return (
     <Show when={props.visible}>
-      <div class={compact() ? 'overflow-y-auto max-h-48 p-2' : 'h-full overflow-y-auto bg-bg p-3'}>
+      <div class="overflow-y-auto max-h-52 p-2">
         <Show
-          when={repoFiles().length > 0}
-          fallback={<div class="text-xs text-text-muted text-center py-4">No files in index</div>}
+          when={entries().length > 0}
+          fallback={
+            <div class="text-[10px] text-text-muted text-center py-2">No file activity</div>
+          }
         >
-          {/* Compact: file count summary */}
-          <Show when={compact()}>
-            <div class="flex items-center justify-between mb-1.5 px-0.5">
-              <span class="text-[10px] uppercase text-text-muted tracking-wider">Files</span>
-              <span class="text-[10px] text-text-muted">
-                {touchedCount()}/{fileCount()}
-              </span>
-            </div>
-          </Show>
-
-          <div class={compact() ? 'space-y-1' : 'space-y-2'}>
-            <For each={[...grouped().entries()]}>
-              {([dir, files]) => (
-                <div>
-                  <Show when={!compact()}>
-                    <div class="text-[10px] text-text-muted mb-0.5 truncate" title={dir}>
-                      {dir}
-                    </div>
-                  </Show>
-                  <div class={`flex flex-wrap ${gapSize()}`}>
-                    <For each={files}>
-                      {(file) => {
-                        const fullPath = dir === '.' ? file : `${dir}/${file}`;
-                        const status = () =>
-                          getFileStatus(fullPath, fileAccessMap(), activeFiles());
-                        return (
-                          <span
-                            role="img"
-                            aria-label={fullPath}
-                            class={`inline-block rounded-sm ${dotSize()} ${dotColor(status())}`}
-                            title={fullPath}
-                            onMouseEnter={(e) =>
-                              setHoveredFile({ path: fullPath, x: e.clientX, y: e.clientY })
-                            }
-                            onMouseLeave={() => setHoveredFile(null)}
-                          />
-                        );
-                      }}
-                    </For>
-                  </div>
-                </div>
+          <div class="flex items-center justify-between mb-1.5 px-0.5">
+            <span class="text-[10px] uppercase text-text-muted tracking-wider">Files</span>
+            <span class="text-[10px] text-text-muted">{entries().length}</span>
+          </div>
+          <div class="flex flex-wrap gap-[3px]">
+            <For each={entries()}>
+              {(entry) => (
+                <span
+                  role="img"
+                  aria-label={entry.path}
+                  class={`inline-block w-2.5 h-2.5 rounded-sm ${dotColor(entry.state)}`}
+                  title={entry.path}
+                  onMouseEnter={(e) => setHoveredFile({ entry, x: e.clientX, y: e.clientY })}
+                  onMouseLeave={() => setHoveredFile(null)}
+                />
               )}
             </For>
           </div>
@@ -181,30 +175,29 @@ export function FileGrid(props: FileGridProps) {
           <Show when={hoveredFile()}>
             {(hovered) => (
               <div
-                class="fixed z-50 px-2 py-1.5 bg-surface border border-border rounded shadow-lg text-xs max-w-64 pointer-events-none"
+                class="fixed z-50 px-2 py-1.5 bg-surface border border-border rounded shadow-lg text-xs max-w-72 pointer-events-none"
                 style={{
                   left: `${hovered().x + 12}px`,
                   top: `${hovered().y - 8}px`,
                 }}
               >
-                <div class="text-text truncate font-mono">{hovered().path}</div>
-                <Show when={hoveredAccess()}>
+                <div class="text-text truncate font-mono text-[11px]">
+                  {shortPath(hovered().entry.path, 2)}
+                </div>
+                <div
+                  class={`text-[10px] mt-0.5 ${dotColor(hovered().entry.state).replace('bg-', 'text-')}`}
+                >
+                  {stateLabel(hovered().entry.state)}
+                </div>
+                <Show when={hovered().entry.gitStatus}>
+                  <div class="text-[10px] text-text-muted">Git: {hovered().entry.gitStatus}</div>
+                </Show>
+                <Show when={hovered().entry.access}>
                   {(access) => (
-                    <div class="mt-1 space-y-0.5 text-[10px] text-text-muted">
-                      <div>
-                        Tool: <span class="text-text">{access().lastTool}</span>
-                      </div>
-                      <div>
-                        Accesses: <span class="text-text">{access().accessCount}</span>
-                      </div>
-                      <Show when={access().wasModified}>
-                        <div class="text-warning">Modified</div>
-                      </Show>
+                    <div class="text-[10px] text-text-muted mt-0.5">
+                      {access().lastTool} ({access().accessCount}x)
                     </div>
                   )}
-                </Show>
-                <Show when={!hoveredAccess()}>
-                  <div class="mt-0.5 text-[10px] text-text-muted">No agent activity</div>
                 </Show>
               </div>
             )}

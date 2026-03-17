@@ -446,26 +446,6 @@ pub fn get_status(worktree_path: &Path) -> Result<Vec<FileStatus>, AppError> {
 }
 
 /// # Errors
-/// Returns `AppError` if the repository cannot be opened or the index cannot be read.
-pub fn list_repo_files(worktree_path: &Path) -> Result<Vec<String>, AppError> {
-    let repo = Repository::open(worktree_path)?;
-    let index = repo.index()?;
-
-    let files: Vec<String> = index
-        .iter()
-        .filter_map(|entry| String::from_utf8(entry.path.clone()).ok())
-        .collect();
-
-    debug!(
-        "Listed {} files in index for {}",
-        files.len(),
-        worktree_path.display()
-    );
-
-    Ok(files)
-}
-
-/// # Errors
 /// Returns `AppError` if the repository cannot be opened or tracking info cannot be resolved.
 pub fn get_branch_tracking(
     repo_path: &Path,
