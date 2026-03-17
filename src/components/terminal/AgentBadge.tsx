@@ -1,23 +1,10 @@
 import { Show } from 'solid-js';
 import type { TabAgentInfo } from '../../lib/stores/agent';
-import { shortPath } from '../../lib/utils';
+import { shortPath, statusColor } from '../../lib/utils';
 
 type AgentBadgeProps = {
   agent: TabAgentInfo | undefined;
 };
-
-function statusColor(status: string): string {
-  switch (status) {
-    case 'active':
-      return 'bg-success';
-    case 'idle':
-      return 'bg-warning';
-    case 'stopped':
-      return 'bg-text-muted';
-    default:
-      return 'bg-text-muted';
-  }
-}
 
 export function AgentBadge(props: AgentBadgeProps) {
   return (

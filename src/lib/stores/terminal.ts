@@ -68,41 +68,11 @@ function createTerminalStore() {
     );
   }
 
-  async function openClaudeTab(worktreePath: string, tabId?: string) {
-    const id = tabId ?? crypto.randomUUID();
-    let resolvedSessionId = '';
-    const env: Record<string, string> = {
-      CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
-      BRANCHDECK_PORT: '13370',
-      BRANCHDECK_TAB_ID: id,
-      BRANCHDECK_SESSION_ID: crypto.randomUUID(),
-    };
-
-    const sessionId = await createTerminalSession(worktreePath, '', env, (event) =>
-      handlePtyEvent(resolvedSessionId, event),
-    );
-    resolvedSessionId = sessionId;
-
-    const tab: TabInfo = {
-      id,
-      sessionId,
-      title: 'Claude Code',
-      type: 'claude',
-      worktreePath,
-    };
-
-    setState(
-      produce((s) => {
-        s.tabs.push(tab);
-        s.activeTabByWorktree[worktreePath] = id;
-      }),
-    );
-
-    const encoder = new TextEncoder();
-    await writeTerminal(sessionId, encoder.encode('claude --dangerously-skip-permissions\n'));
-  }
-
-  async function openAgentTab(worktreePath: string, agentName: string) {
+  async function createClaudeSession(
+    worktreePath: string,
+    title: string,
+    command: string,
+  ): Promise<string> {
     const id = crypto.randomUUID();
     let resolvedSessionId = '';
     const env: Record<string, string> = {
@@ -120,7 +90,7 @@ function createTerminalStore() {
     const tab: TabInfo = {
       id,
       sessionId,
-      title: agentName,
+      title,
       type: 'claude',
       worktreePath,
     };
@@ -133,9 +103,23 @@ function createTerminalStore() {
     );
 
     const encoder = new TextEncoder();
-    await writeTerminal(
-      sessionId,
-      encoder.encode(`claude --agent ${agentName} --dangerously-skip-permissions\n`),
+    await writeTerminal(sessionId, encoder.encode(`${command}\n`));
+    return id;
+  }
+
+  async function openClaudeTab(worktreePath: string) {
+    return createClaudeSession(
+      worktreePath,
+      'Claude Code',
+      'claude --dangerously-skip-permissions',
+    );
+  }
+
+  async function openAgentTab(worktreePath: string, agentName: string) {
+    return createClaudeSession(
+      worktreePath,
+      agentName,
+      `claude --agent ${agentName} --dangerously-skip-permissions`,
     );
   }
 

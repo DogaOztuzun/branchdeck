@@ -59,8 +59,5 @@ export function getLayoutStore() {
         }
       }
     },
-    // Keep backward compat for existing code
-    changesSidebarOpen: () => rightSidebarOpen() && rightSidebarView() === 'changes',
-    teamSidebarOpen: () => rightSidebarOpen() && rightSidebarView() === 'team',
   };
 }

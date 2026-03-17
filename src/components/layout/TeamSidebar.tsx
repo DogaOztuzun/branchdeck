@@ -1,8 +1,9 @@
-import { createEffect, createSignal, For, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, Show } from 'solid-js';
 import { listAgentDefinitions } from '../../lib/commands/agent';
 import { getAgentStore } from '../../lib/stores/agent';
 import { getRepoStore } from '../../lib/stores/repo';
 import { getTerminalStore } from '../../lib/stores/terminal';
+import { statusColor } from '../../lib/utils';
 import type { AgentDefinition } from '../../types/agent';
 
 export function TeamSidebar() {
@@ -47,7 +48,7 @@ export function TeamSidebar() {
     terminalStore.openAgentTab(wt, def.name);
   }
 
-  const activeAgents = () => {
+  const activeAgents = createMemo(() => {
     const visible = terminalStore.state.tabs.filter(
       (t) => t.type === 'claude' && t.worktreePath === worktreePath(),
     );
@@ -57,7 +58,7 @@ export function TeamSidebar() {
         agent: agentStore.getTabAgent(tab.id),
       }))
       .filter((a) => a.agent);
-  };
+  });
 
   return (
     <div class="flex flex-col h-full bg-surface">
@@ -75,13 +76,7 @@ export function TeamSidebar() {
               {(item) => (
                 <div class="flex items-center gap-2 px-2 py-1 rounded text-xs hover:bg-bg/50">
                   <span
-                    class={`w-2 h-2 rounded-full shrink-0 ${
-                      item.agent?.status === 'active'
-                        ? 'bg-success'
-                        : item.agent?.status === 'idle'
-                          ? 'bg-warning'
-                          : 'bg-text-muted'
-                    }`}
+                    class={`w-2 h-2 rounded-full shrink-0 ${statusColor(item.agent?.status ?? 'stopped')}`}
                   />
                   <div class="flex-1 min-w-0">
                     <div class="text-text truncate">{item.tab.title}</div>
