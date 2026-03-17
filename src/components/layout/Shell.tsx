@@ -1,3 +1,4 @@
+import { Show } from 'solid-js';
 import { Panel, PanelGroup, ResizeHandle } from 'solid-resizable-panels';
 import { getLayoutStore } from '../../lib/stores/layout';
 import { TerminalArea } from '../terminal/TerminalArea';
@@ -23,32 +24,22 @@ export function Shell() {
           <RepoSidebar />
         </Panel>
         <ResizeHandle class="w-1 bg-border hover:bg-primary transition-colors cursor-col-resize" />
-        <Panel id="terminal" initialSize={50} minSize={30} class="h-full">
+        <Panel id="terminal" initialSize={64} minSize={30} class="h-full">
           <TerminalArea />
         </Panel>
         <ResizeHandle class="w-1 bg-border hover:bg-primary transition-colors cursor-col-resize" />
         <Panel
-          id="team-sidebar"
-          initialSize={14}
-          minSize={10}
-          collapsible
-          class="h-full"
-          onCollapse={() => layout.setTeamSidebarOpen(false)}
-          onExpand={() => layout.setTeamSidebarOpen(true)}
-        >
-          <TeamSidebar />
-        </Panel>
-        <ResizeHandle class="w-1 bg-border hover:bg-primary transition-colors cursor-col-resize" />
-        <Panel
-          id="changes-sidebar"
+          id="right-sidebar"
           initialSize={18}
           minSize={12}
           collapsible
           class="h-full"
-          onCollapse={() => layout.setChangesSidebarOpen(false)}
-          onExpand={() => layout.setChangesSidebarOpen(true)}
+          onCollapse={() => layout.setRightSidebarOpen(false)}
+          onExpand={() => layout.setRightSidebarOpen(true)}
         >
-          <ChangesSidebar />
+          <Show when={layout.rightSidebarView() === 'team'} fallback={<ChangesSidebar />}>
+            <TeamSidebar />
+          </Show>
         </Panel>
       </PanelGroup>
     </div>
