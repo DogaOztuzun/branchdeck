@@ -1,8 +1,9 @@
-import { openUrl } from '@tauri-apps/plugin-opener';
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { getRepoStore } from '../../lib/stores/repo';
 import type { RepoInfo, WorktreeInfo } from '../../types/git';
+import type { PrInfo } from '../../types/github';
+import { PrTooltip } from '../pr/PrTooltip';
 import { ContextMenu } from '../ui/ContextMenu';
 import { AddWorktreeModal } from '../worktree/AddWorktreeModal';
 import { BranchWorktreeModal } from '../worktree/BranchWorktreeModal';
@@ -24,11 +25,32 @@ export function RepoSidebar() {
     repoPath: string;
     wt: WorktreeInfo;
   } | null>(null);
+  const [hoveredPr, setHoveredPr] = createSignal<{
+    pr: PrInfo;
+    anchorEl: HTMLElement;
+  } | null>(null);
+
+  let sidebarScrollRef: HTMLDivElement | undefined;
+  let prLeaveTimer: ReturnType<typeof setTimeout> | undefined;
 
   onMount(async () => {
     await repoStore.restoreLastSession();
     if (repoStore.state.activeRepoPath) {
       setExpandedRepos(new Set([repoStore.state.activeRepoPath]));
+    }
+
+    // Close tooltip on sidebar scroll (also cancel leave timer to prevent re-fire)
+    const scrollEl = sidebarScrollRef;
+    if (scrollEl) {
+      const handleScroll = () => {
+        if (prLeaveTimer !== undefined) {
+          clearTimeout(prLeaveTimer);
+          prLeaveTimer = undefined;
+        }
+        setHoveredPr(null);
+      };
+      scrollEl.addEventListener('scroll', handleScroll);
+      onCleanup(() => scrollEl.removeEventListener('scroll', handleScroll));
     }
   });
 
@@ -38,11 +60,30 @@ export function RepoSidebar() {
   }, 60_000);
   onCleanup(() => clearInterval(trackingInterval));
 
-  // Refresh PR status every 300s (matches cache TTL)
-  const prInterval = setInterval(() => {
+  // Refresh PR status: 15s for active repo, 60s for expanded inactive repos
+  const activePrInterval = setInterval(() => {
     repoStore.refreshPrStatus();
-  }, 300_000);
-  onCleanup(() => clearInterval(prInterval));
+  }, 15_000);
+  onCleanup(() => clearInterval(activePrInterval));
+
+  const inactivePrInterval = setInterval(() => {
+    // Only refresh expanded repos (excluding active), skip collapsed
+    const expanded = expandedRepos();
+    for (const repoPath of Object.keys(repoStore.state.worktreesByRepo)) {
+      if (repoPath === repoStore.state.activeRepoPath) continue;
+      if (!expanded.has(repoPath)) continue;
+      repoStore.loadPrStatus(repoPath);
+    }
+  }, 60_000);
+  onCleanup(() => clearInterval(inactivePrInterval));
+
+  // Clean up leave timer on unmount
+  onCleanup(() => {
+    if (prLeaveTimer !== undefined) {
+      clearTimeout(prLeaveTimer);
+      prLeaveTimer = undefined;
+    }
+  });
 
   function toggleExpanded(repoPath: string) {
     setExpandedRepos((prev) => {
@@ -82,7 +123,7 @@ export function RepoSidebar() {
       <div class="px-3 py-2 text-xs font-bold text-text-muted uppercase tracking-wider border-b border-border">
         Repositories
       </div>
-      <div class="flex-1 overflow-y-auto">
+      <div class="flex-1 overflow-y-auto" ref={sidebarScrollRef}>
         <For each={repoStore.state.repos}>
           {(repo) => {
             const worktrees = () => repoStore.state.worktreesByRepo[repo.path] ?? [];
@@ -162,31 +203,72 @@ export function RepoSidebar() {
                             );
                           })()}
                           {(() => {
-                            const pr = repoStore.state.prByBranch[wt.branch];
+                            const pr = repoStore.getPrForBranch(repo.path, wt.branch);
                             if (!pr) return null;
                             const colors: Record<string, string> = {
-                              open: 'text-[#7aa2f7]',
-                              draft: 'text-[#565f89]',
-                              merged: 'text-[#bb9af7]',
-                              closed: 'text-[#f7768e]',
+                              open: '#7aa2f7',
+                              draft: '#565f89',
+                              merged: '#bb9af7',
+                              closed: '#f7768e',
                             };
-                            const colorClass = pr.isDraft
+                            const prColor = pr.isDraft
                               ? colors.draft
-                              : (colors[pr.state] ?? 'text-text-muted');
+                              : (colors[pr.state] ?? '#565f89');
+
+                            // Review status icon
+                            const reviewIcon = () => {
+                              if (pr.reviewDecision === 'approved')
+                                return { char: '\u2713', color: '#9ece6a' };
+                              if (pr.reviewDecision === 'changes_requested')
+                                return { char: '!', color: '#f7768e' };
+                              if (pr.reviews.length > 0)
+                                return { char: '\u25CF', color: '#e0af68' };
+                              return null;
+                            };
+
+                            // Checks summary icon
+                            const checksIcon = () => {
+                              if (pr.checks.length === 0) return null;
+                              const allPassed = pr.checks.every(
+                                (c) => c.status === 'completed' && c.conclusion === 'success',
+                              );
+                              const anyFailed = pr.checks.some(
+                                (c) => c.status === 'completed' && c.conclusion === 'failure',
+                              );
+                              const anyRunning = pr.checks.some((c) => c.status === 'in_progress');
+                              if (allPassed) return { char: '\u2713', color: '#9ece6a' };
+                              if (anyFailed) return { char: '\u2715', color: '#f7768e' };
+                              if (anyRunning) return { char: '\u2022', color: '#e0af68' };
+                              return { char: '\u25CB', color: '#565f89' };
+                            };
+
+                            const ri = reviewIcon();
+                            const ci = checksIcon();
+
                             return (
-                              <button
-                                type="button"
-                                class={`ml-1 text-[10px] shrink-0 cursor-pointer hover:underline ${colorClass}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (pr.url) {
-                                    openUrl(pr.url);
+                              // biome-ignore lint/a11y/noStaticElementInteractions: tooltip hover trigger
+                              <span
+                                class="ml-1 flex items-center gap-0.5 text-[10px] shrink-0"
+                                onMouseEnter={(e) => {
+                                  if (prLeaveTimer !== undefined) {
+                                    clearTimeout(prLeaveTimer);
+                                    prLeaveTimer = undefined;
                                   }
+                                  setHoveredPr({ pr, anchorEl: e.currentTarget as HTMLElement });
                                 }}
-                                title={pr.title}
+                                onMouseLeave={() => {
+                                  prLeaveTimer = setTimeout(() => setHoveredPr(null), 200);
+                                }}
                               >
-                                PR #{pr.number}
-                              </button>
+                                {/* PR state dot */}
+                                <span style={{ color: prColor }}>{'\u25CF'}</span>
+                                {/* Review icon */}
+                                {ri && <span style={{ color: ri.color }}>{ri.char}</span>}
+                                {/* Checks icon */}
+                                {ci && <span style={{ color: ci.color }}>{ci.char}</span>}
+                                {/* PR number */}
+                                <span style={{ color: prColor }}>#{pr.number}</span>
+                              </span>
                             );
                           })()}
                         </button>
@@ -300,6 +382,15 @@ export function RepoSidebar() {
               onClose={() => setWtContextMenu(null)}
             />
           </Portal>
+        )}
+      </Show>
+      <Show when={hoveredPr()}>
+        {(hovered) => (
+          <PrTooltip
+            pr={hovered().pr}
+            anchorEl={hovered().anchorEl}
+            onClose={() => setHoveredPr(null)}
+          />
         )}
       </Show>
     </div>

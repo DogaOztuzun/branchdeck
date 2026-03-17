@@ -26,6 +26,8 @@ type RepoState = {
   githubAvailable: boolean;
 };
 
+const inFlightPr = new Set<string>();
+
 function createRepoStore() {
   const [state, setState] = createStore<RepoState>({
     repos: [],
@@ -141,16 +143,25 @@ function createRepoStore() {
     }
   }
 
+  function getPrForBranch(repoPath: string, branch: string): PrInfo | null {
+    return state.prByBranch[`${repoPath}:${branch}`] ?? null;
+  }
+
   async function loadPrStatus(repoPath: string) {
     if (!state.githubAvailable) return;
     const wts = state.worktreesByRepo[repoPath] ?? [];
     const branches = wts.map((w) => w.branch).filter(Boolean);
     for (const branch of branches) {
+      const key = `${repoPath}:${branch}`;
+      if (inFlightPr.has(key)) continue;
+      inFlightPr.add(key);
       try {
         const pr = await getPrStatus(repoPath, branch);
-        setState('prByBranch', branch, pr);
+        setState('prByBranch', key, pr);
       } catch {
         // PR status is best-effort
+      } finally {
+        inFlightPr.delete(key);
       }
     }
   }
@@ -158,6 +169,21 @@ function createRepoStore() {
   async function refreshPrStatus() {
     if (state.activeRepoPath) {
       await loadPrStatus(state.activeRepoPath);
+    }
+  }
+
+  async function refreshInactivePrStatus() {
+    const repoPaths = Object.keys(state.worktreesByRepo);
+    for (const repoPath of repoPaths) {
+      if (repoPath === state.activeRepoPath) continue;
+      await loadPrStatus(repoPath);
+    }
+  }
+
+  async function refreshAllPrStatus() {
+    const repoPaths = Object.keys(state.worktreesByRepo);
+    for (const repoPath of repoPaths) {
+      await loadPrStatus(repoPath);
     }
   }
 
@@ -274,8 +300,11 @@ function createRepoStore() {
     refreshStatus,
     loadBranchTracking,
     refreshTracking,
+    getPrForBranch,
     loadPrStatus,
     refreshPrStatus,
+    refreshInactivePrStatus,
+    refreshAllPrStatus,
   };
 }
 

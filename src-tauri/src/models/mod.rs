@@ -2,7 +2,8 @@ pub mod repo;
 pub mod session;
 
 pub use repo::{
-    BranchInfo, FileStatus, PrInfo, RepoInfo, TrackingInfo, WorktreeInfo, WorktreePreview,
+    BranchInfo, CheckRunInfo, FileStatus, PrInfo, RepoInfo, ReviewInfo, TrackingInfo, WorktreeInfo,
+    WorktreePreview,
 };
 pub use session::{PtyEvent, PtySession, SessionId};
 
