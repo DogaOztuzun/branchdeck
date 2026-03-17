@@ -32,10 +32,14 @@ export function TerminalArea() {
 
   const hasClaudeTab = createMemo(() => visibleTabs().some((t) => t.type === 'claude'));
 
-  const activeTabLog = createMemo(() => {
-    const tabId = activeTabId();
-    if (!tabId) return [];
-    return agentStore.getLogForTab(tabId);
+  const agentLog = createMemo(() => {
+    const claudeTabIds = new Set(
+      visibleTabs()
+        .filter((t) => t.type === 'claude')
+        .map((t) => t.id),
+    );
+    if (claudeTabIds.size === 0) return [];
+    return agentStore.state.log.filter((e) => claudeTabIds.has(e.tabId));
   });
 
   onMount(() => {
@@ -123,7 +127,7 @@ export function TerminalArea() {
           </button>
         </div>
       </Show>
-      <AgentActivity entries={activeTabLog()} visible={activityVisible() && hasClaudeTab()} />
+      <AgentActivity entries={agentLog()} visible={activityVisible() && hasClaudeTab()} />
       <PresetManager
         open={presetManagerOpen()}
         repoPath={repoPath()}
