@@ -21,16 +21,12 @@ fn init_agent_config() -> commands::agent::AgentMonitorConfig {
             if let Err(e) = services::hook_config::install_hooks_user_level(&script_path) {
                 log::warn!("Agent monitoring: failed to install user-level hooks: {e}");
             }
-            commands::agent::AgentMonitorConfig {
-                script_path,
-                port: HOOK_RECEIVER_PORT,
-            }
+            commands::agent::AgentMonitorConfig { script_path }
         }
         Err(e) => {
             log::warn!("Agent monitoring: failed to create notify script: {e}");
             commands::agent::AgentMonitorConfig {
                 script_path: std::path::PathBuf::new(),
-                port: HOOK_RECEIVER_PORT,
             }
         }
     }
@@ -50,13 +46,13 @@ fn setup_agent_monitoring(
         services::hook_receiver::start(receiver_bus, HOOK_RECEIVER_PORT, ready_tx).await;
     });
 
-    match tauri::async_runtime::block_on(ready_rx) {
-        Ok(Ok(())) => {
-            log::info!("Agent monitoring: hook receiver ready on port {HOOK_RECEIVER_PORT}");
+    tauri::async_runtime::spawn(async move {
+        match ready_rx.await {
+            Ok(Ok(port)) => log::info!("Agent monitoring: hook receiver ready on port {port}"),
+            Ok(Err(e)) => log::warn!("Agent monitoring disabled: {e}"),
+            Err(_) => log::warn!("Agent monitoring: hook receiver startup channel dropped"),
         }
-        Ok(Err(e)) => log::warn!("Agent monitoring disabled: {e}"),
-        Err(_) => log::warn!("Agent monitoring: hook receiver startup channel dropped"),
-    }
+    });
 
     services::event_bridge::start(app.handle().clone(), event_bus);
     log::info!("Agent monitoring: event bridge started");

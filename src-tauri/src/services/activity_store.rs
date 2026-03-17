@@ -243,11 +243,6 @@ impl ActivityStore {
         }
     }
 
-    #[allow(dead_code)]
-    pub async fn get_all_agents(&self) -> Vec<AgentState> {
-        self.inner.lock().await.agents.values().cloned().collect()
-    }
-
     pub async fn get_all_files(&self) -> Vec<FileAccess> {
         self.inner.lock().await.files.values().cloned().collect()
     }

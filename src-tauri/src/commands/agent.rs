@@ -7,8 +7,6 @@ use tauri::State;
 
 pub struct AgentMonitorConfig {
     pub script_path: PathBuf,
-    #[allow(dead_code)]
-    pub port: u16,
 }
 
 #[tauri::command]

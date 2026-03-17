@@ -3,7 +3,7 @@
 //! Tests the full flow: hook receiver → event bus → activity store,
 //! plus hook config manager and agent scanner.
 
-#![allow(clippy::unwrap_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -59,10 +59,18 @@ async fn activity_store_lifecycle() {
         model: None,
         ts: 1000,
     });
-    tokio::time::sleep(Duration::from_millis(50)).await;
 
-    let agents = store.get_agents_for_tab("tab-1").await;
-    assert_eq!(agents.len(), 1);
+    let agents = tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let agents = store.get_agents_for_tab("tab-1").await;
+            if agents.len() == 1 {
+                return agents;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("timed out waiting for session start agent");
     assert_eq!(agents[0].status, AgentStatus::Active);
     assert_eq!(agents[0].session_id, "sess-1");
 
@@ -76,13 +84,32 @@ async fn activity_store_lifecycle() {
         file_path: Some("/src/main.rs".into()),
         ts: 2000,
     });
-    tokio::time::sleep(Duration::from_millis(50)).await;
 
-    let agents = store.get_agents_for_tab("tab-1").await;
+    let agents = tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let agents = store.get_agents_for_tab("tab-1").await;
+            if agents[0].current_tool.is_some() {
+                return agents;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("timed out waiting for tool start");
     assert_eq!(agents[0].current_tool.as_deref(), Some("Read"));
     assert_eq!(agents[0].current_file.as_deref(), Some("/src/main.rs"));
 
-    let files = store.get_all_files().await;
+    let files = tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let files = store.get_all_files().await;
+            if !files.is_empty() {
+                return files;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("timed out waiting for file access");
     assert_eq!(files.len(), 1);
     assert_eq!(files[0].path, "/src/main.rs");
     assert_eq!(files[0].access_count, 1);
@@ -98,9 +125,18 @@ async fn activity_store_lifecycle() {
         file_path: Some("/src/main.rs".into()),
         ts: 3000,
     });
-    tokio::time::sleep(Duration::from_millis(50)).await;
 
-    let agents = store.get_agents_for_tab("tab-1").await;
+    let agents = tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let agents = store.get_agents_for_tab("tab-1").await;
+            if agents[0].status == AgentStatus::Idle {
+                return agents;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("timed out waiting for tool end");
     assert_eq!(agents[0].status, AgentStatus::Idle);
     assert!(agents[0].current_tool.is_none());
 
@@ -110,9 +146,18 @@ async fn activity_store_lifecycle() {
         tab_id: "tab-1".into(),
         ts: 4000,
     });
-    tokio::time::sleep(Duration::from_millis(50)).await;
 
-    let agents = store.get_agents_for_tab("tab-1").await;
+    let agents = tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let agents = store.get_agents_for_tab("tab-1").await;
+            if agents[0].status == AgentStatus::Stopped {
+                return agents;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("timed out waiting for session stop");
     assert_eq!(agents[0].status, AgentStatus::Stopped);
 }
 
@@ -138,10 +183,18 @@ async fn activity_store_subagents() {
         tab_id: "tab-1".into(),
         ts: 2000,
     });
-    tokio::time::sleep(Duration::from_millis(50)).await;
 
-    let agents = store.get_agents_for_tab("tab-1").await;
-    assert_eq!(agents.len(), 2, "Should have main + subagent");
+    let agents = tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let agents = store.get_agents_for_tab("tab-1").await;
+            if agents.len() == 2 {
+                return agents;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("timed out waiting for subagent start");
 
     let sub = agents.iter().find(|a| a.agent_id.is_some()).unwrap();
     assert_eq!(sub.agent_id.as_deref(), Some("sub-1"));
@@ -155,7 +208,21 @@ async fn activity_store_subagents() {
         tab_id: "tab-1".into(),
         ts: 3000,
     });
-    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let agents = store.get_agents_for_tab("tab-1").await;
+            let sub = agents.iter().find(|a| a.agent_id.is_some());
+            if let Some(s) = sub {
+                if s.status == AgentStatus::Stopped {
+                    return;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("timed out waiting for subagent stop");
 
     let agents = store.get_agents_for_tab("tab-1").await;
     let sub = agents.iter().find(|a| a.agent_id.is_some()).unwrap();
@@ -171,13 +238,12 @@ async fn hook_receiver_end_to_end() {
     let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
     let receiver_bus = Arc::clone(&bus);
 
-    // Use a random high port to avoid conflicts
-    let port = 13_399;
+    // Use port 0 so the OS assigns an available port, avoiding conflicts
     tokio::spawn(async move {
-        hook_receiver::start(receiver_bus, port, ready_tx).await;
+        hook_receiver::start(receiver_bus, 0, ready_tx).await;
     });
 
-    ready_rx.await.unwrap().unwrap();
+    let port = ready_rx.await.unwrap().unwrap();
 
     // Send a SessionStart hook payload via HTTP (tab ID in header)
     let payload = serde_json::json!({
@@ -259,12 +325,11 @@ async fn hook_receiver_rejects_bad_requests() {
     let bus = Arc::new(EventBus::new());
     let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
 
-    let port = 13_398;
     let receiver_bus = Arc::clone(&bus);
     tokio::spawn(async move {
-        hook_receiver::start(receiver_bus, port, ready_tx).await;
+        hook_receiver::start(receiver_bus, 0, ready_tx).await;
     });
-    ready_rx.await.unwrap().unwrap();
+    let port = ready_rx.await.unwrap().unwrap();
 
     let client = reqwest::Client::new();
 

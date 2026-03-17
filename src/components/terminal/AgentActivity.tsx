@@ -1,5 +1,6 @@
 import { createMemo, For, Show } from 'solid-js';
 import type { AgentLogEntry } from '../../lib/stores/agent';
+import { shortPath } from '../../lib/utils';
 
 type AgentActivityProps = {
   entries: AgentLogEntry[];
@@ -57,15 +58,9 @@ function formatTime(ts: number): string {
   });
 }
 
-function shortPath(filePath: string): string {
-  const parts = filePath.split('/');
-  if (parts.length <= 2) return filePath;
-  return `.../${parts.slice(-2).join('/')}`;
-}
-
 function entryDetail(entry: AgentLogEntry): string {
   if (entry.toolName) {
-    const file = entry.filePath ? ` ${shortPath(entry.filePath)}` : '';
+    const file = entry.filePath ? ` ${shortPath(entry.filePath, 2)}` : '';
     return `${entry.toolName}${file}`;
   }
   if (entry.message) return entry.message;

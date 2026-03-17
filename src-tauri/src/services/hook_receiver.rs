@@ -26,12 +26,13 @@ const RESPONSE_400: &[u8] =
 pub async fn start(
     event_bus: Arc<EventBus>,
     port: u16,
-    ready_tx: oneshot::Sender<Result<(), String>>,
+    ready_tx: oneshot::Sender<Result<u16, String>>,
 ) {
     let listener = match TcpListener::bind(("127.0.0.1", port)).await {
         Ok(l) => {
-            info!("Hook receiver listening on 127.0.0.1:{port}");
-            let _ = ready_tx.send(Ok(()));
+            let actual_port = l.local_addr().map(|a| a.port()).unwrap_or(port);
+            info!("Hook receiver listening on 127.0.0.1:{actual_port}");
+            let _ = ready_tx.send(Ok(actual_port));
             l
         }
         Err(e) => {

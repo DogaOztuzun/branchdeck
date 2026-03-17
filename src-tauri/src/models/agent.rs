@@ -136,9 +136,4 @@ pub struct HookPayload {
     pub title: Option<String>,
     #[serde(default)]
     pub model: Option<String>,
-    #[serde(default)]
-    pub branchdeck_tab_id: Option<String>,
-    #[serde(default)]
-    #[allow(dead_code)]
-    pub branchdeck_session_id: Option<String>,
 }

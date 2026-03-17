@@ -1,5 +1,6 @@
 import { Show } from 'solid-js';
 import type { TabAgentInfo } from '../../lib/stores/agent';
+import { shortPath } from '../../lib/utils';
 
 type AgentBadgeProps = {
   agent: TabAgentInfo | undefined;
@@ -16,11 +17,6 @@ function statusColor(status: string): string {
     default:
       return 'bg-text-muted';
   }
-}
-
-function shortPath(filePath: string): string {
-  const parts = filePath.split('/');
-  return parts.length > 1 ? parts[parts.length - 1] : filePath;
 }
 
 export function AgentBadge(props: AgentBadgeProps) {
