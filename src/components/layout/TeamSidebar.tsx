@@ -166,7 +166,7 @@ export function TeamSidebar() {
         <div class="p-2 border-t border-border">
           <button
             type="button"
-            class="w-full px-3 py-1.5 text-xs text-text-muted hover:text-text border border-border rounded hover:border-primary cursor-pointer"
+            class="w-full px-3 py-1.5 text-xs text-text-muted hover:text-text cursor-pointer text-left hover:bg-bg/50 rounded"
             onClick={() => terminalStore.openClaudeTab(worktreePath())}
           >
             + New Claude Session
