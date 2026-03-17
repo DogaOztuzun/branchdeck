@@ -328,8 +328,10 @@ fn hook_config_install_remove() {
     // Remove hooks
     hook_config::remove_hooks(repo_str, &script_path).unwrap();
 
-    // Settings file should be deleted (was hooks-only)
-    assert!(!settings_path.exists());
+    // Settings file should exist but have no hooks key
+    let settings: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&settings_path).unwrap()).unwrap();
+    assert!(settings.get("hooks").is_none(), "hooks key should be removed");
 
     let _ = std::fs::remove_dir_all(&tmp);
 }

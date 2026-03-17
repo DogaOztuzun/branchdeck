@@ -27,8 +27,7 @@ const HOOK_EVENTS: &[&str] = &[
 ];
 
 /// Generates the `notify.sh` helper script in the Branchdeck config directory
-/// and returns its absolute path. The script is always overwritten so that
-/// upgrades pick up any template changes.
+/// and returns its absolute path.
 pub fn ensure_notify_script() -> Result<PathBuf, AppError> {
     let hooks_dir = crate::services::config::config_dir()?.join("hooks");
 
@@ -70,8 +69,35 @@ pub fn ensure_notify_script() -> Result<PathBuf, AppError> {
     Ok(resolved)
 }
 
-/// Merges Branchdeck hook entries into `{repo_path}/.claude/settings.json`.
-/// Preserves any existing user hooks. Uses atomic writes.
+/// Installs hooks at user level (`~/.claude/settings.json`).
+/// Works for all repos and worktrees.
+pub fn install_hooks_user_level(script_path: &Path) -> Result<(), AppError> {
+    let home = dirs::home_dir()
+        .ok_or_else(|| AppError::Agent("Could not determine home directory".to_string()))?;
+    let claude_dir = home.join(".claude");
+    if !claude_dir.exists() {
+        std::fs::create_dir_all(&claude_dir).map_err(|e| {
+            error!("Failed to create ~/.claude dir: {e}");
+            e
+        })?;
+    }
+    let settings_path = claude_dir.join("settings.json");
+    install_hooks_at(&settings_path, script_path)?;
+    info!("Installed hooks at user level");
+    Ok(())
+}
+
+/// Removes hooks from user level (`~/.claude/settings.json`).
+pub fn remove_hooks_user_level(script_path: &Path) -> Result<(), AppError> {
+    let home = dirs::home_dir()
+        .ok_or_else(|| AppError::Agent("Could not determine home directory".to_string()))?;
+    let settings_path = home.join(".claude").join("settings.json");
+    remove_hooks_at(&settings_path, script_path)?;
+    info!("Removed hooks from user level");
+    Ok(())
+}
+
+/// Installs hooks at project level (`{repo}/.claude/settings.json`).
 pub fn install_hooks(repo_path: &str, script_path: &Path) -> Result<(), AppError> {
     let claude_dir = Path::new(repo_path).join(".claude");
     if !claude_dir.exists() {
@@ -80,9 +106,24 @@ pub fn install_hooks(repo_path: &str, script_path: &Path) -> Result<(), AppError
             e
         })?;
     }
-
     let settings_path = claude_dir.join("settings.json");
-    let mut settings = load_settings(&settings_path)?;
+    install_hooks_at(&settings_path, script_path)?;
+    info!("Installed hooks in {repo_path:?}");
+    Ok(())
+}
+
+/// Removes hooks from project level (`{repo}/.claude/settings.json`).
+pub fn remove_hooks(repo_path: &str, script_path: &Path) -> Result<(), AppError> {
+    let settings_path = Path::new(repo_path).join(".claude").join("settings.json");
+    remove_hooks_at(&settings_path, script_path)?;
+    info!("Removed hooks from {repo_path:?}");
+    Ok(())
+}
+
+// --- Shared helpers ---
+
+fn install_hooks_at(settings_path: &Path, script_path: &Path) -> Result<(), AppError> {
+    let mut settings = load_settings(settings_path)?;
 
     let script_cmd = script_path.to_string_lossy().to_string();
     let hook_entry = serde_json::json!({"type": "command", "command": script_cmd});
@@ -115,22 +156,19 @@ pub fn install_hooks(repo_path: &str, script_path: &Path) -> Result<(), AppError
         }
     }
 
-    atomic_write_json(&settings_path, &settings)?;
-    info!("Installed hooks in {repo_path:?}");
-    Ok(())
+    atomic_write_json(settings_path, &settings)
 }
 
-/// Removes Branchdeck hook entries from `{repo_path}/.claude/settings.json`.
-/// Keeps user hooks intact. Uses atomic writes. Cleans up empty structures.
-pub fn remove_hooks(repo_path: &str, script_path: &Path) -> Result<(), AppError> {
-    let settings_path = Path::new(repo_path).join(".claude").join("settings.json");
-
+fn remove_hooks_at(settings_path: &Path, script_path: &Path) -> Result<(), AppError> {
     if !settings_path.exists() {
-        debug!("No settings.json in {repo_path:?}, nothing to remove");
+        debug!(
+            "No settings at {}, nothing to remove",
+            settings_path.display()
+        );
         return Ok(());
     }
 
-    let mut settings = load_settings(&settings_path)?;
+    let mut settings = load_settings(settings_path)?;
     let script_cmd = script_path.to_string_lossy().to_string();
 
     let root = settings
@@ -166,22 +204,11 @@ pub fn remove_hooks(repo_path: &str, script_path: &Path) -> Result<(), AppError>
         }
     }
 
-    // If the entire settings object is empty, delete the file
-    if root.is_empty() {
-        std::fs::remove_file(&settings_path).map_err(|e| {
-            error!("Failed to delete empty settings.json in {repo_path:?}: {e}");
-            e
-        })?;
-        info!("Removed empty settings.json from {repo_path:?}");
-    } else {
-        atomic_write_json(&settings_path, &settings)?;
-        info!("Removed hooks from {repo_path:?}");
-    }
-
-    Ok(())
+    // Don't delete user-level settings.json even if hooks section is now empty
+    // (it may contain other settings like env, permissions, etc.)
+    atomic_write_json(settings_path, &settings)
 }
 
-/// Loads settings.json, returning an empty object if the file doesn't exist.
 fn load_settings(path: &Path) -> Result<serde_json::Value, AppError> {
     if !path.exists() {
         return Ok(serde_json::json!({}));
@@ -198,7 +225,6 @@ fn load_settings(path: &Path) -> Result<serde_json::Value, AppError> {
     })
 }
 
-/// Writes JSON to a file atomically (write tmp, then rename).
 fn atomic_write_json(path: &Path, value: &serde_json::Value) -> Result<(), AppError> {
     let tmp_path = path.with_extension("json.tmp");
     let contents = serde_json::to_string_pretty(value).map_err(|e| {

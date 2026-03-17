@@ -17,6 +17,10 @@ fn init_agent_config() -> commands::agent::AgentMonitorConfig {
                 "Agent monitoring: notify script at {}",
                 script_path.display()
             );
+            // Install hooks at user level so they work in all repos/worktrees
+            if let Err(e) = services::hook_config::install_hooks_user_level(&script_path) {
+                log::warn!("Agent monitoring: failed to install user-level hooks: {e}");
+            }
             commands::agent::AgentMonitorConfig {
                 script_path,
                 port: HOOK_RECEIVER_PORT,
