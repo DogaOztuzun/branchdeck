@@ -7,6 +7,7 @@ pub mod git;
 pub mod github;
 pub mod hook_config;
 pub mod hook_receiver;
+pub mod run_manager;
 pub mod task;
 pub mod task_watcher;
 pub mod terminal;

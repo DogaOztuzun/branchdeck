@@ -86,6 +86,9 @@ pub fn run() {
         .manage(Arc::clone(&event_bus))
         .manage(init_agent_config())
         .manage(services::task_watcher::create_watcher_state())
+        .manage(services::run_manager::create_run_manager_state(
+            std::path::PathBuf::from("sidecar/agent-bridge.js"),
+        ))
         .setup(move |app| {
             setup_agent_monitoring(app, &event_bus, &activity_store);
             Ok(())
@@ -123,6 +126,10 @@ pub fn run() {
             commands::agent::list_agent_definitions,
             commands::agent::install_agent_hooks,
             commands::agent::remove_agent_hooks,
+            // Run
+            commands::run::launch_run_cmd,
+            commands::run::cancel_run_cmd,
+            commands::run::get_run_status_cmd,
             // Task
             commands::task::create_task_cmd,
             commands::task::get_task_cmd,
