@@ -85,6 +85,7 @@ pub fn run() {
         .manage(Arc::clone(&activity_store))
         .manage(Arc::clone(&event_bus))
         .manage(init_agent_config())
+        .manage(services::task_watcher::create_watcher_state())
         .setup(move |app| {
             setup_agent_monitoring(app, &event_bus, &activity_store);
             Ok(())
@@ -122,6 +123,13 @@ pub fn run() {
             commands::agent::list_agent_definitions,
             commands::agent::install_agent_hooks,
             commands::agent::remove_agent_hooks,
+            // Task
+            commands::task::create_task_cmd,
+            commands::task::get_task_cmd,
+            commands::task::list_tasks_cmd,
+            commands::task::start_task_watcher,
+            commands::task::stop_task_watcher,
+            commands::task::watch_task_path,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {

@@ -19,6 +19,18 @@ pub enum AppError {
 
     #[error("Agent monitoring error: {0}")]
     Agent(String),
+
+    #[error("Task already exists: {0}")]
+    TaskAlreadyExists(String),
+
+    #[error("Task not found: {0}")]
+    TaskNotFound(String),
+
+    #[error("Task parse error: {0}")]
+    TaskParseError(String),
+
+    #[error("Task watch error: {0}")]
+    TaskWatchError(String),
 }
 
 // Tauri requires Serialize for error types returned from commands
