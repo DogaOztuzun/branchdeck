@@ -1,20 +1,43 @@
 import { createEffect, createMemo, createSignal, For, Show } from 'solid-js';
 import { listAgentDefinitions } from '../../lib/commands/agent';
+import { cancelRun } from '../../lib/commands/run';
 import { getAgentStore } from '../../lib/stores/agent';
 import { getRepoStore } from '../../lib/stores/repo';
+import { getTaskStore } from '../../lib/stores/task';
 import { getTerminalStore } from '../../lib/stores/terminal';
 import { statusColor } from '../../lib/utils';
 import type { AgentDefinition } from '../../types/agent';
+import type { TaskInfo } from '../../types/task';
+import { RunTimeline } from '../task/RunTimeline';
+import { TaskBadge } from '../task/TaskBadge';
 import { FileGrid } from './FileGrid';
 
 export function TeamSidebar() {
   const repoStore = getRepoStore();
   const terminalStore = getTerminalStore();
   const agentStore = getAgentStore();
+  const taskStore = getTaskStore();
   const [definitions, setDefinitions] = createSignal<AgentDefinition[]>([]);
 
   const repoPath = () => repoStore.state.activeRepoPath ?? '';
   const worktreePath = () => repoStore.state.activeWorktreePath ?? '';
+
+  const tasksWithWorktree = createMemo(() => {
+    const tasks = taskStore.state.tasksByWorktree;
+    const activeRepo = repoStore.state.activeRepoPath;
+    if (!activeRepo) return [];
+    const wts = repoStore.state.worktreesByRepo[activeRepo] ?? [];
+    const result: { worktree: (typeof wts)[number]; task: TaskInfo }[] = [];
+    for (const wt of wts) {
+      // Normalize path to match store keys (ensure trailing slash)
+      const key = wt.path.endsWith('/') ? wt.path : `${wt.path}/`;
+      const task = tasks[key];
+      if (task) {
+        result.push({ worktree: wt, task });
+      }
+    }
+    return result;
+  });
 
   createEffect(() => {
     const repo = repoPath();
@@ -73,6 +96,41 @@ export function TeamSidebar() {
         <div class="border-b border-border">
           <FileGrid worktreePath={worktreePath()} />
         </div>
+      </Show>
+
+      {/* Tasks */}
+      <Show when={tasksWithWorktree().length > 0}>
+        <div class="px-2 py-1.5 border-b border-border">
+          <span class="text-[10px] uppercase text-text-muted tracking-wider px-1">Tasks</span>
+          <div class="mt-1 space-y-0.5">
+            <For each={tasksWithWorktree()}>
+              {(item) => (
+                <div class="flex items-center gap-2 px-2 py-1 rounded text-xs hover:bg-bg/50">
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-1.5">
+                      <span class="text-text truncate">{item.worktree.branch}</span>
+                      <TaskBadge status={item.task.frontmatter.status} />
+                    </div>
+                  </div>
+                  <Show
+                    when={taskStore.state.activeRun && item.task.frontmatter.status === 'running'}
+                  >
+                    <button
+                      type="button"
+                      class="shrink-0 px-1.5 py-0.5 text-[10px] text-red-400 hover:text-red-300 border border-border rounded hover:border-red-400 cursor-pointer"
+                      onClick={() => cancelRun().catch(() => {})}
+                    >
+                      Cancel
+                    </button>
+                  </Show>
+                </div>
+              )}
+            </For>
+          </div>
+        </div>
+        <Show when={taskStore.state.runLog.length > 0}>
+          <RunTimeline entries={taskStore.state.runLog} visible={true} />
+        </Show>
       </Show>
 
       {/* Active Agents */}

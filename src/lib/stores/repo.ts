@@ -13,7 +13,9 @@ import {
   removeWorktree as removeWorktreeCmd,
 } from '../commands/git';
 import { checkGithubAvailable, getPrStatus } from '../commands/github';
+import { startTaskWatcher, stopTaskWatcher } from '../commands/task';
 import { getAppConfig, getRepoConfig, saveAppConfig, saveRepoConfig } from '../commands/workspace';
+import { getTaskStore } from './task';
 
 type RepoState = {
   repos: RepoInfo[];
@@ -73,6 +75,13 @@ function createRepoStore() {
     loadBranchTracking(lastRepo.path);
     loadPrStatus(lastRepo.path);
 
+    // Load tasks and start watcher for restored session
+    const wtPaths = wts.map((w) => w.path);
+    const taskStore = getTaskStore();
+    taskStore.loadTasks(wtPaths).catch(() => {});
+    taskStore.startListening().catch(() => {});
+    startTaskWatcher(wtPaths).catch(() => {});
+
     const repoConfig = await getRepoConfig(lastRepo.path);
     const targetWt = repoConfig.lastWorktree
       ? wts.find((w) => w.path === repoConfig.lastWorktree)
@@ -109,6 +118,10 @@ function createRepoStore() {
 
   async function removeRepo(repoPath: string) {
     removeAgentHooks(repoPath).catch(() => {});
+    if (state.activeRepoPath === repoPath) {
+      stopTaskWatcher().catch(() => {});
+      getTaskStore().clearAll();
+    }
     await removeRepository(repoPath);
     setState(
       produce((s) => {
@@ -182,15 +195,25 @@ function createRepoStore() {
   }
 
   async function selectRepo(repoPath: string) {
-    // Remove hooks from previously active repo
+    // Remove hooks from previously active repo and stop task watcher
     if (state.activeRepoPath && state.activeRepoPath !== repoPath) {
       removeAgentHooks(state.activeRepoPath).catch(() => {});
+      stopTaskWatcher().catch(() => {});
+      getTaskStore().clearAll();
     }
     setState('activeRepoPath', repoPath);
     // Install hooks for newly selected repo
     installAgentHooks(repoPath).catch(() => {});
     await ensureWorktreesLoaded(repoPath);
     const wts = state.worktreesByRepo[repoPath] ?? [];
+
+    // Load tasks and start task watcher for all worktree paths
+    const wtPaths = wts.map((w) => w.path);
+    const taskStore = getTaskStore();
+    taskStore.loadTasks(wtPaths).catch(() => {});
+    taskStore.startListening().catch(() => {});
+    startTaskWatcher(wtPaths).catch(() => {});
+
     const main = wts.find((w) => w.isMain);
     if (main) {
       setActiveWorktree(main.path);
@@ -204,9 +227,21 @@ function createRepoStore() {
   async function selectRepoAndWorktree(repoPath: string, worktreePath: string) {
     if (state.activeRepoPath && state.activeRepoPath !== repoPath) {
       removeAgentHooks(state.activeRepoPath).catch(() => {});
+      stopTaskWatcher().catch(() => {});
+      getTaskStore().clearAll();
     }
     setState('activeRepoPath', repoPath);
     installAgentHooks(repoPath).catch(() => {});
+
+    // Load tasks for the new repo's worktrees
+    await ensureWorktreesLoaded(repoPath);
+    const wts = state.worktreesByRepo[repoPath] ?? [];
+    const wtPaths = wts.map((w) => w.path);
+    const taskStore = getTaskStore();
+    taskStore.loadTasks(wtPaths).catch(() => {});
+    taskStore.startListening().catch(() => {});
+    startTaskWatcher(wtPaths).catch(() => {});
+
     setActiveWorktree(worktreePath);
   }
 
