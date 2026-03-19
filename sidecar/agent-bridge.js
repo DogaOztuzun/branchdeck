@@ -8,7 +8,7 @@ let activeAbort = null;
 /** @type {string | null} */
 let activeSessionId = null;
 
-/** @type {((result: { allow: boolean, reason?: string }) => void) | null} */
+/** @type {((result: { behavior: string, updatedInput?: Record<string, unknown>, message?: string }) => void) | null} */
 let pendingPermissionResolve = null;
 
 /** @type {ReturnType<typeof setInterval> | null} */
@@ -16,22 +16,13 @@ let heartbeatInterval = null;
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
-/**
- * Start sending periodic heartbeats while a run is active.
- */
 function startHeartbeat() {
   stopHeartbeat();
   heartbeatInterval = setInterval(() => {
-    send({
-      type: "heartbeat",
-      session_id: activeSessionId,
-    });
+    send({ type: "heartbeat", session_id: activeSessionId });
   }, HEARTBEAT_INTERVAL_MS);
 }
 
-/**
- * Stop the heartbeat interval.
- */
 function stopHeartbeat() {
   if (heartbeatInterval) {
     clearInterval(heartbeatInterval);
@@ -48,13 +39,23 @@ function send(msg) {
 }
 
 /**
- * Dispatch a single SDK message to the Rust backend via stdout.
- * @param {object} message - SDK message from the query conversation stream
+ * Dispatch a single SDK message to the Rust backend.
+ *
+ * SDK message types (v0.2.x):
+ *   system        — init, compact_boundary, status, hook_response
+ *   assistant     — complete assistant turn with content blocks
+ *   user          — tool results flowing back (synthetic)
+ *   result        — terminal: success or error_*
+ *   stream_event  — partial streaming (only with includePartialMessages)
+ *   tool_progress — tool execution elapsed time
+ *   auth_status   — authentication state
+ *
+ * @param {object} message
  */
 function dispatchMessage(message) {
   switch (message.type) {
     case "system": {
-      if (message.session_id) {
+      if (message.subtype === "init" && message.session_id) {
         activeSessionId = message.session_id;
         send({
           type: "session_started",
@@ -66,8 +67,9 @@ function dispatchMessage(message) {
     }
 
     case "assistant": {
-      if (message.content) {
-        for (const block of message.content) {
+      const content = message.message?.content ?? message.content;
+      if (content) {
+        for (const block of content) {
           if (block.type === "text" && block.text) {
             send({
               type: "assistant_text",
@@ -83,7 +85,6 @@ function dispatchMessage(message) {
               session_id: activeSessionId,
             });
 
-            // Map file-related tools to run_step
             if (
               ["Edit", "Write", "MultiEdit"].includes(block.name) &&
               block.input?.file_path
@@ -101,40 +102,10 @@ function dispatchMessage(message) {
       break;
     }
 
-    case "result": {
-      const costUsd = message.total_cost_usd ?? 0;
-
-      if (
-        message.subtype === "success" ||
-        message.subtype === "end_turn"
-      ) {
-        send({
-          type: "run_complete",
-          status: "succeeded",
-          cost_usd: costUsd,
-          session_id: activeSessionId,
-        });
-      } else {
-        send({
-          type: "run_error",
-          status: "failed",
-          error: message.subtype ?? "unknown error",
-          cost_usd: costUsd,
-          session_id: activeSessionId,
-        });
-      }
-
-      stopHeartbeat();
-      pendingPermissionResolve = null;
-      activeAbort = null;
-      activeSessionId = null;
-      break;
-    }
-
     case "user": {
-      // Extract tool results for tracking — shows what tools executed
-      if (message.message?.content) {
-        for (const block of message.message.content) {
+      const content = message.message?.content;
+      if (content) {
+        for (const block of content) {
           if (block.type === "tool_result" && block.tool_use_id) {
             send({
               type: "run_step",
@@ -150,6 +121,53 @@ function dispatchMessage(message) {
       break;
     }
 
+    case "tool_progress": {
+      send({
+        type: "run_step",
+        step: "tool_progress",
+        detail: `${message.tool_name} (${Math.round(message.elapsed_time_seconds)}s)`,
+        session_id: activeSessionId,
+      });
+      break;
+    }
+
+    case "result": {
+      const costUsd = message.total_cost_usd ?? 0;
+
+      if (message.subtype === "success" || message.subtype === "end_turn") {
+        send({
+          type: "run_complete",
+          status: "succeeded",
+          cost_usd: costUsd,
+          session_id: activeSessionId,
+        });
+      } else {
+        send({
+          type: "run_error",
+          status: "failed",
+          error: message.errors?.join("; ") ?? message.subtype ?? "unknown error",
+          cost_usd: costUsd,
+          session_id: activeSessionId,
+        });
+      }
+
+      resetRunState();
+      break;
+    }
+
+    case "stream_event": {
+      // Partial streaming messages — currently not forwarded to keep
+      // the protocol simple. Could be used for live token streaming.
+      break;
+    }
+
+    case "auth_status": {
+      if (message.error) {
+        console.error(`Auth error: ${message.error}`);
+      }
+      break;
+    }
+
     default: {
       console.error(
         `Unhandled message type: ${message.type}`,
@@ -160,9 +178,6 @@ function dispatchMessage(message) {
   }
 }
 
-/**
- * Reset run state after completion or error.
- */
 function resetRunState() {
   stopHeartbeat();
   pendingPermissionResolve = null;
@@ -173,12 +188,7 @@ function resetRunState() {
 /**
  * Shared session runner for both launch and resume flows.
  * @param {object} request
- * @param {string} request.task_path
- * @param {string} request.worktree
- * @param {object} [request.options]
- * @param {number} [request.options.max_turns]
- * @param {number} [request.options.max_budget_usd]
- * @param {string | null} resumeSessionId - If provided, resumes an existing session
+ * @param {string | null} resumeSessionId
  */
 async function runSession(request, resumeSessionId = null) {
   if (activeAbort) {
@@ -206,41 +216,39 @@ async function runSession(request, resumeSessionId = null) {
 
   activeAbort = new AbortController();
 
-  const queryOptions = {
-    prompt: taskContent,
-    options: {
-      cwd: request.worktree,
-      abortController: activeAbort,
-      permissionMode: "acceptEdits",
-      canUseTool: async (toolName, input) => {
-        const toolUseId = crypto.randomUUID();
-        send({
-          type: "permission_request",
-          tool: toolName,
-          command: input?.command ?? null,
-          tool_use_id: toolUseId,
-          session_id: activeSessionId,
-        });
-        return new Promise((resolve) => {
-          pendingPermissionResolve = resolve;
-        });
-      },
+  /** @type {import("@anthropic-ai/claude-agent-sdk").Options} */
+  const options = {
+    cwd: request.worktree,
+    abortController: activeAbort,
+    permissionMode: "default",
+    canUseTool: async (toolName, input, callbackOptions) => {
+      // Use the SDK-provided toolUseID
+      const toolUseId = callbackOptions.toolUseID;
+      send({
+        type: "permission_request",
+        tool: toolName,
+        command: input?.command ?? null,
+        tool_use_id: toolUseId,
+        session_id: activeSessionId,
+      });
+      return new Promise((resolve) => {
+        pendingPermissionResolve = resolve;
+      });
     },
   };
 
   if (resumeSessionId) {
-    queryOptions.options.resume = resumeSessionId;
+    options.resume = resumeSessionId;
   }
-
   if (request.options?.max_turns) {
-    queryOptions.options.maxTurns = request.options.max_turns;
+    options.maxTurns = request.options.max_turns;
   }
   if (request.options?.max_budget_usd) {
-    queryOptions.options.maxBudgetUsd = request.options.max_budget_usd;
+    options.maxBudgetUsd = request.options.max_budget_usd;
   }
 
   try {
-    const conversation = query(queryOptions);
+    const conversation = query({ prompt: taskContent, options });
 
     for await (const message of conversation) {
       if (!message || !message.type) {
@@ -264,52 +272,13 @@ async function runSession(request, resumeSessionId = null) {
   }
 }
 
-/**
- * Handle a launch_run request from the Rust backend.
- * @param {object} request
- */
-async function handleLaunchRun(request) {
-  return runSession(request, null);
-}
+// --- Stdin request handler ---
 
-/**
- * Handle a resume_run request from the Rust backend.
- * @param {object} request
- * @param {string} request.session_id
- */
-async function handleResumeRun(request) {
-  return runSession(request, request.session_id);
-}
-
-/**
- * Handle a cancel_run request from the Rust backend.
- */
-function handleCancelRun() {
-  if (activeAbort) {
-    console.error("Cancelling active run");
-    activeAbort.abort();
-  } else {
-    send({
-      type: "run_error",
-      status: "failed",
-      error: "No active run to cancel",
-      session_id: null,
-    });
-  }
-}
-
-// --- Main stdin reader ---
-
-const rl = createInterface({
-  input: process.stdin,
-  terminal: false,
-});
+const rl = createInterface({ input: process.stdin, terminal: false });
 
 rl.on("line", (line) => {
   const trimmed = line.trim();
-  if (!trimmed) {
-    return;
-  }
+  if (!trimmed) return;
 
   let request;
   try {
@@ -321,7 +290,7 @@ rl.on("line", (line) => {
 
   switch (request.type) {
     case "launch_run":
-      handleLaunchRun(request).catch((err) => {
+      runSession(request, null).catch((err) => {
         console.error(`Unhandled error in launch_run: ${err.message}`);
         send({
           type: "run_error",
@@ -329,14 +298,12 @@ rl.on("line", (line) => {
           error: `Internal bridge error: ${err.message}`,
           session_id: activeSessionId,
         });
-        stopHeartbeat();
-        activeAbort = null;
-        activeSessionId = null;
+        resetRunState();
       });
       break;
 
     case "resume_run":
-      handleResumeRun(request).catch((err) => {
+      runSession(request, request.session_id).catch((err) => {
         console.error(`Unhandled error in resume_run: ${err.message}`);
         send({
           type: "run_error",
@@ -344,23 +311,28 @@ rl.on("line", (line) => {
           error: `Internal bridge error: ${err.message}`,
           session_id: activeSessionId,
         });
-        stopHeartbeat();
-        activeAbort = null;
-        activeSessionId = null;
+        resetRunState();
       });
       break;
 
     case "cancel_run":
-      handleCancelRun();
+      if (activeAbort) {
+        console.error("Cancelling active run");
+        activeAbort.abort();
+      } else {
+        send({
+          type: "run_error",
+          status: "failed",
+          error: "No active run to cancel",
+          session_id: null,
+        });
+      }
       break;
 
     case "permission_response":
       if (pendingPermissionResolve) {
         if (request.decision === "approve") {
-          pendingPermissionResolve({
-            behavior: "allow",
-            updatedInput: {},
-          });
+          pendingPermissionResolve({ behavior: "allow" });
         } else {
           pendingPermissionResolve({
             behavior: "deny",
@@ -369,7 +341,9 @@ rl.on("line", (line) => {
         }
         pendingPermissionResolve = null;
       } else {
-        console.error("Received permission_response but no pending permission");
+        console.error(
+          "Received permission_response but no pending permission",
+        );
       }
       break;
 
@@ -379,24 +353,18 @@ rl.on("line", (line) => {
   }
 });
 
-// Graceful shutdown on stdin close
 rl.on("close", () => {
   console.error("stdin closed, shutting down sidecar");
-  if (activeAbort) {
-    activeAbort.abort();
-  }
+  if (activeAbort) activeAbort.abort();
   process.exit(0);
 });
 
-// Handle SIGTERM/SIGINT
 for (const signal of ["SIGTERM", "SIGINT"]) {
   process.on(signal, () => {
     console.error(`Received ${signal}, shutting down`);
-    if (activeAbort) {
-      activeAbort.abort();
-    }
+    if (activeAbort) activeAbort.abort();
     process.exit(0);
   });
 }
 
-console.error("Branchdeck agent bridge started");
+console.error("Branchdeck agent bridge started (SDK v0.2.x)");
