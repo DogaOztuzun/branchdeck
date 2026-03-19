@@ -132,8 +132,18 @@ async function handleRequest(msg) {
 
       try {
         if (toolName === "query_knowledge") {
+          const query = (args.query || "").trim();
+          if (!query) {
+            return makeResponse(id, {
+              content: [
+                { type: "text", text: "Error: query must not be empty" },
+              ],
+              isError: true,
+            });
+          }
+
           const results = await postJSON("/knowledge/query", {
-            query: args.query || "",
+            query,
             top_k: args.top_k || 5,
           });
 

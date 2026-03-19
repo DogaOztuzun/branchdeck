@@ -131,6 +131,10 @@ async fn handle_query(knowledge: &KnowledgeService, body: &str) -> Result<String
     let req: QueryReq =
         serde_json::from_str(body).map_err(|e| format!("invalid query request: {e}"))?;
 
+    if req.query.trim().is_empty() {
+        return Err("query must not be empty".to_string());
+    }
+
     let results = knowledge
         .query(
             &req.repo_path,
@@ -184,6 +188,9 @@ struct RequestHead {
 }
 
 #[cfg(feature = "knowledge")]
+const MAX_LINE_BYTES: usize = 8_192;
+
+#[cfg(feature = "knowledge")]
 async fn read_request_head(
     reader: &mut BufReader<tokio::net::tcp::OwnedReadHalf>,
 ) -> Result<RequestHead, String> {
@@ -192,6 +199,9 @@ async fn read_request_head(
         .read_line(&mut request_line)
         .await
         .map_err(|e| format!("read request line: {e}"))?;
+    if request_line.len() > MAX_LINE_BYTES {
+        return Err("request line too long".to_string());
+    }
 
     let path = request_line
         .split_whitespace()
@@ -208,6 +218,9 @@ async fn read_request_head(
             .read_line(&mut line)
             .await
             .map_err(|e| format!("read header: {e}"))?;
+        if line.len() > MAX_LINE_BYTES {
+            return Err("header line too long".to_string());
+        }
 
         let trimmed = line.trim();
         if trimmed.is_empty() {
