@@ -338,10 +338,17 @@ rl.on("line", (line) => {
 
     case "permission_response":
       if (pendingPermissionResolve) {
-        pendingPermissionResolve({
-          allow: request.decision === "approve",
-          reason: request.reason ?? undefined,
-        });
+        if (request.decision === "approve") {
+          pendingPermissionResolve({
+            behavior: "allow",
+            updatedInput: {},
+          });
+        } else {
+          pendingPermissionResolve({
+            behavior: "deny",
+            message: request.reason ?? "Denied by user",
+          });
+        }
         pendingPermissionResolve = null;
       } else {
         console.error("Received permission_response but no pending permission");
