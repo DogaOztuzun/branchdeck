@@ -2,7 +2,7 @@
 
 # Branchdeck
 
-### Terminal-first workflow manager for git worktrees and coding agents
+### Agentic orchestration for multi-repo and multi-worktree technical workflows
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat)](LICENSE)
 
@@ -19,9 +19,13 @@
 
 ## Why Branchdeck?
 
-Branchdeck is a lightweight desktop app that combines git worktree navigation, embedded terminals, and one-click coding agent sessions into a single three-pane layout.
+Branchdeck is a desktop app for running and coordinating technical work across multiple repos, branches, and worktrees.
 
-Inspired by [Superset](https://github.com/superset-sh/superset) (terminal-first agent workflow) and [Arbor](https://github.com/penso/arbor) (native repo/worktree management), Branchdeck takes the best of both: Arbor's repo-centric shell with Superset's terminal-focused center pane — built on Tauri v2 instead of Electron or GPUI.
+At its core, Branchdeck is about **agentic orchestration** — tasks with durable intent, runs with real execution state, workflows that operate across one worktree or many, and recovery
+when long-running work stalls, fails, or needs follow-up.
+
+Most AI coding tools still assume a single session in a single repo. Branchdeck is built for the reality that technical work is going through a disruptive transformation in how it is
+executed, coordinated, and scaled — many repos, many branches, many worktrees, many active tasks, many sessions that need supervision, context, and recovery.
 
 ## Features
 
