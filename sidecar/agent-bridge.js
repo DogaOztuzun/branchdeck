@@ -131,8 +131,26 @@ function dispatchMessage(message) {
       break;
     }
 
+    case "user": {
+      // Extract tool results for tracking — shows what tools executed
+      if (message.message?.content) {
+        for (const block of message.message.content) {
+          if (block.type === "tool_result" && block.tool_use_id) {
+            send({
+              type: "run_step",
+              step: "tool_result",
+              detail: block.is_error
+                ? `Error: ${String(block.content).slice(0, 200)}`
+                : `Completed (${block.tool_use_id.slice(0, 8)})`,
+              session_id: activeSessionId,
+            });
+          }
+        }
+      }
+      break;
+    }
+
     default: {
-      // Log unhandled message types to stderr for debugging
       console.error(
         `Unhandled message type: ${message.type}`,
         JSON.stringify(message).slice(0, 200),
