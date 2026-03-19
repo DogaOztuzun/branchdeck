@@ -36,7 +36,6 @@ pub struct TaskFrontmatter {
     pub branch: String,
     pub pr: Option<u64>,
     pub created: String,
-    #[serde(rename = "run-count")]
     pub run_count: u32,
 }
 

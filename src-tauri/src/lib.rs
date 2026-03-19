@@ -104,10 +104,14 @@ fn recover_stale_runs(app_handle: &tauri::AppHandle) {
                 // Clean up run.json
                 services::run_state::delete_run_state(&run_info.task_path);
             }
-            models::run::RunStatus::Succeeded
-            | models::run::RunStatus::Failed
-            | models::run::RunStatus::Cancelled
-            | models::run::RunStatus::Created => {
+            models::run::RunStatus::Failed | models::run::RunStatus::Cancelled => {
+                // Keep run.json — it contains the session_id needed for resume_run
+                log::debug!(
+                    "Recovery: keeping run state for resumable task {}",
+                    run_info.task_path
+                );
+            }
+            models::run::RunStatus::Succeeded | models::run::RunStatus::Created => {
                 log::debug!(
                     "Recovery: cleaning up terminal run state for task {}",
                     run_info.task_path

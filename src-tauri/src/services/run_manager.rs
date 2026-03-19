@@ -546,11 +546,8 @@ pub async fn retry_run<R: tauri::Runtime>(
         }
     }
 
-    // Reset task status and increment run count
-    task::update_task_status(task_path, TaskStatus::Running);
-    task::increment_run_count(task_path);
-
-    // Launch a fresh run (handles active-run check, sidecar spawn, etc.)
+    // Launch a fresh run — task status will be set to Running by
+    // handle_session_started once the SDK session is confirmed.
     let options = LaunchOptions {
         max_turns: None,
         max_budget_usd: None,
@@ -607,10 +604,6 @@ pub async fn resume_run<R: tauri::Runtime>(
         return Err(AppError::TaskNotFound(task_path.to_owned()));
     }
 
-    // Reset task status and increment run count
-    task::update_task_status(task_path, TaskStatus::Running);
-    task::increment_run_count(task_path);
-
     manager.ensure_sidecar(app_handle.clone(), Arc::clone(&state))?;
 
     let tab_id = uuid::Uuid::new_v4().to_string();
@@ -627,6 +620,11 @@ pub async fn resume_run<R: tauri::Runtime>(
     };
 
     manager.send_request(&request).await?;
+
+    // Update task status and run count only after sidecar is confirmed alive
+    // and the request was sent successfully
+    task::update_task_status(task_path, TaskStatus::Running);
+    task::increment_run_count(task_path);
 
     let now = chrono::Utc::now().to_rfc3339();
     let now_ms = now_epoch_ms();
