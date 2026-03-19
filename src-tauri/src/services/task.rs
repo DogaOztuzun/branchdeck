@@ -1,6 +1,7 @@
 use crate::error::AppError;
 use crate::models::task::{TaskFrontmatter, TaskInfo, TaskScope, TaskStatus, TaskType};
 use log::{debug, error, info};
+use std::fmt::Write as _;
 use std::io::Write;
 use std::path::Path;
 use yaml_front_matter::YamlFrontMatter;
@@ -176,7 +177,7 @@ pub fn create_task(
         format!("{instructions}\n## Goal\n\n\n\n## Progress\n\n- [ ] Identify approach\n- [ ] Implement\n- [ ] Verify\n\n## Log\n")
     };
 
-    let content = format_task_md(&frontmatter, &body)?;
+    let content = format_task_md(&frontmatter, &body);
 
     // Atomic create: fails if the file already exists (TOCTOU-safe)
     let mut file = std::fs::OpenOptions::new()
@@ -301,11 +302,32 @@ pub fn parse_task_md(content: &str, path: &str) -> Result<TaskInfo, AppError> {
 /// # Errors
 ///
 /// Returns `TaskParseError` if YAML serialization fails.
-fn format_task_md(fm: &TaskFrontmatter, body: &str) -> Result<String, AppError> {
-    let yaml = serde_yaml::to_string(fm).map_err(|e| {
-        error!("Failed to serialize task frontmatter: {e}");
-        AppError::TaskParseError(format!("serialization: {e}"))
-    })?;
-    let yaml = yaml.trim_end_matches('\n');
-    Ok(format!("---\n{yaml}\n---\n{body}"))
+fn format_task_md(fm: &TaskFrontmatter, body: &str) -> String {
+    let task_type = match fm.task_type {
+        TaskType::IssueFix => "issue-fix",
+        TaskType::PrShepherd => "pr-shepherd",
+    };
+    let scope = match fm.scope {
+        TaskScope::Worktree => "worktree",
+        TaskScope::Workspace => "workspace",
+    };
+    let status = match fm.status {
+        TaskStatus::Created => "created",
+        TaskStatus::Running => "running",
+        TaskStatus::Blocked => "blocked",
+        TaskStatus::Succeeded => "succeeded",
+        TaskStatus::Failed => "failed",
+        TaskStatus::Cancelled => "cancelled",
+    };
+
+    let mut yaml = format!(
+        "type: {task_type}\nscope: {scope}\nstatus: {status}\nrepo: {}\nbranch: {}",
+        fm.repo, fm.branch
+    );
+    if let Some(pr) = fm.pr {
+        let _ = write!(yaml, "\npr: {pr}");
+    }
+    let _ = write!(yaml, "\ncreated: {}\nrun-count: {}", fm.created, fm.run_count);
+
+    format!("---\n{yaml}\n---\n{body}")
 }

@@ -68,6 +68,7 @@ pub async fn check_permission_timeout<R: tauri::Runtime>(
                     if let Err(e) = stdin.write_all(bytes.as_bytes()).await {
                         error!("Failed to send auto-deny to sidecar: {e}");
                     }
+                    let _ = stdin.flush().await;
                 }
             }
         }

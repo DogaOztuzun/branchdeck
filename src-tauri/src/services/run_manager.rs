@@ -26,7 +26,8 @@ pub fn now_epoch_ms() -> u64 {
 
 /// Convert epoch milliseconds to an RFC 3339 string.
 fn epoch_ms_to_rfc3339(epoch_ms: u64) -> String {
-    let secs = (epoch_ms / 1000).cast_signed();
+    #[allow(clippy::cast_possible_wrap)]
+    let secs = (epoch_ms / 1000) as i64;
     // Nanos from millisecond remainder always fits in u32
     #[allow(clippy::cast_possible_truncation)]
     let nanos = ((epoch_ms % 1000) * 1_000_000) as u32;
@@ -44,7 +45,7 @@ pub struct RunManager {
     last_activity_ms: u64,
     /// Epoch milliseconds when the current run started.
     started_at_epoch_ms: u64,
-    /// Pending permission requests awaiting user decisions, keyed by tool_use_id.
+    /// Pending permission requests awaiting user decisions, keyed by `tool_use_id`.
     pending_permissions: std::collections::HashMap<String, PendingPermission>,
 }
 

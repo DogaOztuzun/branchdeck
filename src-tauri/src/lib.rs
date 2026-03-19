@@ -187,7 +187,7 @@ fn setup_agent_monitoring(
 ///
 /// Panics if the Tauri application fails to initialize.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
-#[allow(clippy::expect_used)]
+#[allow(clippy::expect_used, clippy::too_many_lines)]
 pub fn run() {
     let event_bus = Arc::new(services::event_bus::EventBus::new());
     let activity_store = Arc::new(services::activity_store::ActivityStore::new());
@@ -211,13 +211,28 @@ pub fn run() {
         .manage(Arc::clone(&event_bus))
         .manage(init_agent_config())
         .manage(services::task_watcher::create_watcher_state())
-        .manage(services::run_manager::create_run_manager_state(
-            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .parent()
-                .expect("CARGO_MANIFEST_DIR has parent")
-                .join("sidecar/agent-bridge.js"),
-        ))
         .setup(move |app| {
+            let dev_path = || {
+                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .parent()
+                    .expect("CARGO_MANIFEST_DIR has parent")
+                    .join("sidecar/agent-bridge.js")
+            };
+            let sidecar_path = app
+                .path()
+                .resource_dir()
+                .map_or_else(|_| dev_path(), |dir| dir.join("sidecar/agent-bridge.js"));
+
+            // If the resource-dir resolved path doesn't exist, fall back to dev path
+            let sidecar_path = if sidecar_path.exists() {
+                sidecar_path
+            } else {
+                dev_path()
+            };
+
+            log::info!("Sidecar path resolved to: {}", sidecar_path.display());
+            app.manage(services::run_manager::create_run_manager_state(sidecar_path));
+
             recover_stale_runs(app.handle());
             setup_agent_monitoring(app, &event_bus, &activity_store);
             start_stale_checker(app);

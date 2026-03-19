@@ -68,7 +68,6 @@ pub fn handle_run_complete<R: tauri::Runtime>(
         }
         info!("Run completed successfully, cost: ${:.4}", run.cost_usd);
         task::update_task_status(&run.task_path, TaskStatus::Succeeded);
-        run_state::save_run_state(&run.task_path, run);
         run_state::delete_run_state(&run.task_path);
         if let Err(e) = app_handle.emit("run:status_changed", &*run) {
             error!("Failed to emit run:status_changed: {e}");
