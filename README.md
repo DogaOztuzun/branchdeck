@@ -2,7 +2,7 @@
 
 # Branchdeck
 
-### Agentic orchestration for multi-repo and multi-worktree technical workflows
+### Self-learning agentic orchestration across repos, worktrees, and workflows
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat)](LICENSE)
 
@@ -19,13 +19,15 @@
 
 ## Why Branchdeck?
 
-Branchdeck is a desktop app for running and coordinating technical work across multiple repos, branches, and worktrees.
+Branchdeck is a desktop app for running, coordinating, and learning from technical work across multiple repos, branches, and worktrees.
 
-At its core, Branchdeck is about **agentic orchestration** — tasks with durable intent, runs with real execution state, workflows that operate across one worktree or many, and recovery
-when long-running work stalls, fails, or needs follow-up.
+At its core, Branchdeck combines **agentic orchestration** with **persistent memory** — tasks with durable intent, runs with real execution state, and a growing knowledge layer that remembers
+what worked across every repo, every worktree, every agent session.
 
-Most AI coding tools still assume a single session in a single repo. Branchdeck is built for the reality that technical work is going through a disruptive transformation in how it is
-executed, coordinated, and scaled — many repos, many branches, many worktrees, many active tasks, many sessions that need supervision, context, and recovery.
+Every agent run, PR review, and code fix is captured. Succeeded patterns promote across projects. Failed approaches are filtered out. The more you use it, the more it knows.
+
+Most AI coding tools assume a single session in a single repo with no memory between sessions. Branchdeck is built for the reality that technical work spans many repos, many branches,
+many active tasks — and the tool should get smarter as that work happens, not start from zero every time.
 
 ## Features
 
