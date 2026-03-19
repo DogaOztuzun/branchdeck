@@ -15,6 +15,7 @@ export type RunInfo = {
   costUsd: number;
   lastHeartbeat: string | null;
   elapsedSecs: number;
+  tabId: string | null;
 };
 
 export type RunStepEvent = {

@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager};
 use tauri_plugin_log::{Target, TargetKind};
 
-const HOOK_RECEIVER_PORT: u16 = 13_370;
+pub const HOOK_RECEIVER_PORT: u16 = 13_370;
 const ACTIVITY_GC_TTL_MS: u64 = 300_000; // 5 minutes
 const STALE_CHECK_INTERVAL_SECS: u64 = 30;
 

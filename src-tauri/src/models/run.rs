@@ -24,6 +24,8 @@ pub struct RunInfo {
     pub last_heartbeat: Option<String>,
     #[serde(default)]
     pub elapsed_secs: u64,
+    #[serde(default)]
+    pub tab_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -33,12 +35,16 @@ pub enum SidecarRequest {
         task_path: String,
         worktree: String,
         options: LaunchOptions,
+        hook_port: u16,
+        tab_id: String,
     },
     ResumeRun {
         task_path: String,
         worktree: String,
         session_id: String,
         options: LaunchOptions,
+        hook_port: u16,
+        tab_id: String,
     },
     CancelRun {
         session_id: Option<String>,

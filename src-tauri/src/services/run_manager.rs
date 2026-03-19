@@ -475,10 +475,13 @@ pub async fn launch_run<R: tauri::Runtime>(
 
     manager.ensure_sidecar(app_handle.clone(), Arc::clone(&state))?;
 
+    let tab_id = uuid::Uuid::new_v4().to_string();
     let request = SidecarRequest::LaunchRun {
         task_path: task_path.to_owned(),
         worktree: worktree_path.to_owned(),
         options,
+        hook_port: crate::HOOK_RECEIVER_PORT,
+        tab_id: tab_id.clone(),
     };
 
     manager.send_request(&request).await?;
@@ -493,6 +496,7 @@ pub async fn launch_run<R: tauri::Runtime>(
         cost_usd: 0.0,
         last_heartbeat: None,
         elapsed_secs: 0,
+        tab_id: Some(tab_id),
     };
 
     manager.started_at_epoch_ms = now_ms;
@@ -604,6 +608,7 @@ pub async fn resume_run<R: tauri::Runtime>(
 
     manager.ensure_sidecar(app_handle.clone(), Arc::clone(&state))?;
 
+    let tab_id = uuid::Uuid::new_v4().to_string();
     let request = SidecarRequest::ResumeRun {
         task_path: task_path.to_owned(),
         worktree: worktree_path.to_owned(),
@@ -612,6 +617,8 @@ pub async fn resume_run<R: tauri::Runtime>(
             max_turns: None,
             max_budget_usd: None,
         },
+        hook_port: crate::HOOK_RECEIVER_PORT,
+        tab_id: tab_id.clone(),
     };
 
     manager.send_request(&request).await?;
@@ -626,6 +633,7 @@ pub async fn resume_run<R: tauri::Runtime>(
         cost_usd: 0.0,
         last_heartbeat: None,
         elapsed_secs: 0,
+        tab_id: Some(tab_id),
     };
 
     manager.started_at_epoch_ms = now_ms;

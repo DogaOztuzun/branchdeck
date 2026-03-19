@@ -11,6 +11,7 @@ import type {
 import type { TaskInfo } from '../../types/task';
 import { getRunStatus } from '../commands/run';
 import { listTasks } from '../commands/task';
+import { getAgentStore } from './agent';
 
 const MAX_LOG_ENTRIES = 200;
 
@@ -109,8 +110,23 @@ function createTaskStore() {
   function handleRunStatusChanged(run: RunInfo) {
     batch(() => {
       setState('activeRun', run);
+
+      // Register/unregister task's tabId with agent store for monitoring
+      if (run.tabId) {
+        const agentStore = getAgentStore();
+        if (run.status === 'starting' || run.status === 'running') {
+          agentStore.includeTab(run.tabId);
+        } else {
+          // Run ended — keep tab registered briefly so final events arrive
+          const tabIdToRemove = run.tabId;
+          if (tabIdToRemove) {
+            setTimeout(() => agentStore.removeTab(tabIdToRemove), 5000);
+          }
+        }
+      }
+
       // Clear all pending permissions when run completes
-      if (run.status !== 'blocked' && run.status !== 'running') {
+      if (run.status !== 'blocked' && run.status !== 'running' && run.status !== 'starting') {
         setState('pendingPermissions', []);
       }
       setState(
