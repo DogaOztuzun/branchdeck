@@ -1,4 +1,4 @@
-//! Core KnowledgeService — manages RVF stores and provides the knowledge API.
+//! Core `KnowledgeService` — manages RVF stores and provides the knowledge API.
 //!
 //! This service is always used as `Arc<KnowledgeService>` in Tauri state.
 //! Methods that spawn async tasks take `self: &Arc<Self>`.
@@ -23,23 +23,23 @@ pub(crate) const MAX_EMBED_QUEUE_SIZE: usize = 1000;
 
 /// Metadata field IDs used in RVF stores.
 pub(crate) mod field_ids {
-    /// worktree_id (String) — for cascading query filter
+    /// `worktree_id` (String) — for cascading query filter
     pub const WORKTREE_ID: u16 = 0;
-    /// entry_type (String) — "trajectory", "commit", "explicit", etc.
+    /// `entry_type` (String) — "trajectory", "commit", "explicit", etc.
     pub const ENTRY_TYPE: u16 = 1;
-    /// quality_score (F64)
+    /// `quality_score` (F64)
     pub const QUALITY_SCORE: u16 = 2;
-    /// created_at (U64) — epoch milliseconds
+    /// `created_at` (U64) — epoch milliseconds
     pub const CREATED_AT: u16 = 3;
 }
 
-/// Wrapper around RvfStore + content index.
-/// RVF SearchResult only returns `{id, distance}`, so we maintain
+/// Wrapper around `RvfStore` + content index.
+/// RVF `SearchResult` only returns `{id, distance}`, so we maintain
 /// a parallel content index for full entry retrieval.
 #[cfg(feature = "knowledge")]
 pub struct StoreHandle {
     pub(crate) store: RvfStore,
-    /// Content index: vector_id → KnowledgeEntry
+    /// Content index: `vector_id` → `KnowledgeEntry`
     pub(crate) entries: HashMap<u64, KnowledgeEntry>,
     /// Path to the JSONL content index file
     pub(crate) entries_path: PathBuf,
@@ -130,7 +130,7 @@ pub struct KnowledgeService {
 }
 
 impl KnowledgeService {
-    /// Create a new KnowledgeService. Eagerly opens/creates `global.rvf`.
+    /// Create a new `KnowledgeService`. Eagerly opens/creates `global.rvf`.
     ///
     /// # Errors
     ///
@@ -189,6 +189,10 @@ impl KnowledgeService {
     }
 
     /// Close a repo-specific RVF store, flushing to disk.
+    ///
+    /// # Errors
+    ///
+    /// Returns `AppError::Knowledge` if the store is still in use or cannot be closed.
     #[cfg(feature = "knowledge")]
     pub async fn close_repo(&self, repo_path: &str) -> Result<(), AppError> {
         let hash = repo_hash(repo_path);
@@ -314,6 +318,10 @@ impl KnowledgeService {
 
     /// Drain the embed queue — embed and store all queued entries.
     /// Returns the number of entries processed.
+    ///
+    /// # Errors
+    ///
+    /// Returns `AppError::Knowledge` if embedding or storage fails.
     #[cfg(feature = "knowledge")]
     pub async fn drain_embed_queue(&self) -> Result<usize, AppError> {
         let entries: Vec<PendingEntry> = {

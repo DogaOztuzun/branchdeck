@@ -1,4 +1,4 @@
-//! Knowledge ingestion — EventBus subscriber and trajectory recording.
+//! Knowledge ingestion — `EventBus` subscriber and trajectory recording.
 
 use crate::models::agent::Event;
 use crate::models::knowledge::{
@@ -14,7 +14,7 @@ use std::sync::Arc;
 type TrajectoryMap = HashMap<String, TrajectoryRecord>;
 
 impl KnowledgeService {
-    /// Subscribe to the EventBus for trajectory recording.
+    /// Subscribe to the `EventBus` for trajectory recording.
     pub fn start_subscriber(self: &Arc<Self>, event_bus: &EventBus) {
         let service = Arc::clone(self);
         let mut rx = event_bus.subscribe();
@@ -131,8 +131,9 @@ impl KnowledgeService {
         }
     }
 
-    /// Finalize a trajectory when RunComplete is received from RunManager.
+    /// Finalize a trajectory when `RunComplete` is received from `RunManager`.
     #[cfg(feature = "knowledge")]
+    #[allow(clippy::too_many_lines)]
     async fn finalize_trajectory(
         &self,
         session_id: &str,
@@ -287,6 +288,10 @@ impl KnowledgeService {
     }
 
     /// Explicit knowledge ingestion — called by MCP `remember_this` and Tauri IPC.
+    ///
+    /// # Errors
+    ///
+    /// Returns `AppError::Knowledge` if embedding fails or the queue is full.
     #[cfg(feature = "knowledge")]
     pub async fn ingest_explicit(
         &self,

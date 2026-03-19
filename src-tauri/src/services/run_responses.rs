@@ -163,8 +163,8 @@ pub fn handle_run_error<R: tauri::Runtime>(
     pending_permissions.clear();
 }
 
-/// Emit a `RunComplete` event via the EventBus for KnowledgeService consumption.
-/// Public variant for use from RunManager (mark_run_failed_with_reason).
+/// Emit a `RunComplete` event via the `EventBus` for `KnowledgeService` consumption.
+/// Public variant for use from `RunManager` (`mark_run_failed_with_reason`).
 pub fn emit_run_complete_event_pub(event_bus: &EventBus, run: &RunInfo, status: &str) {
     emit_run_complete_event(event_bus, run, status);
 }

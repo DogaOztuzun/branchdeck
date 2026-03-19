@@ -47,7 +47,7 @@ pub struct RunManager {
     started_at_epoch_ms: u64,
     /// Pending permission requests awaiting user decisions, keyed by `tool_use_id`.
     pending_permissions: std::collections::HashMap<String, PendingPermission>,
-    /// EventBus for publishing RunComplete events to KnowledgeService.
+    /// `EventBus` for publishing `RunComplete` events to `KnowledgeService`.
     event_bus: Arc<crate::services::event_bus::EventBus>,
 }
 
