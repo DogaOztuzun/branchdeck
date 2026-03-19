@@ -139,8 +139,7 @@ impl KnowledgeService {
     pub fn new(config_dir: &Path) -> Result<Self, AppError> {
         let global_rvf_path = config_dir.join("global.rvf");
         let global_entries_path = config_dir.join("global.entries.jsonl");
-        let global_store =
-            StoreHandle::create_or_open(&global_rvf_path, &global_entries_path)?;
+        let global_store = StoreHandle::create_or_open(&global_rvf_path, &global_entries_path)?;
 
         info!(
             "KnowledgeService initialized, global store at {}",
@@ -274,8 +273,7 @@ impl KnowledgeService {
         }
 
         let cache_dir = self.config_dir.join("models");
-        let options = fastembed::TextInitOptions::default()
-            .with_cache_dir(cache_dir);
+        let options = fastembed::TextInitOptions::default().with_cache_dir(cache_dir);
 
         info!("Initializing ONNX embedding model (first use)...");
         match fastembed::TextEmbedding::try_new(options) {
@@ -368,7 +366,10 @@ impl KnowledgeService {
 
         // Re-queue entries that actually failed
         if !failed_entries.is_empty() {
-            warn!("{} embed queue entries could not be processed, re-queuing", failed_entries.len());
+            warn!(
+                "{} embed queue entries could not be processed, re-queuing",
+                failed_entries.len()
+            );
             let mut queue = self.embed_queue.write().await;
             queue.extend(failed_entries);
         }
@@ -385,10 +386,7 @@ impl KnowledgeService {
 
     /// Get a reference to the repo store for a given repo hash.
     #[cfg(feature = "knowledge")]
-    pub(crate) async fn get_repo_store(
-        &self,
-        repo_hash: &str,
-    ) -> Option<Arc<RwLock<StoreHandle>>> {
+    pub(crate) async fn get_repo_store(&self, repo_hash: &str) -> Option<Arc<RwLock<StoreHandle>>> {
         let stores = self.repo_stores.read().await;
         stores.get(repo_hash).map(Arc::clone)
     }
@@ -495,7 +493,10 @@ fn append_content_entry(path: &Path, entry: &KnowledgeEntry) {
     use std::io::Write;
 
     let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) else {
-        error!("Failed to open content index for append: {}", path.display());
+        error!(
+            "Failed to open content index for append: {}",
+            path.display()
+        );
         return;
     };
 

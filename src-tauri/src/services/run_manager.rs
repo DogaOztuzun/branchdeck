@@ -53,7 +53,10 @@ pub struct RunManager {
 
 impl RunManager {
     #[must_use]
-    pub fn new(sidecar_path: PathBuf, event_bus: Arc<crate::services::event_bus::EventBus>) -> Self {
+    pub fn new(
+        sidecar_path: PathBuf,
+        event_bus: Arc<crate::services::event_bus::EventBus>,
+    ) -> Self {
         Self {
             process: None,
             stdin: None,

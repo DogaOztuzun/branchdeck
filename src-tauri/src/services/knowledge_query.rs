@@ -38,9 +38,10 @@ impl KnowledgeService {
             ));
         }
 
-        let embedding = self.embed_text(query_text).await.ok_or_else(|| {
-            AppError::Knowledge("Failed to embed query text".to_string())
-        })?;
+        let embedding = self
+            .embed_text(query_text)
+            .await
+            .ok_or_else(|| AppError::Knowledge("Failed to embed query text".to_string()))?;
 
         let hash = repo_hash(repo_path);
         let mut all_results: Vec<QueryResult> = Vec::new();
@@ -49,13 +50,8 @@ impl KnowledgeService {
         // Tier 1: worktree-filtered query on repo store
         if let Some(wt_id) = worktree_id {
             if let Some(store_lock) = self.get_repo_store(&hash).await {
-                let results = query_store_filtered(
-                    &store_lock,
-                    &embedding,
-                    top_k,
-                    Some(wt_id),
-                )
-                .await;
+                let results =
+                    query_store_filtered(&store_lock, &embedding, top_k, Some(wt_id)).await;
                 for r in results {
                     if seen_ids.insert(r.id) {
                         all_results.push(r);
@@ -66,8 +62,7 @@ impl KnowledgeService {
 
         // Tier 2: repo-level query (no worktree filter)
         if let Some(store_lock) = self.get_repo_store(&hash).await {
-            let results =
-                query_store_filtered(&store_lock, &embedding, top_k, None).await;
+            let results = query_store_filtered(&store_lock, &embedding, top_k, None).await;
             for r in results {
                 if seen_ids.insert(r.id) {
                     all_results.push(r);
@@ -87,7 +82,11 @@ impl KnowledgeService {
         }
 
         // Re-rank by distance and take top_k
-        all_results.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap_or(std::cmp::Ordering::Equal));
+        all_results.sort_by(|a, b| {
+            a.distance
+                .partial_cmp(&b.distance)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         all_results.truncate(top_k);
 
         debug!(

@@ -38,9 +38,10 @@ impl KnowledgeService {
     ) -> Result<MergeResult, AppError> {
         let hash = repo_hash(repo_path);
 
-        let store_lock = self.get_repo_store(&hash).await.ok_or_else(|| {
-            AppError::Knowledge(format!("Repo store not open for {repo_path:?}"))
-        })?;
+        let store_lock = self
+            .get_repo_store(&hash)
+            .await
+            .ok_or_else(|| AppError::Knowledge(format!("Repo store not open for {repo_path:?}")))?;
 
         let mut store = store_lock.write().await;
 
@@ -71,9 +72,7 @@ impl KnowledgeService {
             for id in &matching_ids {
                 store.entries.remove(id);
             }
-            info!(
-                "Deleted {delete_count} knowledge entries for worktree {worktree_id:?}"
-            );
+            info!("Deleted {delete_count} knowledge entries for worktree {worktree_id:?}");
             return Ok(MergeResult {
                 promoted: 0,
                 discarded: 0,
@@ -160,8 +159,7 @@ impl KnowledgeService {
             }
 
             for store_lock in repo_stores.values() {
-                let store: tokio::sync::RwLockReadGuard<'_, StoreHandle> =
-                    store_lock.read().await;
+                let store: tokio::sync::RwLockReadGuard<'_, StoreHandle> = store_lock.read().await;
                 for entry in store
                     .entries
                     .values()
@@ -184,10 +182,8 @@ impl KnowledgeService {
 
             for (content, count) in &seen_content {
                 if *count >= min_occurrences {
-                    let already_exists = global_store
-                        .entries
-                        .values()
-                        .any(|e| e.content == *content);
+                    let already_exists =
+                        global_store.entries.values().any(|e| e.content == *content);
 
                     if !already_exists {
                         if let Some(embedding) = self.embed_text(content).await {

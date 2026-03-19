@@ -1,10 +1,10 @@
 //! Tauri IPC commands for the knowledge service.
 
+use crate::error::AppError;
 #[cfg(feature = "knowledge")]
 use crate::models::knowledge::{KnowledgeStats, KnowledgeType, QueryResult};
 #[cfg(feature = "knowledge")]
 use crate::services::knowledge::KnowledgeService;
-use crate::error::AppError;
 #[cfg(feature = "knowledge")]
 use std::sync::Arc;
 #[cfg(feature = "knowledge")]

@@ -91,7 +91,8 @@ impl KnowledgeService {
     }
 
     async fn begin_trajectory(&self, session_id: &str, tab_id: &str, ts: u64) {
-        let mut trajectories: tokio::sync::RwLockWriteGuard<'_, TrajectoryMap> = self.active_trajectories.write().await;
+        let mut trajectories: tokio::sync::RwLockWriteGuard<'_, TrajectoryMap> =
+            self.active_trajectories.write().await;
         if trajectories.contains_key(session_id) {
             warn!("Trajectory already exists for session {session_id}, replacing");
         }
@@ -117,7 +118,8 @@ impl KnowledgeService {
         was_modified: bool,
         ts: u64,
     ) {
-        let mut trajectories: tokio::sync::RwLockWriteGuard<'_, TrajectoryMap> = self.active_trajectories.write().await;
+        let mut trajectories: tokio::sync::RwLockWriteGuard<'_, TrajectoryMap> =
+            self.active_trajectories.write().await;
         if let Some(trajectory) = trajectories.get_mut(session_id) {
             trajectory.steps.push(TrajectoryStep {
                 tool_name: tool_name.to_string(),
@@ -139,7 +141,8 @@ impl KnowledgeService {
         _elapsed_secs: u64,
     ) {
         let trajectory = {
-            let mut trajectories: tokio::sync::RwLockWriteGuard<'_, TrajectoryMap> = self.active_trajectories.write().await;
+            let mut trajectories: tokio::sync::RwLockWriteGuard<'_, TrajectoryMap> =
+                self.active_trajectories.write().await;
             trajectories.remove(session_id)
         };
 
@@ -265,7 +268,8 @@ impl KnowledgeService {
     /// was emitted with empty `session_id` due to pre-session crash).
     async fn end_trajectory_fallback(&self, session_id: &str) {
         let has_trajectory = {
-            let trajectories: tokio::sync::RwLockReadGuard<'_, TrajectoryMap> = self.active_trajectories.read().await;
+            let trajectories: tokio::sync::RwLockReadGuard<'_, TrajectoryMap> =
+                self.active_trajectories.read().await;
             trajectories.contains_key(session_id)
         };
 
@@ -275,7 +279,8 @@ impl KnowledgeService {
                 .await;
             #[cfg(not(feature = "knowledge"))]
             {
-                let mut trajectories: tokio::sync::RwLockWriteGuard<'_, TrajectoryMap> = self.active_trajectories.write().await;
+                let mut trajectories: tokio::sync::RwLockWriteGuard<'_, TrajectoryMap> =
+                    self.active_trajectories.write().await;
                 trajectories.remove(session_id);
             }
         }
