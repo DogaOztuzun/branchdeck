@@ -159,8 +159,12 @@ export function TeamSidebar() {
             </For>
           </div>
         </div>
-        <Show when={taskStore.state.runLog.length > 0}>
-          <RunTimeline entries={taskStore.state.runLog} visible={true} />
+        <Show when={taskStore.state.runLog.length > 0 || taskStore.state.activeRun}>
+          <RunTimeline
+            entries={taskStore.state.runLog}
+            visible={true}
+            activeRun={taskStore.state.activeRun}
+          />
         </Show>
       </Show>
 

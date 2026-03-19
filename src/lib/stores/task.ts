@@ -99,10 +99,14 @@ function createTaskStore() {
       }
       setState(
         produce((s) => {
+          const costSuffix =
+            run.status === 'succeeded' || run.status === 'failed'
+              ? ` ($${run.costUsd.toFixed(4)})`
+              : '';
           const entry: RunLogEntry = {
             id: `${++logCounter}`,
             type: 'status_change',
-            detail: `Run ${run.status}`,
+            detail: `Run ${run.status}${costSuffix}`,
             sessionId: run.sessionId,
             ts: Date.now(),
           };
@@ -210,12 +214,21 @@ function createTaskStore() {
     logCounter = 0;
   }
 
+  function getRunDuration(): number {
+    const run = state.activeRun;
+    if (!run?.startedAt) return 0;
+    const startMs = new Date(run.startedAt).getTime();
+    if (Number.isNaN(startMs)) return 0;
+    return Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+  }
+
   return {
     state,
     loadTasks,
     startListening,
     stopListening,
     clearAll,
+    getRunDuration,
   };
 }
 
