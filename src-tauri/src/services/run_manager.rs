@@ -5,16 +5,45 @@ use crate::services::{run_state, task};
 use log::{debug, error, info, warn};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Emitter;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin};
 use tokio::sync::Mutex;
+
+/// Get the current time as epoch milliseconds.
+#[allow(clippy::cast_possible_truncation)]
+fn now_epoch_ms() -> u64 {
+    // Truncation from u128 won't occur before year ~584 million
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
+/// Convert epoch milliseconds to an RFC 3339 string.
+fn epoch_ms_to_rfc3339(epoch_ms: u64) -> String {
+    let secs = (epoch_ms / 1000).cast_signed();
+    // Nanos from millisecond remainder always fits in u32
+    #[allow(clippy::cast_possible_truncation)]
+    let nanos = ((epoch_ms % 1000) * 1_000_000) as u32;
+    chrono::DateTime::from_timestamp(secs, nanos)
+        .unwrap_or_default()
+        .to_rfc3339()
+}
+
+/// Stale threshold: if no heartbeat or activity for this many seconds, mark run failed.
+const STALE_THRESHOLD_SECS: u64 = 120;
 
 pub struct RunManager {
     process: Option<Child>,
     stdin: Option<ChildStdin>,
     active_run: Option<RunInfo>,
     sidecar_path: PathBuf,
+    /// Epoch milliseconds of the last heartbeat or activity from the sidecar.
+    last_activity_ms: u64,
+    /// Epoch milliseconds when the current run started.
+    started_at_epoch_ms: u64,
 }
 
 impl RunManager {
@@ -25,6 +54,8 @@ impl RunManager {
             stdin: None,
             active_run: None,
             sidecar_path,
+            last_activity_ms: 0,
+            started_at_epoch_ms: 0,
         }
     }
 
@@ -92,11 +123,47 @@ impl RunManager {
         Ok(())
     }
 
-    /// Get the current run status.
+    /// Get the current run status with computed elapsed time.
     #[must_use]
     pub fn get_status(&self) -> Option<RunInfo> {
         debug!("Getting run status");
-        self.active_run.clone()
+        self.active_run.clone().map(|mut run| {
+            if self.started_at_epoch_ms > 0 {
+                let now = now_epoch_ms();
+                run.elapsed_secs = (now.saturating_sub(self.started_at_epoch_ms)) / 1000;
+            }
+            if self.last_activity_ms > 0 {
+                run.last_heartbeat = Some(epoch_ms_to_rfc3339(self.last_activity_ms));
+            }
+            run
+        })
+    }
+
+    /// Record activity (heartbeat or any sidecar response).
+    fn update_activity(&mut self) {
+        self.last_activity_ms = now_epoch_ms();
+    }
+
+    /// Check if the active run is stale (no activity for `STALE_THRESHOLD_SECS`).
+    /// If stale, marks the run as failed with a "stalled" reason.
+    pub fn check_stale<R: tauri::Runtime>(&mut self, app_handle: &tauri::AppHandle<R>) {
+        if self.active_run.is_none() {
+            return;
+        }
+
+        if self.last_activity_ms == 0 {
+            return;
+        }
+
+        let now = now_epoch_ms();
+        let elapsed_secs = (now.saturating_sub(self.last_activity_ms)) / 1000;
+
+        if elapsed_secs >= STALE_THRESHOLD_SECS {
+            warn!(
+                "Stale run detected: no activity for {elapsed_secs}s (threshold: {STALE_THRESHOLD_SECS}s)"
+            );
+            self.mark_run_failed_with_reason(app_handle, "stalled: no heartbeat for 120s");
+        }
     }
 
     /// Check if a response's `session_id` matches the active run's `session_id`.
@@ -120,7 +187,17 @@ impl RunManager {
         response: &SidecarResponse,
         app_handle: &tauri::AppHandle<R>,
     ) {
+        // Update activity timestamp on every response (heartbeat or real)
+        self.update_activity();
+
         match response {
+            SidecarResponse::Heartbeat { session_id } => {
+                if !self.session_matches(session_id.as_ref()) {
+                    warn!("Ignoring heartbeat with mismatched session_id: {session_id:?}");
+                    return;
+                }
+                debug!("Heartbeat received");
+            }
             SidecarResponse::SessionStarted { session_id } => {
                 if let Some(ref mut run) = self.active_run {
                     run.session_id = Some(session_id.clone());
@@ -158,6 +235,10 @@ impl RunManager {
                     if let Some(cost) = cost_usd {
                         run.cost_usd = *cost;
                     }
+                    if self.started_at_epoch_ms > 0 {
+                        run.elapsed_secs =
+                            (now_epoch_ms().saturating_sub(self.started_at_epoch_ms)) / 1000;
+                    }
                     info!("Run completed successfully, cost: ${:.4}", run.cost_usd);
                     task::update_task_status(&run.task_path, TaskStatus::Succeeded);
                     run_state::save_run_state(&run.task_path, run);
@@ -167,6 +248,8 @@ impl RunManager {
                     }
                 }
                 self.active_run = None;
+                self.last_activity_ms = 0;
+                self.started_at_epoch_ms = 0;
             }
             SidecarResponse::RunError {
                 error: err_msg,
@@ -188,6 +271,10 @@ impl RunManager {
                     if let Some(cost) = cost_usd {
                         run.cost_usd = *cost;
                     }
+                    if self.started_at_epoch_ms > 0 {
+                        run.elapsed_secs =
+                            (now_epoch_ms().saturating_sub(self.started_at_epoch_ms)) / 1000;
+                    }
                     error!("Run failed: {err_msg}");
                     task::update_task_status(&run.task_path, task_status);
                     run_state::save_run_state(&run.task_path, run);
@@ -197,15 +284,29 @@ impl RunManager {
                     }
                 }
                 self.active_run = None;
+                self.last_activity_ms = 0;
+                self.started_at_epoch_ms = 0;
             }
         }
     }
 
     /// Mark the active run as failed (used when sidecar crashes).
     pub fn mark_run_failed<R: tauri::Runtime>(&mut self, app_handle: &tauri::AppHandle<R>) {
+        self.mark_run_failed_with_reason(app_handle, "sidecar crash");
+    }
+
+    /// Mark the active run as failed with a specific reason.
+    pub fn mark_run_failed_with_reason<R: tauri::Runtime>(
+        &mut self,
+        app_handle: &tauri::AppHandle<R>,
+        reason: &str,
+    ) {
         if let Some(ref mut run) = self.active_run {
             run.status = RunStatus::Failed;
-            warn!("Marking active run as failed due to sidecar crash");
+            if self.started_at_epoch_ms > 0 {
+                run.elapsed_secs = (now_epoch_ms().saturating_sub(self.started_at_epoch_ms)) / 1000;
+            }
+            warn!("Marking active run as failed: {reason}");
             task::update_task_status(&run.task_path, TaskStatus::Failed);
             run_state::save_run_state(&run.task_path, run);
             run_state::delete_run_state(&run.task_path);
@@ -216,6 +317,8 @@ impl RunManager {
         self.active_run = None;
         self.process = None;
         self.stdin = None;
+        self.last_activity_ms = 0;
+        self.started_at_epoch_ms = 0;
     }
 
     /// Shut down the run manager during app exit.
@@ -341,14 +444,19 @@ pub async fn launch_run<R: tauri::Runtime>(
     manager.send_request(&request).await?;
 
     let now = chrono::Utc::now().to_rfc3339();
+    let now_ms = now_epoch_ms();
     let run_info = RunInfo {
         session_id: None,
         task_path: task_path.to_owned(),
         status: RunStatus::Starting,
         started_at: now,
         cost_usd: 0.0,
+        last_heartbeat: None,
+        elapsed_secs: 0,
     };
 
+    manager.started_at_epoch_ms = now_ms;
+    manager.last_activity_ms = now_ms;
     manager.active_run = Some(run_info.clone());
     run_state::save_run_state(task_path, &run_info);
 

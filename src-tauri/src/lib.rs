@@ -9,6 +9,7 @@ use tauri_plugin_log::{Target, TargetKind};
 
 const HOOK_RECEIVER_PORT: u16 = 13_370;
 const ACTIVITY_GC_TTL_MS: u64 = 300_000; // 5 minutes
+const STALE_CHECK_INTERVAL_SECS: u64 = 30;
 
 fn init_agent_config() -> commands::agent::AgentMonitorConfig {
     match services::hook_config::ensure_notify_script() {
@@ -138,6 +139,24 @@ fn emit_task_updated(app_handle: &tauri::AppHandle, task_path: &str) {
     }
 }
 
+fn start_stale_checker(app: &tauri::App) {
+    let run_state: services::run_manager::RunManagerState = app
+        .state::<services::run_manager::RunManagerState>()
+        .inner()
+        .clone();
+    let app_handle = app.handle().clone();
+    tauri::async_runtime::spawn(async move {
+        let mut interval =
+            tokio::time::interval(std::time::Duration::from_secs(STALE_CHECK_INTERVAL_SECS));
+        loop {
+            interval.tick().await;
+            let mut manager = run_state.lock().await;
+            manager.check_stale(&app_handle);
+        }
+    });
+    log::info!("Stale run checker started (interval: {STALE_CHECK_INTERVAL_SECS}s)");
+}
+
 fn setup_agent_monitoring(
     app: &tauri::App,
     event_bus: &Arc<services::event_bus::EventBus>,
@@ -198,6 +217,7 @@ pub fn run() {
         .setup(move |app| {
             recover_stale_runs(app.handle());
             setup_agent_monitoring(app, &event_bus, &activity_store);
+            start_stale_checker(app);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

@@ -20,6 +20,10 @@ pub struct RunInfo {
     pub status: RunStatus,
     pub started_at: String,
     pub cost_usd: f64,
+    #[serde(default)]
+    pub last_heartbeat: Option<String>,
+    #[serde(default)]
+    pub elapsed_secs: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -45,6 +49,9 @@ pub struct LaunchOptions {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SidecarResponse {
+    Heartbeat {
+        session_id: Option<String>,
+    },
     SessionStarted {
         session_id: String,
     },

@@ -13,6 +13,8 @@ export type RunInfo = {
   status: RunStatus;
   startedAt: string;
   costUsd: number;
+  lastHeartbeat: string | null;
+  elapsedSecs: number;
 };
 
 export type RunStepEvent = {

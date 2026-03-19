@@ -8,6 +8,34 @@ let activeAbort = null;
 /** @type {string | null} */
 let activeSessionId = null;
 
+/** @type {ReturnType<typeof setInterval> | null} */
+let heartbeatInterval = null;
+
+const HEARTBEAT_INTERVAL_MS = 30_000;
+
+/**
+ * Start sending periodic heartbeats while a run is active.
+ */
+function startHeartbeat() {
+  stopHeartbeat();
+  heartbeatInterval = setInterval(() => {
+    send({
+      type: "heartbeat",
+      session_id: activeSessionId,
+    });
+  }, HEARTBEAT_INTERVAL_MS);
+}
+
+/**
+ * Stop the heartbeat interval.
+ */
+function stopHeartbeat() {
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+  }
+}
+
 /**
  * Write a JSON message to stdout (newline-delimited).
  * @param {Record<string, unknown>} msg
@@ -84,6 +112,7 @@ async function handleLaunchRun(request) {
               type: "session_started",
               session_id: message.session_id,
             });
+            startHeartbeat();
           }
           break;
         }
@@ -149,6 +178,7 @@ async function handleLaunchRun(request) {
             });
           }
 
+          stopHeartbeat();
           activeAbort = null;
           activeSessionId = null;
           break;
@@ -176,6 +206,7 @@ async function handleLaunchRun(request) {
       session_id: activeSessionId,
     });
 
+    stopHeartbeat();
     activeAbort = null;
     activeSessionId = null;
   }
@@ -229,6 +260,7 @@ rl.on("line", (line) => {
           error: `Internal bridge error: ${err.message}`,
           session_id: activeSessionId,
         });
+        stopHeartbeat();
         activeAbort = null;
         activeSessionId = null;
       });
