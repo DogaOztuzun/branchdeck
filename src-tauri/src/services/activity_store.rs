@@ -240,6 +240,9 @@ impl ActivityStore {
                     agent.last_activity = ts;
                 }
             }
+            Event::RunComplete { .. } => {
+                // Handled by KnowledgeService, not ActivityStore
+            }
         }
     }
 

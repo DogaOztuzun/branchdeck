@@ -70,6 +70,15 @@ pub enum Event {
         message: String,
         ts: EpochMs,
     },
+    #[serde(rename_all = "camelCase")]
+    RunComplete {
+        session_id: String,
+        tab_id: String,
+        status: String,
+        cost_usd: f64,
+        elapsed_secs: u64,
+        ts: EpochMs,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

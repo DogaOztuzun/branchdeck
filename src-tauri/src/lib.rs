@@ -237,11 +237,36 @@ pub fn run() {
             log::info!("Sidecar path resolved to: {}", sidecar_path.display());
             app.manage(services::run_manager::create_run_manager_state(
                 sidecar_path,
+                Arc::clone(&event_bus),
             ));
 
             recover_stale_runs(app.handle());
             setup_agent_monitoring(app, &event_bus, &activity_store);
             start_stale_checker(app);
+
+            // Knowledge service initialization
+            #[cfg(feature = "knowledge")]
+            {
+                match services::config::config_dir() {
+                    Ok(config_dir) => {
+                        match services::knowledge::KnowledgeService::new(&config_dir) {
+                            Ok(knowledge_service) => {
+                                let knowledge_service = Arc::new(knowledge_service);
+                                knowledge_service.start_subscriber(&event_bus);
+                                app.manage(Arc::clone(&knowledge_service));
+                                log::info!("Knowledge service initialized");
+                            }
+                            Err(e) => {
+                                log::warn!("Knowledge service initialization failed: {e}");
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("Could not determine config dir for knowledge service: {e}");
+                    }
+                }
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -292,6 +317,13 @@ pub fn run() {
             commands::task::start_task_watcher,
             commands::task::stop_task_watcher,
             commands::task::watch_task_path,
+            // Knowledge
+            #[cfg(feature = "knowledge")]
+            commands::knowledge::query_knowledge,
+            #[cfg(feature = "knowledge")]
+            commands::knowledge::ingest_knowledge,
+            #[cfg(feature = "knowledge")]
+            commands::knowledge::get_knowledge_stats,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {

@@ -1,6 +1,7 @@
+use crate::models::agent::{self, Event};
 use crate::models::run::{PendingPermission, RunInfo, RunStatus, SidecarResponse};
 use crate::models::task::TaskStatus;
-use crate::services::{run_state, task};
+use crate::services::{event_bus::EventBus, run_state, task};
 use log::{error, info, warn};
 use tauri::Emitter;
 
@@ -57,6 +58,7 @@ pub fn handle_run_complete<R: tauri::Runtime>(
     pending_permissions: &mut std::collections::HashMap<String, PendingPermission>,
     cost_usd: Option<&f64>,
     app_handle: &tauri::AppHandle<R>,
+    event_bus: &EventBus,
 ) {
     if let Some(ref mut run) = active_run {
         run.status = RunStatus::Succeeded;
@@ -66,6 +68,10 @@ pub fn handle_run_complete<R: tauri::Runtime>(
         if *started_at_epoch_ms > 0 {
             run.elapsed_secs = (now_epoch_ms().saturating_sub(*started_at_epoch_ms)) / 1000;
         }
+
+        // Emit RunComplete event for KnowledgeService BEFORE clearing active_run
+        emit_run_complete_event(event_bus, run, "succeeded");
+
         info!("Run completed successfully, cost: ${:.4}", run.cost_usd);
         task::update_task_status(&run.task_path, TaskStatus::Succeeded);
         run_state::delete_run_state(&run.task_path);
@@ -123,6 +129,7 @@ pub fn handle_run_error<R: tauri::Runtime>(
     status: &str,
     cost_usd: Option<&f64>,
     app_handle: &tauri::AppHandle<R>,
+    event_bus: &EventBus,
 ) {
     if let Some(ref mut run) = active_run {
         let (run_status, task_status) = if status == "cancelled" {
@@ -137,6 +144,10 @@ pub fn handle_run_error<R: tauri::Runtime>(
         if *started_at_epoch_ms > 0 {
             run.elapsed_secs = (now_epoch_ms().saturating_sub(*started_at_epoch_ms)) / 1000;
         }
+
+        // Emit RunComplete event for KnowledgeService BEFORE clearing active_run
+        emit_run_complete_event(event_bus, run, status);
+
         error!("Run failed: {err_msg}");
         task::update_task_status(&run.task_path, task_status);
         // Save (but do not delete) run.json so session_id is
@@ -150,4 +161,21 @@ pub fn handle_run_error<R: tauri::Runtime>(
     *last_activity_ms = 0;
     *started_at_epoch_ms = 0;
     pending_permissions.clear();
+}
+
+/// Emit a `RunComplete` event via the `EventBus` for `KnowledgeService` consumption.
+/// Public variant for use from `RunManager` (`mark_run_failed_with_reason`).
+pub fn emit_run_complete_event_pub(event_bus: &EventBus, run: &RunInfo, status: &str) {
+    emit_run_complete_event(event_bus, run, status);
+}
+
+fn emit_run_complete_event(event_bus: &EventBus, run: &RunInfo, status: &str) {
+    let _ = event_bus.publish(Event::RunComplete {
+        session_id: run.session_id.clone().unwrap_or_default(),
+        tab_id: run.tab_id.clone().unwrap_or_default(),
+        status: status.to_string(),
+        cost_usd: run.cost_usd,
+        elapsed_secs: run.elapsed_secs,
+        ts: agent::now_ms(),
+    });
 }

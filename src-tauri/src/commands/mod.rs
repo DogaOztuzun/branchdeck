@@ -1,6 +1,8 @@
 pub mod agent;
 pub mod git;
 pub mod github;
+#[cfg(feature = "knowledge")]
+pub mod knowledge;
 pub mod run;
 pub mod task;
 pub mod terminal;
