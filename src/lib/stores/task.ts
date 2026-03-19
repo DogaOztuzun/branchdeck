@@ -1,7 +1,13 @@
 import { listen } from '@tauri-apps/api/event';
 import { batch } from 'solid-js';
 import { createStore, produce } from 'solid-js/store';
-import type { AssistantTextEvent, RunInfo, RunStepEvent, ToolCallEvent } from '../../types/run';
+import type {
+  AssistantTextEvent,
+  PermissionRequestEvent,
+  RunInfo,
+  RunStepEvent,
+  ToolCallEvent,
+} from '../../types/run';
 import type { TaskInfo } from '../../types/task';
 import { getRunStatus } from '../commands/run';
 import { listTasks } from '../commands/task';
@@ -20,6 +26,7 @@ type TaskStoreState = {
   tasksByWorktree: Record<string, TaskInfo>;
   activeRun: RunInfo | null;
   runLog: RunLogEntry[];
+  pendingPermission: PermissionRequestEvent | null;
 };
 
 function normalizePath(p: string): string {
@@ -41,6 +48,7 @@ function createTaskStore() {
     tasksByWorktree: {},
     activeRun: null,
     runLog: [],
+    pendingPermission: null,
   });
 
   let logCounter = 0;
@@ -78,9 +86,17 @@ function createTaskStore() {
     setState('tasksByWorktree', wtPath, task);
   }
 
+  function handlePermissionRequest(perm: PermissionRequestEvent) {
+    setState('pendingPermission', perm);
+  }
+
   function handleRunStatusChanged(run: RunInfo) {
     batch(() => {
       setState('activeRun', run);
+      // Clear pending permission when status leaves blocked
+      if (run.status !== 'blocked') {
+        setState('pendingPermission', null);
+      }
       setState(
         produce((s) => {
           const entry: RunLogEntry = {
@@ -157,6 +173,11 @@ function createTaskStore() {
           handleRunStep(e.payload);
         }),
       );
+      listenPromises.push(
+        listen<PermissionRequestEvent>('run:permission_request', (e) => {
+          handlePermissionRequest(e.payload);
+        }),
+      );
       await Promise.all(listenPromises);
     } catch {
       listening = false;
@@ -183,6 +204,7 @@ function createTaskStore() {
         s.tasksByWorktree = {};
         s.activeRun = null;
         s.runLog = [];
+        s.pendingPermission = null;
       }),
     );
     logCounter = 0;

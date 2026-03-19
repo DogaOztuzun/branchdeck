@@ -8,6 +8,9 @@ let activeAbort = null;
 /** @type {string | null} */
 let activeSessionId = null;
 
+/** @type {((result: { allow: boolean, reason?: string }) => void) | null} */
+let pendingPermissionResolve = null;
+
 /** @type {ReturnType<typeof setInterval> | null} */
 let heartbeatInterval = null;
 
@@ -85,6 +88,19 @@ async function handleLaunchRun(request) {
       cwd: request.worktree,
       abortController: activeAbort,
       permissionMode: "acceptEdits",
+      canUseTool: async (tool, input) => {
+        const toolUseId = crypto.randomUUID();
+        send({
+          type: "permission_request",
+          tool: tool.name,
+          command: input?.command ?? null,
+          tool_use_id: toolUseId,
+          session_id: activeSessionId,
+        });
+        return new Promise((resolve) => {
+          pendingPermissionResolve = resolve;
+        });
+      },
     },
   };
 
@@ -179,6 +195,7 @@ async function handleLaunchRun(request) {
           }
 
           stopHeartbeat();
+          pendingPermissionResolve = null;
           activeAbort = null;
           activeSessionId = null;
           break;
@@ -207,6 +224,7 @@ async function handleLaunchRun(request) {
     });
 
     stopHeartbeat();
+    pendingPermissionResolve = null;
     activeAbort = null;
     activeSessionId = null;
   }
@@ -258,6 +276,19 @@ async function handleResumeRun(request) {
       abortController: activeAbort,
       permissionMode: "acceptEdits",
       resume: request.session_id,
+      canUseTool: async (tool, input) => {
+        const toolUseId = crypto.randomUUID();
+        send({
+          type: "permission_request",
+          tool: tool.name,
+          command: input?.command ?? null,
+          tool_use_id: toolUseId,
+          session_id: activeSessionId,
+        });
+        return new Promise((resolve) => {
+          pendingPermissionResolve = resolve;
+        });
+      },
     },
   };
 
@@ -348,6 +379,7 @@ async function handleResumeRun(request) {
           }
 
           stopHeartbeat();
+          pendingPermissionResolve = null;
           activeAbort = null;
           activeSessionId = null;
           break;
@@ -375,6 +407,7 @@ async function handleResumeRun(request) {
     });
 
     stopHeartbeat();
+    pendingPermissionResolve = null;
     activeAbort = null;
     activeSessionId = null;
   }
@@ -451,6 +484,18 @@ rl.on("line", (line) => {
 
     case "cancel_run":
       handleCancelRun();
+      break;
+
+    case "permission_response":
+      if (pendingPermissionResolve) {
+        pendingPermissionResolve({
+          allow: request.decision === "approve",
+          reason: request.reason ?? undefined,
+        });
+        pendingPermissionResolve = null;
+      } else {
+        console.error("Received permission_response but no pending permission");
+      }
       break;
 
     default:

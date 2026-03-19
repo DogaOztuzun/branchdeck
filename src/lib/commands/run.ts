@@ -65,3 +65,20 @@ export async function resumeRun(taskPath: string, worktreePath: string): Promise
     throw e;
   }
 }
+
+export async function respondToPermission(
+  toolUseId: string,
+  decision: string,
+  reason?: string,
+): Promise<void> {
+  try {
+    await invoke('respond_to_permission_cmd', {
+      toolUseId,
+      decision,
+      reason: reason ?? null,
+    });
+  } catch (e) {
+    logError(`respondToPermission failed: ${e}`);
+    throw e;
+  }
+}

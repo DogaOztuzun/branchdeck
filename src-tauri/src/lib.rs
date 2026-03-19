@@ -151,7 +151,7 @@ fn start_stale_checker(app: &tauri::App) {
         loop {
             interval.tick().await;
             let mut manager = run_state.lock().await;
-            manager.check_stale(&app_handle);
+            manager.check_stale(&app_handle).await;
         }
     });
     log::info!("Stale run checker started (interval: {STALE_CHECK_INTERVAL_SECS}s)");
@@ -260,6 +260,7 @@ pub fn run() {
             commands::run::recover_runs_cmd,
             commands::run::retry_run_cmd,
             commands::run::resume_run_cmd,
+            commands::run::respond_to_permission_cmd,
             // Task
             commands::task::create_task_cmd,
             commands::task::get_task_cmd,

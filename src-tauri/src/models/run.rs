@@ -86,4 +86,29 @@ pub enum SidecarResponse {
         cost_usd: Option<f64>,
         session_id: Option<String>,
     },
+    PermissionRequest {
+        tool: String,
+        command: Option<String>,
+        tool_use_id: String,
+        session_id: Option<String>,
+    },
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PermissionResponseMsg {
+    PermissionResponse {
+        tool_use_id: String,
+        decision: String,
+        reason: Option<String>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingPermission {
+    pub tool: String,
+    pub command: Option<String>,
+    pub tool_use_id: String,
+    pub requested_at: u64,
 }

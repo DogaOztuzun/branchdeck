@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, Show } from 'solid-js';
 import { listAgentDefinitions } from '../../lib/commands/agent';
-import { cancelRun, resumeRun, retryRun } from '../../lib/commands/run';
+import { cancelRun, respondToPermission, resumeRun, retryRun } from '../../lib/commands/run';
 import { getAgentStore } from '../../lib/stores/agent';
 import { getRepoStore } from '../../lib/stores/repo';
 import { getTaskStore } from '../../lib/stores/task';
@@ -8,6 +8,7 @@ import { getTerminalStore } from '../../lib/stores/terminal';
 import { statusColor } from '../../lib/utils';
 import type { AgentDefinition } from '../../types/agent';
 import type { TaskInfo } from '../../types/task';
+import { ApprovalDialog } from '../task/ApprovalDialog';
 import { RunTimeline } from '../task/RunTimeline';
 import { TaskBadge } from '../task/TaskBadge';
 import { FileGrid } from './FileGrid';
@@ -161,6 +162,20 @@ export function TeamSidebar() {
         <Show when={taskStore.state.runLog.length > 0}>
           <RunTimeline entries={taskStore.state.runLog} visible={true} />
         </Show>
+      </Show>
+
+      {/* Permission Approval Dialog */}
+      <Show when={taskStore.state.pendingPermission}>
+        {(perm) => (
+          <div class="border-b border-border">
+            <ApprovalDialog
+              permission={perm()}
+              onRespond={(decision) => {
+                respondToPermission(perm().toolUseId, decision).catch(() => {});
+              }}
+            />
+          </div>
+        )}
       </Show>
 
       {/* Active Agents */}

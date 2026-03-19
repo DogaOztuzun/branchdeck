@@ -44,3 +44,10 @@ export type RunStatusEvent = {
   costUsd?: number;
   sessionId: string | null;
 };
+
+export type PermissionRequestEvent = {
+  tool: string;
+  command: string | null;
+  toolUseId: string;
+  requestedAt: number;
+};
