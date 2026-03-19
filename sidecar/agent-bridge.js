@@ -2,19 +2,53 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 
+// --- State ---
+
 /** @type {AbortController | null} */
 let activeAbort = null;
-
 /** @type {string | null} */
 let activeSessionId = null;
-
-/** @type {((result: { behavior: string, updatedInput?: Record<string, unknown>, message?: string }) => void) | null} */
-let pendingPermissionResolve = null;
-
+/** @type {string | null} */
+let activeTabId = null;
+/** @type {number} */
+let hookReceiverPort = 13370;
+/** @type {Map<string, (result: object) => void>} */
+const pendingPermissions = new Map();
 /** @type {ReturnType<typeof setInterval> | null} */
 let heartbeatInterval = null;
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
+
+// --- Stdout protocol (sidecar → Rust run_manager) ---
+
+function send(msg) {
+  process.stdout.write(JSON.stringify(msg) + "\n");
+}
+
+// --- Hook receiver HTTP POST (sidecar → Rust hook_receiver → EventBus → frontend) ---
+
+async function postHook(payload) {
+  try {
+    const body = JSON.stringify(payload);
+    const res = await fetch(`http://127.0.0.1:${hookReceiverPort}/hook`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": String(Buffer.byteLength(body)),
+        ...(activeTabId ? { "X-Branchdeck-Tab-Id": activeTabId } : {}),
+      },
+      body,
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!res.ok) {
+      console.error(`Hook POST failed: ${res.status}`);
+    }
+  } catch {
+    // Best-effort — don't crash if hook receiver is down
+  }
+}
+
+// --- Heartbeat ---
 
 function startHeartbeat() {
   stopHeartbeat();
@@ -30,28 +64,206 @@ function stopHeartbeat() {
   }
 }
 
-/**
- * Write a JSON message to stdout (newline-delimited).
- * @param {Record<string, unknown>} msg
- */
-function send(msg) {
-  process.stdout.write(JSON.stringify(msg) + "\n");
+function resetRunState() {
+  stopHeartbeat();
+  pendingPermissions.clear();
+  activeAbort = null;
+  activeSessionId = null;
 }
 
-/**
- * Dispatch a single SDK message to the Rust backend.
- *
- * SDK message types (v0.2.x):
- *   system        — init, compact_boundary, status, hook_response
- *   assistant     — complete assistant turn with content blocks
- *   user          — tool results flowing back (synthetic)
- *   result        — terminal: success or error_*
- *   stream_event  — partial streaming (only with includePartialMessages)
- *   tool_progress — tool execution elapsed time
- *   auth_status   — authentication state
- *
- * @param {object} message
- */
+// --- SDK Hooks (real-time tool observability) ---
+
+function buildHooks() {
+  return {
+    PreToolUse: [
+      {
+        hooks: [
+          async (input, toolUseID) => {
+            // Forward to hook receiver for agent monitoring UI
+            postHook({
+              session_id: input.session_id,
+              hook_event_name: "PreToolUse",
+              tool_name: input.tool_name,
+              tool_input: input.tool_input,
+              tool_use_id: input.tool_use_id ?? toolUseID,
+              agent_id: input.agent_id ?? null,
+            });
+            // Also forward to run timeline via stdout
+            send({
+              type: "tool_call",
+              tool: input.tool_name,
+              file_path: extractFilePath(input.tool_name, input.tool_input),
+              session_id: activeSessionId,
+            });
+            return {};
+          },
+        ],
+      },
+    ],
+    PostToolUse: [
+      {
+        hooks: [
+          async (input, toolUseID) => {
+            postHook({
+              session_id: input.session_id,
+              hook_event_name: "PostToolUse",
+              tool_name: input.tool_name,
+              tool_input: input.tool_input,
+              tool_use_id: input.tool_use_id ?? toolUseID,
+              agent_id: input.agent_id ?? null,
+            });
+            // Send result summary to timeline
+            const detail = summarizeToolResult(
+              input.tool_name,
+              input.tool_response,
+            );
+            send({
+              type: "run_step",
+              step: "tool_result",
+              detail: `${input.tool_name}: ${detail}`,
+              session_id: activeSessionId,
+            });
+            return {};
+          },
+        ],
+      },
+    ],
+    PostToolUseFailure: [
+      {
+        hooks: [
+          async (input) => {
+            send({
+              type: "run_step",
+              step: "tool_error",
+              detail: `${input.tool_name}: ${input.error?.slice(0, 300) ?? "unknown error"}`,
+              session_id: activeSessionId,
+            });
+            return {};
+          },
+        ],
+      },
+    ],
+    SubagentStart: [
+      {
+        hooks: [
+          async (input) => {
+            postHook({
+              session_id: input.session_id,
+              hook_event_name: "SubagentStart",
+              agent_id: input.agent_id,
+              agent_type: input.agent_type,
+            });
+            send({
+              type: "run_step",
+              step: "subagent_start",
+              detail: `${input.agent_type} (${input.agent_id})`,
+              session_id: activeSessionId,
+            });
+            return {};
+          },
+        ],
+      },
+    ],
+    SubagentStop: [
+      {
+        hooks: [
+          async (input) => {
+            postHook({
+              session_id: input.session_id,
+              hook_event_name: "SubagentStop",
+              agent_id: input.agent_id,
+              agent_type: input.agent_type,
+            });
+            send({
+              type: "run_step",
+              step: "subagent_stop",
+              detail: `${input.agent_type} (${input.agent_id})`,
+              session_id: activeSessionId,
+            });
+            return {};
+          },
+        ],
+      },
+    ],
+    Notification: [
+      {
+        hooks: [
+          async (input) => {
+            postHook({
+              session_id: input.session_id,
+              hook_event_name: "Notification",
+              title: input.title ?? null,
+              message: input.message ?? null,
+            });
+            send({
+              type: "run_step",
+              step: "notification",
+              detail: input.title
+                ? `${input.title}: ${input.message}`
+                : input.message,
+              session_id: activeSessionId,
+            });
+            return {};
+          },
+        ],
+      },
+    ],
+    SessionStart: [
+      {
+        hooks: [
+          async (input) => {
+            postHook({
+              session_id: input.session_id,
+              hook_event_name: "SessionStart",
+              model: input.model ?? null,
+            });
+            return {};
+          },
+        ],
+      },
+    ],
+    Stop: [
+      {
+        hooks: [
+          async (input) => {
+            postHook({
+              session_id: input.session_id,
+              hook_event_name: "Stop",
+            });
+            return {};
+          },
+        ],
+      },
+    ],
+  };
+}
+
+// --- Helper: extract file path from tool input ---
+
+function extractFilePath(toolName, toolInput) {
+  if (!toolInput || typeof toolInput !== "object") return null;
+  if (["Read", "Write", "Edit", "MultiEdit"].includes(toolName)) {
+    return toolInput.file_path ?? null;
+  }
+  if (["Glob", "Grep"].includes(toolName)) {
+    return toolInput.path ?? null;
+  }
+  return null;
+}
+
+// --- Helper: summarize tool result for timeline ---
+
+function summarizeToolResult(toolName, toolResponse) {
+  if (toolResponse == null) return "done";
+  const str = typeof toolResponse === "string"
+    ? toolResponse
+    : JSON.stringify(toolResponse);
+  if (str.length <= 150) return str;
+  return `${str.slice(0, 147)}...`;
+}
+
+// --- SDK message dispatch (conversation-level events) ---
+
 function dispatchMessage(message) {
   switch (message.type) {
     case "system": {
@@ -77,42 +289,13 @@ function dispatchMessage(message) {
               session_id: activeSessionId,
             });
           }
+          // tool_use blocks are handled by PreToolUse hook, but
+          // also send from here as backup for tools that bypass hooks
           if (block.type === "tool_use") {
             send({
-              type: "tool_call",
-              tool: block.name,
-              file_path: block.input?.file_path ?? null,
-              session_id: activeSessionId,
-            });
-
-            if (
-              ["Edit", "Write", "MultiEdit"].includes(block.name) &&
-              block.input?.file_path
-            ) {
-              send({
-                type: "run_step",
-                step: "files_changed",
-                detail: block.input.file_path,
-                session_id: activeSessionId,
-              });
-            }
-          }
-        }
-      }
-      break;
-    }
-
-    case "user": {
-      const content = message.message?.content;
-      if (content) {
-        for (const block of content) {
-          if (block.type === "tool_result" && block.tool_use_id) {
-            send({
               type: "run_step",
-              step: "tool_result",
-              detail: block.is_error
-                ? `Error: ${String(block.content).slice(0, 200)}`
-                : `Completed (${block.tool_use_id.slice(0, 8)})`,
+              step: "tool_requested",
+              detail: `${block.name}${block.input?.file_path ? ` ${block.input.file_path}` : ""}`,
               session_id: activeSessionId,
             });
           }
@@ -133,7 +316,6 @@ function dispatchMessage(message) {
 
     case "result": {
       const costUsd = message.total_cost_usd ?? 0;
-
       if (message.subtype === "success" || message.subtype === "end_turn") {
         send({
           type: "run_complete",
@@ -145,51 +327,27 @@ function dispatchMessage(message) {
         send({
           type: "run_error",
           status: "failed",
-          error: message.errors?.join("; ") ?? message.subtype ?? "unknown error",
+          error:
+            message.errors?.join("; ") ?? message.subtype ?? "unknown error",
           cost_usd: costUsd,
           session_id: activeSessionId,
         });
       }
-
       resetRunState();
       break;
     }
 
-    case "stream_event": {
-      // Partial streaming messages — currently not forwarded to keep
-      // the protocol simple. Could be used for live token streaming.
+    case "stream_event":
+    case "auth_status":
       break;
-    }
 
-    case "auth_status": {
-      if (message.error) {
-        console.error(`Auth error: ${message.error}`);
-      }
+    default:
       break;
-    }
-
-    default: {
-      console.error(
-        `Unhandled message type: ${message.type}`,
-        JSON.stringify(message).slice(0, 200),
-      );
-      break;
-    }
   }
 }
 
-function resetRunState() {
-  stopHeartbeat();
-  pendingPermissionResolve = null;
-  activeAbort = null;
-  activeSessionId = null;
-}
+// --- Session runner ---
 
-/**
- * Shared session runner for both launch and resume flows.
- * @param {object} request
- * @param {string | null} resumeSessionId
- */
 async function runSession(request, resumeSessionId = null) {
   if (activeAbort) {
     send({
@@ -200,6 +358,10 @@ async function runSession(request, resumeSessionId = null) {
     });
     return;
   }
+
+  // Store config from launch request
+  if (request.hook_port) hookReceiverPort = request.hook_port;
+  if (request.tab_id) activeTabId = request.tab_id;
 
   let taskContent;
   try {
@@ -216,13 +378,12 @@ async function runSession(request, resumeSessionId = null) {
 
   activeAbort = new AbortController();
 
-  /** @type {import("@anthropic-ai/claude-agent-sdk").Options} */
   const options = {
     cwd: request.worktree,
     abortController: activeAbort,
     permissionMode: "default",
+    hooks: buildHooks(),
     canUseTool: async (toolName, input, callbackOptions) => {
-      // Use the SDK-provided toolUseID
       const toolUseId = callbackOptions.toolUseID;
       send({
         type: "permission_request",
@@ -232,42 +393,31 @@ async function runSession(request, resumeSessionId = null) {
         session_id: activeSessionId,
       });
       return new Promise((resolve) => {
-        pendingPermissionResolve = resolve;
+        pendingPermissions.set(toolUseId, resolve);
       });
     },
   };
 
-  if (resumeSessionId) {
-    options.resume = resumeSessionId;
-  }
-  if (request.options?.max_turns) {
-    options.maxTurns = request.options.max_turns;
-  }
-  if (request.options?.max_budget_usd) {
+  if (resumeSessionId) options.resume = resumeSessionId;
+  if (request.options?.max_turns) options.maxTurns = request.options.max_turns;
+  if (request.options?.max_budget_usd)
     options.maxBudgetUsd = request.options.max_budget_usd;
-  }
 
   try {
     const conversation = query({ prompt: taskContent, options });
-
     for await (const message of conversation) {
-      if (!message || !message.type) {
-        continue;
-      }
-      dispatchMessage(message);
+      if (message?.type) dispatchMessage(message);
     }
   } catch (err) {
     const errorMsg =
       err.name === "AbortError" ? "Run cancelled" : err.message;
     const status = err.name === "AbortError" ? "cancelled" : "failed";
-
     send({
       type: "run_error",
       status,
       error: errorMsg,
       session_id: activeSessionId,
     });
-
     resetRunState();
   }
 }
@@ -329,23 +479,25 @@ rl.on("line", (line) => {
       }
       break;
 
-    case "permission_response":
-      if (pendingPermissionResolve) {
+    case "permission_response": {
+      const resolve = pendingPermissions.get(request.tool_use_id);
+      if (resolve) {
+        pendingPermissions.delete(request.tool_use_id);
         if (request.decision === "approve") {
-          pendingPermissionResolve({ behavior: "allow" });
+          resolve({ behavior: "allow" });
         } else {
-          pendingPermissionResolve({
+          resolve({
             behavior: "deny",
             message: request.reason ?? "Denied by user",
           });
         }
-        pendingPermissionResolve = null;
       } else {
         console.error(
-          "Received permission_response but no pending permission",
+          `No pending permission for tool_use_id: ${request.tool_use_id}`,
         );
       }
       break;
+    }
 
     default:
       console.error(`Unknown request type: ${request.type}`);
