@@ -3,21 +3,10 @@ name: Claude Code Review
 on:
   pull_request:
     types: [opened, synchronize, ready_for_review, reopened]
-    # Optional: Only run on specific file changes
-    # paths:
-    #   - "src/**/*.ts"
-    #   - "src/**/*.tsx"
-    #   - "src/**/*.js"
-    #   - "src/**/*.jsx"
 
 jobs:
   claude-review:
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
-
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -36,9 +25,30 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
-          plugins: 'code-review@claude-code-plugins'
-          prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://code.claude.com/docs/en/cli-reference for available options
+          use_sticky_comment: true
+          track_progress: true
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+            PR TITLE: ${{ github.event.pull_request.title }}
 
+            You are reviewing a PR in Branchdeck — a Tauri v2 desktop app (Rust backend + SolidJS frontend).
+            Read CLAUDE.md first for project conventions, then review.
+
+            Review focus:
+            - Bugs, race conditions, edge cases
+            - Security (no unsafe, no unwrap, no SQL/command injection)
+            - Rust: clippy pedantic compliance, thiserror usage, no business logic in commands/
+            - TypeScript: strict mode, no `any`, named exports, IPC wrapped in lib/commands/
+            - Logging: every service function must follow the structured logging convention
+            - Performance: no hot-path debug! logging, no unnecessary clones
+
+            Instructions:
+            - Use `gh pr diff ${{ github.event.pull_request.number }}` to read the full diff
+            - Use `mcp__github_inline_comment__create_inline_comment` (with `confirmed: true`) for specific code issues
+            - Post a single summary via `gh pr comment ${{ github.event.pull_request.number }}` at the end
+            - If no issues found, still post a short summary confirming the PR looks good
+            - Be concise — skip praise, focus on actionable findings
+
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Glob,Grep" --max-turns 25

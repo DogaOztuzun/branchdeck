@@ -1,0 +1,61 @@
+name: Claude CI Fix
+
+on:
+  check_suite:
+    types: [completed]
+
+jobs:
+  claude-fix:
+    if: >-
+      github.event.check_suite.conclusion == 'failure' &&
+      github.event.check_suite.head_branch != 'main' &&
+      github.event.check_suite.latest_check_runs_count > 0
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      checks: read
+      actions: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.check_suite.head_branch }}
+          fetch-depth: 1
+
+      - name: Run Claude CI Fix
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          track_progress: true
+          prompt: |
+            REPO: ${{ github.repository }}
+            BRANCH: ${{ github.event.check_suite.head_branch }}
+            COMMIT: ${{ github.event.check_suite.head_sha }}
+
+            The CI check suite just failed on this branch.
+
+            Steps:
+            1. Use `gh run list --branch ${{ github.event.check_suite.head_branch }} --status failure --limit 3` to find the failed runs
+            2. Use `gh run view <run_id> --log-failed` to read the failure logs
+            3. Read CLAUDE.md for project conventions
+            4. Identify the root cause — common failures:
+               - Biome lint/format (`bun run check:fix` can auto-fix)
+               - Clippy warnings (`cargo clippy`)
+               - Rust fmt (`cargo fmt`)
+               - Build errors
+               - Test failures
+            5. Fix the issues in the source code
+            6. Commit with a message like `fix: resolve CI failures (biome/clippy/fmt)`
+            7. Push the fix to the branch
+
+            Rules:
+            - Only fix what CI is complaining about — no other changes
+            - If the failure is a flaky test or infrastructure issue (not code), post a PR comment explaining instead of changing code
+            - If you can't determine the fix confidently, post a PR comment with your analysis instead
+
+          claude_args: |
+            --allowedTools "Bash(gh run:*),Bash(gh pr comment:*),Bash(bun run check*),Bash(cargo fmt*),Bash(cargo clippy*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Read,Edit,Glob,Grep" --max-turns 20
