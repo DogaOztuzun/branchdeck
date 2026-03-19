@@ -193,15 +193,8 @@ export function TeamSidebar() {
                         <TaskBadge status={item.task.frontmatter.status} />
                       </div>
                     </div>
-                    {/* Launch button for launchable statuses */}
-                    <Show
-                      when={
-                        canLaunch() &&
-                        (item.task.frontmatter.status === 'created' ||
-                          item.task.frontmatter.status === 'failed' ||
-                          item.task.frontmatter.status === 'cancelled')
-                      }
-                    >
+                    {/* Launch button for newly created tasks only */}
+                    <Show when={canLaunch() && item.task.frontmatter.status === 'created'}>
                       <button
                         type="button"
                         class="shrink-0 px-1.5 py-0.5 text-[10px] text-text-muted hover:text-text border border-border rounded hover:border-primary cursor-pointer"
@@ -222,10 +215,10 @@ export function TeamSidebar() {
                         Cancel
                       </button>
                     </Show>
-                    {/* Retry/Resume for failed/cancelled */}
+                    {/* Retry/Resume for failed/cancelled — only when no other run is active */}
                     <Show
                       when={
-                        !canLaunch() &&
+                        canLaunch() &&
                         (item.task.frontmatter.status === 'failed' ||
                           item.task.frontmatter.status === 'cancelled')
                       }
@@ -237,22 +230,15 @@ export function TeamSidebar() {
                       >
                         Retry
                       </button>
-                      <Show
-                        when={
-                          taskStore.state.activeRun?.sessionId &&
-                          taskStore.state.activeRun?.taskPath === item.task.path
+                      <button
+                        type="button"
+                        class="shrink-0 px-1.5 py-0.5 text-[10px] text-text-muted hover:text-text border border-border rounded hover:border-info cursor-pointer"
+                        onClick={() =>
+                          resumeRun(item.task.path, item.worktree.path).catch(() => {})
                         }
                       >
-                        <button
-                          type="button"
-                          class="shrink-0 px-1.5 py-0.5 text-[10px] text-text-muted hover:text-text border border-border rounded hover:border-info cursor-pointer"
-                          onClick={() =>
-                            resumeRun(item.task.path, item.worktree.path).catch(() => {})
-                          }
-                        >
-                          Resume
-                        </button>
-                      </Show>
+                        Resume
+                      </button>
                     </Show>
                   </div>
                   {/* Task details row */}

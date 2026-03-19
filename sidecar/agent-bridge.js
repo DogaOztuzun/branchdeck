@@ -66,6 +66,10 @@ function stopHeartbeat() {
 
 function resetRunState() {
   stopHeartbeat();
+  // Reject any pending permission promises so the SDK doesn't hang
+  for (const [, resolve] of pendingPermissions) {
+    resolve({ behavior: "deny", message: "Run ended" });
+  }
   pendingPermissions.clear();
   activeAbort = null;
   activeSessionId = null;
