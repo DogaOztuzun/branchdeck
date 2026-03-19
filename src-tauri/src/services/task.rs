@@ -1,5 +1,6 @@
 use crate::error::AppError;
 use crate::models::task::{TaskFrontmatter, TaskInfo, TaskScope, TaskStatus, TaskType};
+use git2::Repository;
 use log::{debug, error, info};
 use std::fmt::Write as _;
 use std::io::Write;
@@ -295,6 +296,155 @@ pub fn parse_task_md(content: &str, path: &str) -> Result<TaskInfo, AppError> {
         body: document.content,
         path: path.to_owned(),
     })
+}
+
+/// Capture git artifacts after a run completes and append them to task.md.
+///
+/// Best-effort: logs errors but never propagates them. Run completion
+/// must not be blocked by artifact capture failures.
+#[allow(clippy::cast_possible_truncation)]
+pub fn capture_run_artifacts(task_path: &str, status: &str, started_at_epoch_ms: u64) {
+    // Derive worktree path from task path (strip .branchdeck/task.md)
+    let Some(wt_path) = Path::new(task_path).parent().and_then(Path::parent) else {
+        error!("Cannot derive worktree path from task path: {task_path}");
+        return;
+    };
+
+    // Read current task to get run-count and PR number
+    let content = match std::fs::read_to_string(task_path) {
+        Ok(c) => c,
+        Err(e) => {
+            error!("Artifact capture: failed to read task file {task_path}: {e}");
+            return;
+        }
+    };
+
+    let (run_number, pr_number) = match parse_task_md(&content, task_path) {
+        Ok(task_info) => (
+            task_info.frontmatter.run_count,
+            task_info.frontmatter.pr,
+        ),
+        Err(e) => {
+            error!("Artifact capture: failed to parse task {task_path}: {e}");
+            return;
+        }
+    };
+
+    // Read git state from the worktree
+    let repo = match Repository::open(wt_path) {
+        Ok(r) => r,
+        Err(e) => {
+            error!(
+                "Artifact capture: failed to open repo at {}: {e}",
+                wt_path.display()
+            );
+            return;
+        }
+    };
+
+    // Bind head reference once to avoid TOCTOU between branch and SHA reads
+    let head_ref = repo.head().ok();
+
+    let branch = head_ref
+        .as_ref()
+        .and_then(|h| h.shorthand().map(String::from))
+        .unwrap_or_else(|| "HEAD".to_string());
+
+    let head_sha = head_ref
+        .and_then(|h| h.peel_to_commit().ok())
+        .map(|c| c.id().to_string());
+
+    let short_sha = head_sha
+        .as_deref()
+        .map_or("unknown", |s| &s[..s.len().min(7)]);
+
+    // Collect commits made during this run (since started_at_epoch_ms).
+    // If started_at_epoch_ms is 0 (run crashed before session started), skip
+    // commit collection to avoid dumping unrelated historical commits.
+    let commits = if started_at_epoch_ms > 0 {
+        collect_recent_commits(&repo, started_at_epoch_ms)
+    } else {
+        Vec::new()
+    };
+
+    // Format the artifact block
+    let mut block = format!("\n### Run {run_number} — {status}\n\n");
+    let _ = writeln!(block, "- **Branch:** `{branch}`");
+    let _ = writeln!(block, "- **HEAD:** `{short_sha}`");
+    if let Some(pr) = pr_number {
+        let _ = writeln!(block, "- **PR:** #{pr}");
+    }
+    if commits.is_empty() {
+        let _ = writeln!(block, "- **Commits:** none");
+    } else {
+        let _ = writeln!(block, "- **Commits:** {}", commits.len());
+        for commit_line in &commits {
+            let _ = writeln!(block, "  - {commit_line}");
+        }
+    }
+
+    // Append to task.md under ## Artifacts section
+    append_artifacts_section(&content, task_path, &block);
+
+    info!(
+        "Captured artifacts for run {run_number} ({status}): {} commits at {short_sha}",
+        commits.len()
+    );
+}
+
+/// Collect one-line summaries of commits made since `since_epoch_ms`.
+/// Returns at most 20 commits to avoid bloating task.md.
+fn collect_recent_commits(repo: &Repository, since_epoch_ms: u64) -> Vec<String> {
+    let mut commits = Vec::new();
+    let Ok(head) = repo.head().and_then(|h| h.peel_to_commit()) else {
+        return commits;
+    };
+
+    let Ok(mut revwalk) = repo.revwalk() else {
+        return commits;
+    };
+
+    revwalk.set_sorting(git2::Sort::TIME).ok();
+
+    if revwalk.push(head.id()).is_err() {
+        return commits;
+    }
+
+    #[allow(clippy::cast_possible_wrap)]
+    let since_secs = (since_epoch_ms / 1000) as i64;
+
+    for oid in revwalk.flatten() {
+        if commits.len() >= 20 {
+            break;
+        }
+        let Ok(commit) = repo.find_commit(oid) else {
+            continue;
+        };
+        if commit.time().seconds() < since_secs {
+            break;
+        }
+        let short_id = &commit.id().to_string()[..7];
+        let summary = commit.summary().unwrap_or("(no message)");
+        commits.push(format!("`{short_id}` {summary}"));
+    }
+
+    commits
+}
+
+/// Append an artifact block to the `## Artifacts` section of task.md.
+/// Creates the section if it doesn't exist.
+fn append_artifacts_section(content: &str, task_path: &str, block: &str) {
+    let updated = if content.contains("\n## Artifacts\n") {
+        // Section exists — append at the end of the file
+        format!("{content}{block}")
+    } else {
+        // No Artifacts section — add it at the end
+        format!("{content}\n## Artifacts\n{block}")
+    };
+
+    if let Err(e) = std::fs::write(task_path, updated) {
+        error!("Artifact capture: failed to write to {task_path}: {e}");
+    }
 }
 
 /// Serializes a `TaskFrontmatter` and body into a task.md file content string.

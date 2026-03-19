@@ -73,6 +73,7 @@ pub fn handle_run_complete<R: tauri::Runtime>(
         emit_run_complete_event(event_bus, run, "succeeded");
 
         info!("Run completed successfully, cost: ${:.4}", run.cost_usd);
+        task::capture_run_artifacts(&run.task_path, "succeeded", *started_at_epoch_ms);
         task::update_task_status(&run.task_path, TaskStatus::Succeeded);
         run_state::delete_run_state(&run.task_path);
         if let Err(e) = app_handle.emit("run:status_changed", &*run) {
@@ -149,6 +150,7 @@ pub fn handle_run_error<R: tauri::Runtime>(
         emit_run_complete_event(event_bus, run, status);
 
         error!("Run failed: {err_msg}");
+        task::capture_run_artifacts(&run.task_path, status, *started_at_epoch_ms);
         task::update_task_status(&run.task_path, task_status);
         // Save (but do not delete) run.json so session_id is
         // available for a subsequent resume_run.
