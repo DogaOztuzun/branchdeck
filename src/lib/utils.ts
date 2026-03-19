@@ -29,7 +29,7 @@ export function parseArtifactSummary(body: string): ArtifactSummary | null {
 
   const section = body.slice(match.index);
   const runHeaders = section.match(/### Run \d+ — (\w+)/g);
-  if (!runHeaders || runHeaders.length === 0) return null;
+  if (!runHeaders) return null;
 
   let totalCommits = 0;
   const commitMatches = section.matchAll(/\*\*Commits:\*\* (\d+)/g);
