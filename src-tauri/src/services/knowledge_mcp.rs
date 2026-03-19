@@ -94,11 +94,11 @@ async fn handle_connection(
         .await
         .map_err(|e| format!("read body: {e}"))?;
 
-    let body_str = String::from_utf8_lossy(&body);
+    let body_str = std::str::from_utf8(&body).map_err(|e| format!("invalid UTF-8 in body: {e}"))?;
 
     let response = match head.path.as_str() {
-        "/knowledge/query" => handle_query(knowledge, &body_str).await,
-        "/knowledge/remember" => handle_remember(knowledge, &body_str).await,
+        "/knowledge/query" => handle_query(knowledge, body_str).await,
+        "/knowledge/remember" => handle_remember(knowledge, body_str).await,
         "/knowledge/health" => Ok(r#"{"status":"ok"}"#.to_string()),
         _ => Err("unknown endpoint".to_string()),
     };
@@ -196,6 +196,7 @@ async fn read_request_head(
         .to_string();
 
     let mut content_length: usize = 0;
+    let mut headers_read: usize = 0;
 
     loop {
         let mut line = String::new();
@@ -207,6 +208,11 @@ async fn read_request_head(
         let trimmed = line.trim();
         if trimmed.is_empty() {
             break;
+        }
+
+        headers_read += 1;
+        if headers_read >= 32 {
+            return Err("too many headers".to_string());
         }
 
         let lower = trimmed.to_ascii_lowercase();

@@ -161,8 +161,18 @@ async function handleRequest(msg) {
         }
 
         if (toolName === "remember_this") {
+          const content = (args.content || "").trim();
+          if (!content) {
+            return makeResponse(id, {
+              content: [
+                { type: "text", text: "Error: content must not be empty" },
+              ],
+              isError: true,
+            });
+          }
+
           const result = await postJSON("/knowledge/remember", {
-            content: args.content || "",
+            content,
           });
 
           if (result.error) {

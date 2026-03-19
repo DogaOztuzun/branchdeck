@@ -267,30 +267,36 @@ pub fn run() {
                                 });
 
                                 let mcp_sidecar = sidecar_dir.join("knowledge-mcp.js");
-
-                                tauri::async_runtime::spawn(async move {
-                                    match mcp_rx.await {
-                                        Ok(Ok(port)) => {
-                                            log::info!(
-                                                "Knowledge MCP endpoint ready on port {port}"
-                                            );
-                                            if let Err(e) =
-                                                services::hook_config::install_mcp_config(
-                                                    port,
-                                                    &mcp_sidecar,
-                                                )
-                                            {
-                                                log::warn!("Failed to install MCP config: {e}");
+                                if mcp_sidecar.exists() {
+                                    tauri::async_runtime::spawn(async move {
+                                        match mcp_rx.await {
+                                            Ok(Ok(port)) => {
+                                                log::info!(
+                                                    "Knowledge MCP endpoint ready on port {port}"
+                                                );
+                                                if let Err(e) =
+                                                    services::hook_config::install_mcp_config(
+                                                        port,
+                                                        &mcp_sidecar,
+                                                    )
+                                                {
+                                                    log::warn!("Failed to install MCP config: {e}");
+                                                }
+                                            }
+                                            Ok(Err(e)) => {
+                                                log::warn!("Knowledge MCP endpoint failed: {e}");
+                                            }
+                                            Err(_) => {
+                                                log::warn!("Knowledge MCP startup channel dropped");
                                             }
                                         }
-                                        Ok(Err(e)) => {
-                                            log::warn!("Knowledge MCP endpoint failed: {e}");
-                                        }
-                                        Err(_) => {
-                                            log::warn!("Knowledge MCP startup channel dropped");
-                                        }
-                                    }
-                                });
+                                    });
+                                } else {
+                                    log::warn!(
+                                        "knowledge-mcp.js not found at {}, skipping MCP config",
+                                        mcp_sidecar.display()
+                                    );
+                                }
 
                                 log::info!("Knowledge service initialized");
                             }

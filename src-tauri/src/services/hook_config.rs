@@ -256,7 +256,14 @@ fn remove_hooks_at(settings_path: &Path, script_path: &Path) -> Result<(), AppEr
 pub fn install_mcp_config(port: u16, sidecar_path: &Path) -> Result<(), AppError> {
     let home = dirs::home_dir()
         .ok_or_else(|| AppError::Agent("Could not determine home directory".to_string()))?;
-    let settings_path = home.join(".claude").join("settings.json");
+    let claude_dir = home.join(".claude");
+    if !claude_dir.exists() {
+        std::fs::create_dir_all(&claude_dir).map_err(|e| {
+            error!("Failed to create ~/.claude dir: {e}");
+            e
+        })?;
+    }
+    let settings_path = claude_dir.join("settings.json");
     let mut settings = load_settings(&settings_path)?;
 
     let root = settings
