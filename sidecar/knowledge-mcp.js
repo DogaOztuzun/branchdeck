@@ -144,7 +144,7 @@ async function handleRequest(msg) {
 
           const results = await postJSON("/knowledge/query", {
             query,
-            top_k: args.top_k || 5,
+            top_k: args.top_k ?? 5,
           });
 
           if (results.error) {
