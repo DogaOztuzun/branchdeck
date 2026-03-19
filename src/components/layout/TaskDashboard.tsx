@@ -4,6 +4,7 @@ import { listTasks } from '../../lib/commands/task';
 import { getLayoutStore } from '../../lib/stores/layout';
 import { getRepoStore } from '../../lib/stores/repo';
 import { worktreePathFromTaskPath } from '../../lib/stores/task';
+import { parseArtifactSummary } from '../../lib/utils';
 import type { TaskInfo, TaskStatus } from '../../types/task';
 import { TaskBadge } from '../task/TaskBadge';
 
@@ -191,16 +192,33 @@ export function TaskDashboard() {
                 {(item) => (
                   <button
                     type="button"
-                    class={`w-full text-left px-2 py-1.5 rounded text-xs hover:bg-bg/50 cursor-pointer flex items-center justify-between gap-1 ${item.task.frontmatter.status === 'blocked' ? 'border-l-2 border-yellow-400' : ''}`}
+                    class={`w-full text-left px-2 py-1.5 rounded text-xs hover:bg-bg/50 cursor-pointer ${item.task.frontmatter.status === 'blocked' ? 'border-l-2 border-yellow-400' : ''}`}
                     title={`${item.task.frontmatter.type} · ${item.task.frontmatter['run-count']} runs`}
                     onClick={() => handleCardClick(item)}
                   >
-                    <span class="truncate">
-                      <span class="text-text-muted">{item.repoName}</span>
-                      <span class="text-text-muted">/</span>
-                      <span class="text-text">{item.branch}</span>
-                    </span>
-                    <TaskBadge status={item.task.frontmatter.status} />
+                    <div class="flex items-center justify-between gap-1">
+                      <span class="truncate">
+                        <span class="text-text-muted">{item.repoName}</span>
+                        <span class="text-text-muted">/</span>
+                        <span class="text-text">{item.branch}</span>
+                      </span>
+                      <TaskBadge status={item.task.frontmatter.status} />
+                    </div>
+                    <Show when={parseArtifactSummary(item.task.body)}>
+                      {(artifacts) => (
+                        <div class="flex items-center gap-1.5 mt-0.5 text-[10px] text-text-muted">
+                          <Show when={artifacts().totalCommits > 0}>
+                            <span>
+                              {artifacts().totalCommits} commit
+                              {artifacts().totalCommits === 1 ? '' : 's'}
+                            </span>
+                          </Show>
+                          <Show when={artifacts().pr}>
+                            <span class="text-info">PR #{artifacts().pr}</span>
+                          </Show>
+                        </div>
+                      )}
+                    </Show>
                   </button>
                 )}
               </For>

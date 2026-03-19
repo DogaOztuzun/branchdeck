@@ -290,6 +290,7 @@ impl RunManager {
             run_responses::emit_run_complete_event_pub(&self.event_bus, run, "failed");
 
             warn!("Marking active run as failed: {reason}");
+            task::capture_run_artifacts(&run.task_path, "failed", self.started_at_epoch_ms);
             task::update_task_status(&run.task_path, TaskStatus::Failed);
             // Save (but do not delete) run.json so session_id is
             // available for a subsequent resume_run.

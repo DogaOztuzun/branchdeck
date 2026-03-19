@@ -11,7 +11,7 @@ import { getAgentStore } from '../../lib/stores/agent';
 import { getRepoStore } from '../../lib/stores/repo';
 import { getTaskStore } from '../../lib/stores/task';
 import { getTerminalStore } from '../../lib/stores/terminal';
-import { statusColor } from '../../lib/utils';
+import { parseArtifactSummary, statusColor } from '../../lib/utils';
 import type { AgentDefinition } from '../../types/agent';
 import type { TaskInfo } from '../../types/task';
 import { ApprovalDialog } from '../task/ApprovalDialog';
@@ -251,6 +251,22 @@ export function TeamSidebar() {
                       <span>{item.task.frontmatter['run-count']} runs</span>
                     </Show>
                   </div>
+                  {/* Artifact summary */}
+                  <Show when={parseArtifactSummary(item.task.body)}>
+                    {(artifacts) => (
+                      <div class="flex items-center gap-1.5 mt-0.5 text-[10px] text-text-muted">
+                        <Show when={artifacts().totalCommits > 0}>
+                          <span>
+                            {artifacts().totalCommits} commit
+                            {artifacts().totalCommits === 1 ? '' : 's'}
+                          </span>
+                        </Show>
+                        <Show when={artifacts().pr}>
+                          <span class="text-info">PR #{artifacts().pr}</span>
+                        </Show>
+                      </div>
+                    )}
+                  </Show>
                 </div>
               )}
             </For>
