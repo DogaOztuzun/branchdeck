@@ -213,6 +213,174 @@ async function handleLaunchRun(request) {
 }
 
 /**
+ * Handle a resume_run request from the Rust backend.
+ *
+ * Same as launch_run but passes `resume: session_id` to the SDK query options
+ * so the SDK resumes from the previous session.
+ * @param {object} request
+ * @param {string} request.task_path
+ * @param {string} request.worktree
+ * @param {string} request.session_id
+ * @param {object} [request.options]
+ * @param {number} [request.options.max_turns]
+ * @param {number} [request.options.max_budget_usd]
+ */
+async function handleResumeRun(request) {
+  if (activeAbort) {
+    send({
+      type: "run_error",
+      status: "failed",
+      error: "A run is already active",
+      session_id: activeSessionId,
+    });
+    return;
+  }
+
+  let taskContent;
+  try {
+    taskContent = readFileSync(request.task_path, "utf-8");
+  } catch (err) {
+    send({
+      type: "run_error",
+      status: "failed",
+      error: `Failed to read task file: ${err.message}`,
+      session_id: null,
+    });
+    return;
+  }
+
+  activeAbort = new AbortController();
+
+  const queryOptions = {
+    prompt: taskContent,
+    options: {
+      cwd: request.worktree,
+      abortController: activeAbort,
+      permissionMode: "acceptEdits",
+      resume: request.session_id,
+    },
+  };
+
+  if (request.options?.max_turns) {
+    queryOptions.options.maxTurns = request.options.max_turns;
+  }
+  if (request.options?.max_budget_usd) {
+    queryOptions.options.maxBudgetUsd = request.options.max_budget_usd;
+  }
+
+  try {
+    const conversation = query(queryOptions);
+
+    for await (const message of conversation) {
+      if (!message || !message.type) {
+        continue;
+      }
+
+      switch (message.type) {
+        case "system": {
+          if (message.session_id) {
+            activeSessionId = message.session_id;
+            send({
+              type: "session_started",
+              session_id: message.session_id,
+            });
+            startHeartbeat();
+          }
+          break;
+        }
+
+        case "assistant": {
+          if (message.content) {
+            for (const block of message.content) {
+              if (block.type === "text" && block.text) {
+                send({
+                  type: "assistant_text",
+                  text: block.text,
+                  session_id: activeSessionId,
+                });
+              }
+              if (block.type === "tool_use") {
+                send({
+                  type: "tool_call",
+                  tool: block.name,
+                  file_path: block.input?.file_path ?? null,
+                  session_id: activeSessionId,
+                });
+
+                if (
+                  ["Edit", "Write", "MultiEdit"].includes(block.name) &&
+                  block.input?.file_path
+                ) {
+                  send({
+                    type: "run_step",
+                    step: "files_changed",
+                    detail: block.input.file_path,
+                    session_id: activeSessionId,
+                  });
+                }
+              }
+            }
+          }
+          break;
+        }
+
+        case "result": {
+          const costUsd = message.total_cost_usd ?? 0;
+
+          if (
+            message.subtype === "success" ||
+            message.subtype === "end_turn"
+          ) {
+            send({
+              type: "run_complete",
+              status: "succeeded",
+              cost_usd: costUsd,
+              session_id: activeSessionId,
+            });
+          } else {
+            send({
+              type: "run_error",
+              status: "failed",
+              error: message.subtype ?? "unknown error",
+              cost_usd: costUsd,
+              session_id: activeSessionId,
+            });
+          }
+
+          stopHeartbeat();
+          activeAbort = null;
+          activeSessionId = null;
+          break;
+        }
+
+        default: {
+          console.error(
+            `Unhandled message type: ${message.type}`,
+            JSON.stringify(message).slice(0, 200),
+          );
+          break;
+        }
+      }
+    }
+  } catch (err) {
+    const errorMsg =
+      err.name === "AbortError" ? "Run cancelled" : err.message;
+    const status = err.name === "AbortError" ? "cancelled" : "failed";
+
+    send({
+      type: "run_error",
+      status,
+      error: errorMsg,
+      session_id: activeSessionId,
+    });
+
+    stopHeartbeat();
+    activeAbort = null;
+    activeSessionId = null;
+  }
+}
+
+/**
  * Handle a cancel_run request from the Rust backend.
  */
 function handleCancelRun() {
@@ -254,6 +422,21 @@ rl.on("line", (line) => {
     case "launch_run":
       handleLaunchRun(request).catch((err) => {
         console.error(`Unhandled error in launch_run: ${err.message}`);
+        send({
+          type: "run_error",
+          status: "failed",
+          error: `Internal bridge error: ${err.message}`,
+          session_id: activeSessionId,
+        });
+        stopHeartbeat();
+        activeAbort = null;
+        activeSessionId = null;
+      });
+      break;
+
+    case "resume_run":
+      handleResumeRun(request).catch((err) => {
+        console.error(`Unhandled error in resume_run: ${err.message}`);
         send({
           type: "run_error",
           status: "failed",

@@ -34,6 +34,12 @@ pub enum SidecarRequest {
         worktree: String,
         options: LaunchOptions,
     },
+    ResumeRun {
+        task_path: String,
+        worktree: String,
+        session_id: String,
+        options: LaunchOptions,
+    },
     CancelRun {
         session_id: Option<String>,
     },

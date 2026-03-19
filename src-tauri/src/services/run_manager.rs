@@ -277,8 +277,9 @@ impl RunManager {
                     }
                     error!("Run failed: {err_msg}");
                     task::update_task_status(&run.task_path, task_status);
+                    // Save (but do not delete) run.json so session_id is
+                    // available for a subsequent resume_run.
                     run_state::save_run_state(&run.task_path, run);
-                    run_state::delete_run_state(&run.task_path);
                     if let Err(e) = app_handle.emit("run:status_changed", &*run) {
                         error!("Failed to emit run:status_changed: {e}");
                     }
@@ -308,8 +309,9 @@ impl RunManager {
             }
             warn!("Marking active run as failed: {reason}");
             task::update_task_status(&run.task_path, TaskStatus::Failed);
+            // Save (but do not delete) run.json so session_id is
+            // available for a subsequent resume_run.
             run_state::save_run_state(&run.task_path, run);
-            run_state::delete_run_state(&run.task_path);
             if let Err(e) = app_handle.emit("run:status_changed", &*run) {
                 error!("Failed to emit run:status_changed: {e}");
             }
@@ -461,6 +463,139 @@ pub async fn launch_run<R: tauri::Runtime>(
     run_state::save_run_state(task_path, &run_info);
 
     info!("Launched run for task {task_path}");
+
+    if let Err(e) = app_handle.emit("run:status_changed", &run_info) {
+        error!("Failed to emit run:status_changed event: {e}");
+    }
+
+    Ok(run_info)
+}
+
+/// Retry a failed or cancelled run by launching a fresh session.
+///
+/// Verifies no active run exists, the task is in a terminal-failed state,
+/// resets task status to running, increments run count, then launches.
+///
+/// # Errors
+///
+/// Returns `RunError` if a run is already active or the task is not failed/cancelled.
+/// Returns `TaskNotFound` if the task file does not exist.
+/// Returns `SidecarError` if the sidecar cannot be spawned or written to.
+pub async fn retry_run<R: tauri::Runtime>(
+    state: RunManagerState,
+    app_handle: tauri::AppHandle<R>,
+    task_path: &str,
+    worktree_path: &str,
+) -> Result<RunInfo, AppError> {
+    // Validate task exists and is in a retryable state
+    let task_info = task::get_task(worktree_path)?;
+    match task_info.frontmatter.status {
+        TaskStatus::Failed | TaskStatus::Cancelled => {}
+        other => {
+            error!("Cannot retry task with status {other:?}: {task_path}");
+            return Err(AppError::RunError(format!(
+                "Cannot retry: task status is {other:?}, expected failed or cancelled"
+            )));
+        }
+    }
+
+    // Reset task status and increment run count
+    task::update_task_status(task_path, TaskStatus::Running);
+    task::increment_run_count(task_path);
+
+    // Launch a fresh run (handles active-run check, sidecar spawn, etc.)
+    let options = LaunchOptions {
+        max_turns: None,
+        max_budget_usd: None,
+    };
+    launch_run(state, app_handle, task_path, worktree_path, options).await
+}
+
+/// Resume a failed or cancelled run by continuing its previous SDK session.
+///
+/// Loads the `session_id` from the last known run state (run.json), then sends
+/// a `ResumeRun` request to the sidecar so the SDK picks up where it left off.
+///
+/// # Errors
+///
+/// Returns `RunError` if a run is already active, the task is not failed/cancelled,
+/// or no `session_id` is available to resume.
+/// Returns `TaskNotFound` if the task file does not exist.
+/// Returns `SidecarError` if the sidecar cannot be spawned or written to.
+pub async fn resume_run<R: tauri::Runtime>(
+    state: RunManagerState,
+    app_handle: tauri::AppHandle<R>,
+    task_path: &str,
+    worktree_path: &str,
+) -> Result<RunInfo, AppError> {
+    // Validate task exists and is in a resumable state
+    let task_info = task::get_task(worktree_path)?;
+    match task_info.frontmatter.status {
+        TaskStatus::Failed | TaskStatus::Cancelled => {}
+        other => {
+            error!("Cannot resume task with status {other:?}: {task_path}");
+            return Err(AppError::RunError(format!(
+                "Cannot resume: task status is {other:?}, expected failed or cancelled"
+            )));
+        }
+    }
+
+    // Load session_id from run.json (saved during previous run)
+    let previous_run = run_state::load_run_state(worktree_path);
+    let session_id = previous_run.and_then(|r| r.session_id).ok_or_else(|| {
+        error!("Cannot resume: no session_id found for {task_path}");
+        AppError::RunError("No session to resume — try retry instead".to_owned())
+    })?;
+
+    let mut manager = state.lock().await;
+
+    if manager.active_run.is_some() {
+        error!("Cannot resume run: a run is already active");
+        return Err(AppError::RunError("A run is already active".to_owned()));
+    }
+
+    let task_file = Path::new(task_path);
+    if !task_file.exists() {
+        error!("Task file not found: {task_path}");
+        return Err(AppError::TaskNotFound(task_path.to_owned()));
+    }
+
+    // Reset task status and increment run count
+    task::update_task_status(task_path, TaskStatus::Running);
+    task::increment_run_count(task_path);
+
+    manager.ensure_sidecar(app_handle.clone(), Arc::clone(&state))?;
+
+    let request = SidecarRequest::ResumeRun {
+        task_path: task_path.to_owned(),
+        worktree: worktree_path.to_owned(),
+        session_id: session_id.clone(),
+        options: LaunchOptions {
+            max_turns: None,
+            max_budget_usd: None,
+        },
+    };
+
+    manager.send_request(&request).await?;
+
+    let now = chrono::Utc::now().to_rfc3339();
+    let now_ms = now_epoch_ms();
+    let run_info = RunInfo {
+        session_id: Some(session_id),
+        task_path: task_path.to_owned(),
+        status: RunStatus::Starting,
+        started_at: now,
+        cost_usd: 0.0,
+        last_heartbeat: None,
+        elapsed_secs: 0,
+    };
+
+    manager.started_at_epoch_ms = now_ms;
+    manager.last_activity_ms = now_ms;
+    manager.active_run = Some(run_info.clone());
+    run_state::save_run_state(task_path, &run_info);
+
+    info!("Resumed run for task {task_path}");
 
     if let Err(e) = app_handle.emit("run:status_changed", &run_info) {
         error!("Failed to emit run:status_changed event: {e}");

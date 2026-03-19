@@ -71,6 +71,65 @@ pub fn replace_frontmatter_status(content: &str, new_status: &str) -> Option<Str
     Some(format!("---\n{new_fm}{}", &rest[end_idx..]))
 }
 
+/// Increment the `run-count` field in a task.md file's YAML frontmatter.
+///
+/// Best-effort: logs errors but does not propagate them, matching
+/// `update_task_status` semantics.
+pub fn increment_run_count(task_path: &str) {
+    let content = match std::fs::read_to_string(task_path) {
+        Ok(c) => c,
+        Err(e) => {
+            error!("Failed to read task file for run-count increment {task_path}: {e}");
+            return;
+        }
+    };
+
+    let Some(updated) = replace_frontmatter_run_count(&content) else {
+        error!("Failed to locate run-count field in frontmatter of {task_path}");
+        return;
+    };
+
+    if let Err(e) = std::fs::write(task_path, updated) {
+        error!("Failed to write updated run-count to {task_path}: {e}");
+    } else {
+        debug!("Incremented run-count in {task_path}");
+    }
+}
+
+/// Find the `run-count: N` line in YAML frontmatter and replace with `N+1`.
+/// Returns `None` if the frontmatter or run-count field cannot be found.
+#[must_use]
+fn replace_frontmatter_run_count(content: &str) -> Option<String> {
+    let rest = content.strip_prefix("---\n")?;
+    let end_idx = rest.find("\n---\n").or_else(|| rest.find("\n---"))?;
+    let frontmatter = &rest[..end_idx];
+
+    let mut found = false;
+    let new_fm: String = frontmatter
+        .lines()
+        .map(|line| {
+            if line.starts_with("run-count:") || line.starts_with("run_count:") {
+                let current: u32 = line
+                    .split(':')
+                    .nth(1)
+                    .and_then(|v| v.trim().parse().ok())
+                    .unwrap_or(0);
+                found = true;
+                format!("run-count: {}", current + 1)
+            } else {
+                line.to_owned()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    if !found {
+        return None;
+    }
+
+    Some(format!("---\n{new_fm}{}", &rest[end_idx..]))
+}
+
 const TASK_DIR: &str = ".branchdeck";
 const TASK_FILE: &str = "task.md";
 

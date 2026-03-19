@@ -258,6 +258,8 @@ pub fn run() {
             commands::run::cancel_run_cmd,
             commands::run::get_run_status_cmd,
             commands::run::recover_runs_cmd,
+            commands::run::retry_run_cmd,
+            commands::run::resume_run_cmd,
             // Task
             commands::task::create_task_cmd,
             commands::task::get_task_cmd,

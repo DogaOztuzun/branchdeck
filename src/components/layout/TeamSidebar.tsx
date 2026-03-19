@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, Show } from 'solid-js';
 import { listAgentDefinitions } from '../../lib/commands/agent';
-import { cancelRun } from '../../lib/commands/run';
+import { cancelRun, resumeRun, retryRun } from '../../lib/commands/run';
 import { getAgentStore } from '../../lib/stores/agent';
 import { getRepoStore } from '../../lib/stores/repo';
 import { getTaskStore } from '../../lib/stores/task';
@@ -122,6 +122,36 @@ export function TeamSidebar() {
                     >
                       Cancel
                     </button>
+                  </Show>
+                  <Show
+                    when={
+                      item.task.frontmatter.status === 'failed' ||
+                      item.task.frontmatter.status === 'cancelled'
+                    }
+                  >
+                    <button
+                      type="button"
+                      class="shrink-0 px-1.5 py-0.5 text-[10px] text-text-muted hover:text-text border border-border rounded hover:border-primary cursor-pointer"
+                      onClick={() => retryRun(item.task.path, item.worktree.path).catch(() => {})}
+                    >
+                      Retry
+                    </button>
+                    <Show
+                      when={
+                        taskStore.state.activeRun?.sessionId &&
+                        taskStore.state.activeRun?.taskPath === item.task.path
+                      }
+                    >
+                      <button
+                        type="button"
+                        class="shrink-0 px-1.5 py-0.5 text-[10px] text-text-muted hover:text-text border border-border rounded hover:border-info cursor-pointer"
+                        onClick={() =>
+                          resumeRun(item.task.path, item.worktree.path).catch(() => {})
+                        }
+                      >
+                        Resume
+                      </button>
+                    </Show>
                   </Show>
                 </div>
               )}

@@ -42,3 +42,27 @@ pub async fn get_run_status_cmd(
 pub fn recover_runs_cmd(worktree_paths: Vec<String>) -> Vec<RunInfo> {
     run_state::scan_all_run_states(&worktree_paths)
 }
+
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub async fn retry_run_cmd(
+    run_manager: State<'_, RunManagerState>,
+    app_handle: tauri::AppHandle,
+    task_path: String,
+    worktree_path: String,
+) -> Result<RunInfo, AppError> {
+    let state = Arc::clone(&run_manager);
+    run_manager::retry_run(state, app_handle, &task_path, &worktree_path).await
+}
+
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub async fn resume_run_cmd(
+    run_manager: State<'_, RunManagerState>,
+    app_handle: tauri::AppHandle,
+    task_path: String,
+    worktree_path: String,
+) -> Result<RunInfo, AppError> {
+    let state = Arc::clone(&run_manager);
+    run_manager::resume_run(state, app_handle, &task_path, &worktree_path).await
+}

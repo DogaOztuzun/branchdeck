@@ -47,3 +47,21 @@ export async function recoverRuns(worktreePaths: string[]): Promise<RunInfo[]> {
     throw e;
   }
 }
+
+export async function retryRun(taskPath: string, worktreePath: string): Promise<RunInfo> {
+  try {
+    return await invoke<RunInfo>('retry_run_cmd', { taskPath, worktreePath });
+  } catch (e) {
+    logError(`retryRun failed: ${e}`);
+    throw e;
+  }
+}
+
+export async function resumeRun(taskPath: string, worktreePath: string): Promise<RunInfo> {
+  try {
+    return await invoke<RunInfo>('resume_run_cmd', { taskPath, worktreePath });
+  } catch (e) {
+    logError(`resumeRun failed: ${e}`);
+    throw e;
+  }
+}
