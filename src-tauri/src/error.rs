@@ -37,6 +37,9 @@ pub enum AppError {
 
     #[error("Sidecar error: {0}")]
     SidecarError(String),
+
+    #[error("Knowledge error: {0}")]
+    Knowledge(String),
 }
 
 // Tauri requires Serialize for error types returned from commands

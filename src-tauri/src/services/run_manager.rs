@@ -47,11 +47,13 @@ pub struct RunManager {
     started_at_epoch_ms: u64,
     /// Pending permission requests awaiting user decisions, keyed by `tool_use_id`.
     pending_permissions: std::collections::HashMap<String, PendingPermission>,
+    /// EventBus for publishing RunComplete events to KnowledgeService.
+    event_bus: Arc<crate::services::event_bus::EventBus>,
 }
 
 impl RunManager {
     #[must_use]
-    pub fn new(sidecar_path: PathBuf) -> Self {
+    pub fn new(sidecar_path: PathBuf, event_bus: Arc<crate::services::event_bus::EventBus>) -> Self {
         Self {
             process: None,
             stdin: None,
@@ -60,6 +62,7 @@ impl RunManager {
             last_activity_ms: 0,
             started_at_epoch_ms: 0,
             pending_permissions: std::collections::HashMap::new(),
+            event_bus,
         }
     }
 
@@ -216,6 +219,7 @@ impl RunManager {
                     &mut self.pending_permissions,
                     cost_usd.as_ref(),
                     app_handle,
+                    &self.event_bus,
                 );
             }
             SidecarResponse::PermissionRequest {
@@ -256,6 +260,7 @@ impl RunManager {
                     status,
                     cost_usd.as_ref(),
                     app_handle,
+                    &self.event_bus,
                 );
             }
         }
@@ -277,6 +282,10 @@ impl RunManager {
             if self.started_at_epoch_ms > 0 {
                 run.elapsed_secs = (now_epoch_ms().saturating_sub(self.started_at_epoch_ms)) / 1000;
             }
+
+            // Emit RunComplete event for KnowledgeService
+            run_responses::emit_run_complete_event_pub(&self.event_bus, run, "failed");
+
             warn!("Marking active run as failed: {reason}");
             task::update_task_status(&run.task_path, TaskStatus::Failed);
             // Save (but do not delete) run.json so session_id is
@@ -704,6 +713,9 @@ pub type RunManagerState = Arc<Mutex<RunManager>>;
 
 /// Create the initial `RunManager` managed state.
 #[must_use]
-pub fn create_run_manager_state(sidecar_path: PathBuf) -> RunManagerState {
-    Arc::new(Mutex::new(RunManager::new(sidecar_path)))
+pub fn create_run_manager_state(
+    sidecar_path: PathBuf,
+    event_bus: Arc<crate::services::event_bus::EventBus>,
+) -> RunManagerState {
+    Arc::new(Mutex::new(RunManager::new(sidecar_path, event_bus)))
 }

@@ -34,6 +34,15 @@ yaml-front-matter = "0.1"
 notify-debouncer-mini = "0.7"
 notify = "8"
 
+# Knowledge service (feature-gated)
+rvf-runtime = { version = "0.2", optional = true }
+fastembed = { version = "5", optional = true }
+bincode = { version = "2", optional = true }
+
+[features]
+default = ["knowledge"]
+knowledge = ["dep:rvf-runtime", "dep:fastembed", "dep:bincode"]
+
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json"] }
 
