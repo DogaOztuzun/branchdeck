@@ -121,12 +121,29 @@ export function TeamSidebar() {
     const visible = terminalStore.state.tabs.filter(
       (t) => t.type === 'claude' && t.worktreePath === worktreePath(),
     );
-    return visible
+    const terminalAgents = visible
       .map((tab) => ({
-        tab,
+        tab: { id: tab.id, title: tab.title },
         agent: agentStore.getTabAgent(tab.id),
       }))
       .filter((a) => a.agent);
+
+    // Include task agent if running
+    const run = taskStore.state.activeRun;
+    if (
+      run?.tabId &&
+      (run.status === 'running' || run.status === 'starting' || run.status === 'blocked')
+    ) {
+      const taskAgent = agentStore.getTabAgent(run.tabId);
+      if (taskAgent) {
+        terminalAgents.push({
+          tab: { id: run.tabId, title: 'Task Agent' },
+          agent: taskAgent,
+        });
+      }
+    }
+
+    return terminalAgents;
   });
 
   return (

@@ -114,14 +114,12 @@ function createTaskStore() {
       // Register/unregister task's tabId with agent store for monitoring
       if (run.tabId) {
         const agentStore = getAgentStore();
-        if (run.status === 'starting' || run.status === 'running') {
-          agentStore.includeTab(run.tabId);
-        } else {
+        // Always register — events may arrive before status changes
+        agentStore.includeTab(run.tabId);
+        if (run.status !== 'blocked' && run.status !== 'running' && run.status !== 'starting') {
           // Run ended — keep tab registered briefly so final events arrive
           const tabIdToRemove = run.tabId;
-          if (tabIdToRemove) {
-            setTimeout(() => agentStore.removeTab(tabIdToRemove), 5000);
-          }
+          setTimeout(() => agentStore.removeTab(tabIdToRemove), 5000);
         }
       }
 
