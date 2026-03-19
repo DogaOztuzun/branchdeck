@@ -432,7 +432,7 @@ fn collect_recent_commits(
 /// Append an artifact block to the `## Artifacts` section of task.md.
 /// Creates the section if it doesn't exist.
 fn append_artifacts_section(content: &str, task_path: &str, block: &str) {
-    let updated = if content.contains("## Artifacts") {
+    let updated = if content.lines().any(|l| l == "## Artifacts") {
         // Section exists — append at the end of the file
         format!("{content}{block}")
     } else {

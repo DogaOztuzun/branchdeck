@@ -204,22 +204,21 @@ export function TaskDashboard() {
                       </span>
                       <TaskBadge status={item.task.frontmatter.status} />
                     </div>
-                    {(() => {
-                      const a = parseArtifactSummary(item.task.body);
-                      if (!a) return null;
-                      return (
+                    <Show when={parseArtifactSummary(item.task.body)}>
+                      {(artifacts) => (
                         <div class="flex items-center gap-1.5 mt-0.5 text-[10px] text-text-muted">
-                          <Show when={a.totalCommits > 0}>
+                          <Show when={artifacts().totalCommits > 0}>
                             <span>
-                              {a.totalCommits} commit{a.totalCommits === 1 ? '' : 's'}
+                              {artifacts().totalCommits} commit
+                              {artifacts().totalCommits === 1 ? '' : 's'}
                             </span>
                           </Show>
-                          <Show when={a.pr}>
-                            <span class="text-info">PR #{a.pr}</span>
+                          <Show when={artifacts().pr}>
+                            <span class="text-info">PR #{artifacts().pr}</span>
                           </Show>
                         </div>
-                      );
-                    })()}
+                      )}
+                    </Show>
                   </button>
                 )}
               </For>
