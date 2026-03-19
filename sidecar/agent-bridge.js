@@ -381,7 +381,7 @@ async function runSession(request, resumeSessionId = null) {
   const options = {
     cwd: request.worktree,
     abortController: activeAbort,
-    permissionMode: "default",
+    permissionMode: "acceptEdits",
     hooks: buildHooks(),
     canUseTool: async (toolName, input, callbackOptions) => {
       const toolUseId = callbackOptions.toolUseID;

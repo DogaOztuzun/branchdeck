@@ -499,6 +499,7 @@ pub async fn launch_run<R: tauri::Runtime>(
         tab_id: Some(tab_id),
     };
 
+    task::increment_run_count(task_path);
     manager.started_at_epoch_ms = now_ms;
     manager.last_activity_ms = now_ms;
     manager.active_run = Some(run_info.clone());
