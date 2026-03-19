@@ -320,10 +320,7 @@ pub fn capture_run_artifacts(task_path: &str, status: &str, started_at_epoch_ms:
     };
 
     let (run_number, pr_number) = match parse_task_md(&content, task_path) {
-        Ok(task_info) => (
-            task_info.frontmatter.run_count,
-            task_info.frontmatter.pr,
-        ),
+        Ok(task_info) => (task_info.frontmatter.run_count, task_info.frontmatter.pr),
         Err(e) => {
             error!("Artifact capture: failed to parse task {task_path}: {e}");
             return;
