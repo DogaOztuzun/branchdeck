@@ -230,7 +230,7 @@ impl RunManager {
                 run_responses::handle_permission_request(
                     &mut self.active_run,
                     &mut self.pending_permission,
-                    tool,
+                    tool.as_ref(),
                     command.as_ref(),
                     tool_use_id,
                     app_handle,

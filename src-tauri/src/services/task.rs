@@ -145,6 +145,7 @@ pub fn create_task(
     repo: &str,
     branch: &str,
     pr: Option<u64>,
+    description: Option<&str>,
 ) -> Result<TaskInfo, AppError> {
     let base = Path::new(worktree_path);
     let dir = base.join(TASK_DIR);
@@ -167,7 +168,11 @@ pub fn create_task(
         run_count: 0,
     };
 
-    let body = "\n## Goal\n\n\n\n## Progress\n\n- [ ] Identify approach\n- [ ] Implement\n- [ ] Verify\n\n## Log\n".to_owned();
+    let body = if let Some(desc) = description {
+        format!("\n## Goal\n\n{desc}\n\n## Progress\n\n- [ ] Identify approach\n- [ ] Implement\n- [ ] Verify\n\n## Log\n")
+    } else {
+        "\n## Goal\n\n\n\n## Progress\n\n- [ ] Identify approach\n- [ ] Implement\n- [ ] Verify\n\n## Log\n".to_owned()
+    };
 
     let content = format_task_md(&frontmatter, &body)?;
 

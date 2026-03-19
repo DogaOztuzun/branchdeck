@@ -14,6 +14,7 @@ type CreateTaskModalProps = {
 export function CreateTaskModal(props: CreateTaskModalProps) {
   const [taskType, setTaskType] = createSignal<TaskType>('issue-fix');
   const [prNumber, setPrNumber] = createSignal('');
+  const [description, setDescription] = createSignal('');
   const [error, setError] = createSignal<string | null>(null);
   const [creating, setCreating] = createSignal(false);
 
@@ -21,6 +22,7 @@ export function CreateTaskModal(props: CreateTaskModalProps) {
     if (props.open) {
       setTaskType('issue-fix');
       setPrNumber('');
+      setDescription('');
       setError(null);
       setCreating(false);
     }
@@ -48,7 +50,8 @@ export function CreateTaskModal(props: CreateTaskModalProps) {
         setCreating(false);
         return;
       }
-      await createTask(props.worktreePath, taskType(), props.repo, props.branch, pr);
+      const desc = description().trim() || undefined;
+      await createTask(props.worktreePath, taskType(), props.repo, props.branch, pr, desc);
       await watchTaskPath(props.worktreePath).catch(() => {});
       props.onClose();
     } catch (e) {
@@ -108,6 +111,20 @@ export function CreateTaskModal(props: CreateTaskModalProps) {
                 />
               </div>
             </Show>
+
+            <div class="mt-2">
+              <label class="text-xs text-text-muted" for="task-description">
+                Description
+              </label>
+              <textarea
+                id="task-description"
+                placeholder="What should the agent do?"
+                value={description()}
+                onInput={(e) => setDescription(e.currentTarget.value)}
+                rows={3}
+                class="w-full mt-1 px-3 py-1.5 text-xs bg-bg border border-border rounded text-text placeholder:text-text-muted focus:outline-none focus:border-primary resize-y"
+              />
+            </div>
 
             <div class="mt-3 space-y-1.5 text-xs">
               <div class="flex gap-2">

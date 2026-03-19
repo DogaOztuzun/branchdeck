@@ -11,8 +11,16 @@ pub fn create_task_cmd(
     repo: String,
     branch: String,
     pr: Option<u64>,
+    description: Option<String>,
 ) -> Result<TaskInfo, AppError> {
-    crate::services::task::create_task(&worktree_path, task_type, &repo, &branch, pr)
+    crate::services::task::create_task(
+        &worktree_path,
+        task_type,
+        &repo,
+        &branch,
+        pr,
+        description.as_deref(),
+    )
 }
 
 #[tauri::command]

@@ -46,7 +46,7 @@ export type RunStatusEvent = {
 };
 
 export type PermissionRequestEvent = {
-  tool: string;
+  tool: string | null;
   command: string | null;
   toolUseId: string;
   requestedAt: number;

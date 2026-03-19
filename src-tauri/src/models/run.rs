@@ -87,7 +87,7 @@ pub enum SidecarResponse {
         session_id: Option<String>,
     },
     PermissionRequest {
-        tool: String,
+        tool: Option<String>,
         command: Option<String>,
         tool_use_id: String,
         session_id: Option<String>,
@@ -107,7 +107,7 @@ pub enum PermissionResponseMsg {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PendingPermission {
-    pub tool: String,
+    pub tool: Option<String>,
     pub command: Option<String>,
     pub tool_use_id: String,
     pub requested_at: u64,

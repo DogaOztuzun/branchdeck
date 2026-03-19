@@ -8,6 +8,7 @@ export async function createTask(
   repo: string,
   branch: string,
   pr?: number,
+  description?: string,
 ): Promise<TaskInfo> {
   try {
     return await invoke<TaskInfo>('create_task_cmd', {
@@ -16,6 +17,7 @@ export async function createTask(
       repo,
       branch,
       pr: pr ?? null,
+      description: description || null,
     });
   } catch (e) {
     logError(`createTask failed: ${e}`);

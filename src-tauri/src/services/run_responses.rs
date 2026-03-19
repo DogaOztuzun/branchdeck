@@ -84,7 +84,7 @@ pub fn handle_run_complete<R: tauri::Runtime>(
 pub fn handle_permission_request<R: tauri::Runtime>(
     active_run: &mut Option<RunInfo>,
     pending_permission: &mut Option<PendingPermission>,
-    tool: &str,
+    tool: Option<&String>,
     command: Option<&String>,
     tool_use_id: &str,
     app_handle: &tauri::AppHandle<R>,
@@ -95,7 +95,7 @@ pub fn handle_permission_request<R: tauri::Runtime>(
     }
     info!("Permission requested for tool {tool:?}, command: {command:?}, id: {tool_use_id}");
     let pending = PendingPermission {
-        tool: tool.to_owned(),
+        tool: tool.cloned(),
         command: command.cloned(),
         tool_use_id: tool_use_id.to_owned(),
         requested_at: now_epoch_ms(),

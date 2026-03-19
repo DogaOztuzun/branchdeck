@@ -194,11 +194,11 @@ async function runSession(request, resumeSessionId = null) {
       cwd: request.worktree,
       abortController: activeAbort,
       permissionMode: "acceptEdits",
-      canUseTool: async (tool, input) => {
+      canUseTool: async (toolName, input) => {
         const toolUseId = crypto.randomUUID();
         send({
           type: "permission_request",
-          tool: tool.name,
+          tool: toolName,
           command: input?.command ?? null,
           tool_use_id: toolUseId,
           session_id: activeSessionId,
