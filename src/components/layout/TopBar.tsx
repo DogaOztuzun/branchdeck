@@ -65,6 +65,30 @@ export function TopBar() {
         <button
           type="button"
           class="p-1.5 text-text-muted hover:text-text cursor-pointer rounded hover:bg-bg/50"
+          aria-label="Toggle dashboard"
+          title="Toggle task dashboard"
+          onClick={() => layout.toggleDashboard()}
+        >
+          <svg
+            aria-hidden="true"
+            width="18"
+            height="18"
+            viewBox="0 0 18 18"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <rect x="1.5" y="1.5" width="6" height="6" rx="1" />
+            <rect x="10.5" y="1.5" width="6" height="6" rx="1" />
+            <rect x="1.5" y="10.5" width="6" height="6" rx="1" />
+            <rect x="10.5" y="10.5" width="6" height="6" rx="1" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="p-1.5 text-text-muted hover:text-text cursor-pointer rounded hover:bg-bg/50"
           aria-label="Toggle changes"
           title="Toggle changes (Ctrl+Shift+L)"
           onClick={() => layout.toggleChangesSidebar()}

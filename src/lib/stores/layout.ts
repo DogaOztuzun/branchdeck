@@ -1,7 +1,7 @@
 import { createSignal } from 'solid-js';
 import type { PanelGroupAPI } from 'solid-resizable-panels';
 
-export type RightSidebarView = 'changes' | 'team';
+export type RightSidebarView = 'changes' | 'team' | 'dashboard';
 
 const [panelApi, setPanelApi] = createSignal<PanelGroupAPI | null>(null);
 const [repoSidebarOpen, setRepoSidebarOpen] = createSignal(true);
@@ -59,5 +59,20 @@ export function getLayoutStore() {
         }
       }
     },
+    toggleDashboard() {
+      const api = panelApi();
+      if (!api) return;
+      if (rightSidebarOpen() && rightSidebarView() === 'dashboard') {
+        api.collapse(RIGHT_SIDEBAR_ID);
+        setRightSidebarOpen(false);
+      } else {
+        setRightSidebarView('dashboard');
+        if (!rightSidebarOpen()) {
+          api.expand(RIGHT_SIDEBAR_ID, DEFAULT_SIDEBAR_SIZE);
+          setRightSidebarOpen(true);
+        }
+      }
+    },
+    setRightSidebarView,
   };
 }
