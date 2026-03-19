@@ -34,6 +34,7 @@ function postJSON(path, body) {
       (res) => {
         let chunks = [];
         res.on("data", (chunk) => chunks.push(chunk));
+        res.on("error", (e) => reject(e));
         res.on("end", () => {
           try {
             resolve(JSON.parse(Buffer.concat(chunks).toString()));
