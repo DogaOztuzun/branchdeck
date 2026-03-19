@@ -168,10 +168,12 @@ pub fn create_task(
         run_count: 0,
     };
 
+    let instructions = "\n## Instructions\n\nAs you work, update this file:\n- Check off Progress items as you complete them: `- [ ]` → `- [x]`\n- Append your findings and results to the Log section below\n";
+
     let body = if let Some(desc) = description {
-        format!("\n## Goal\n\n{desc}\n\n## Progress\n\n- [ ] Identify approach\n- [ ] Implement\n- [ ] Verify\n\n## Log\n")
+        format!("{instructions}\n## Goal\n\n{desc}\n\n## Progress\n\n- [ ] Identify approach\n- [ ] Implement\n- [ ] Verify\n\n## Log\n")
     } else {
-        "\n## Goal\n\n\n\n## Progress\n\n- [ ] Identify approach\n- [ ] Implement\n- [ ] Verify\n\n## Log\n".to_owned()
+        format!("{instructions}\n## Goal\n\n\n\n## Progress\n\n- [ ] Identify approach\n- [ ] Implement\n- [ ] Verify\n\n## Log\n")
     };
 
     let content = format_task_md(&frontmatter, &body)?;
