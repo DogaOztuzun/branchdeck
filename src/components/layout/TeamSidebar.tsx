@@ -1,6 +1,12 @@
-import { createEffect, createMemo, createSignal, For, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
 import { listAgentDefinitions } from '../../lib/commands/agent';
-import { cancelRun, respondToPermission, resumeRun, retryRun } from '../../lib/commands/run';
+import {
+  cancelRun,
+  launchRun,
+  respondToPermission,
+  resumeRun,
+  retryRun,
+} from '../../lib/commands/run';
 import { getAgentStore } from '../../lib/stores/agent';
 import { getRepoStore } from '../../lib/stores/repo';
 import { getTaskStore } from '../../lib/stores/task';
@@ -9,6 +15,7 @@ import { statusColor } from '../../lib/utils';
 import type { AgentDefinition } from '../../types/agent';
 import type { TaskInfo } from '../../types/task';
 import { ApprovalDialog } from '../task/ApprovalDialog';
+import { CreateTaskModal } from '../task/CreateTaskModal';
 import { RunTimeline } from '../task/RunTimeline';
 import { TaskBadge } from '../task/TaskBadge';
 import { FileGrid } from './FileGrid';
@@ -19,9 +26,20 @@ export function TeamSidebar() {
   const agentStore = getAgentStore();
   const taskStore = getTaskStore();
   const [definitions, setDefinitions] = createSignal<AgentDefinition[]>([]);
+  const [showCreateTask, setShowCreateTask] = createSignal(false);
+  const [launchError, setLaunchError] = createSignal<string | null>(null);
+  let launchErrorTimer: ReturnType<typeof setTimeout> | undefined;
 
   const repoPath = () => repoStore.state.activeRepoPath ?? '';
   const worktreePath = () => repoStore.state.activeWorktreePath ?? '';
+
+  // Reset modal state when worktree changes
+  createEffect(() => {
+    worktreePath(); // track dependency
+    setShowCreateTask(false);
+  });
+
+  onCleanup(() => clearTimeout(launchErrorTimer));
 
   const tasksWithWorktree = createMemo(() => {
     const tasks = taskStore.state.tasksByWorktree;
@@ -67,6 +85,32 @@ export function TeamSidebar() {
       .catch(() => setDefinitions([]));
   });
 
+  const activeWorktree = createMemo(() => {
+    const activeRepo = repoStore.state.activeRepoPath;
+    const activeWt = repoStore.state.activeWorktreePath;
+    if (!activeRepo || !activeWt) return null;
+    const wts = repoStore.state.worktreesByRepo[activeRepo] ?? [];
+    return wts.find((wt) => wt.path === activeWt) ?? null;
+  });
+
+  const activeWorktreeHasTask = createMemo(() => {
+    const wt = worktreePath();
+    if (!wt) return false;
+    return taskStore.hasTaskForWorktree(wt);
+  });
+
+  const canLaunch = createMemo(() => !taskStore.state.activeRun);
+
+  function handleLaunch(task: TaskInfo, wtPath: string) {
+    if (!canLaunch()) return;
+    clearTimeout(launchErrorTimer);
+    setLaunchError(null);
+    launchRun(task.path, wtPath).catch((e) => {
+      setLaunchError(String(e));
+      launchErrorTimer = setTimeout(() => setLaunchError(null), 5000);
+    });
+  }
+
   function launchAgent(def: AgentDefinition) {
     const wt = worktreePath();
     if (!wt) return;
@@ -100,72 +144,125 @@ export function TeamSidebar() {
       </Show>
 
       {/* Tasks */}
-      <Show when={tasksWithWorktree().length > 0}>
-        <div class="px-2 py-1.5 border-b border-border">
-          <span class="text-[10px] uppercase text-text-muted tracking-wider px-1">Tasks</span>
+      <div class="px-2 py-1.5 border-b border-border">
+        <div class="flex items-center justify-between px-1">
+          <span class="text-[10px] uppercase text-text-muted tracking-wider">Tasks</span>
+          <Show when={worktreePath() && !activeWorktreeHasTask()}>
+            <button
+              type="button"
+              class="text-[10px] text-text-muted hover:text-text cursor-pointer"
+              onClick={() => setShowCreateTask(true)}
+            >
+              + New Task
+            </button>
+          </Show>
+        </div>
+        <Show
+          when={tasksWithWorktree().length > 0}
+          fallback={
+            <Show when={worktreePath()}>
+              <div class="px-2 py-2 text-[10px] text-text-muted text-center">No tasks yet</div>
+            </Show>
+          }
+        >
           <div class="mt-1 space-y-0.5">
             <For each={tasksWithWorktree()}>
               {(item) => (
-                <div class="flex items-center gap-2 px-2 py-1 rounded text-xs hover:bg-bg/50">
-                  <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-1.5">
-                      <span class="text-text truncate">{item.worktree.branch}</span>
-                      <TaskBadge status={item.task.frontmatter.status} />
+                <div class="px-2 py-1.5 rounded text-xs hover:bg-bg/50">
+                  <div class="flex items-center gap-2">
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-center gap-1.5">
+                        <span class="text-text truncate">{item.worktree.branch}</span>
+                        <TaskBadge status={item.task.frontmatter.status} />
+                      </div>
                     </div>
-                  </div>
-                  <Show
-                    when={taskStore.state.activeRun && item.task.frontmatter.status === 'running'}
-                  >
-                    <button
-                      type="button"
-                      class="shrink-0 px-1.5 py-0.5 text-[10px] text-red-400 hover:text-red-300 border border-border rounded hover:border-red-400 cursor-pointer"
-                      onClick={() => cancelRun().catch(() => {})}
-                    >
-                      Cancel
-                    </button>
-                  </Show>
-                  <Show
-                    when={
-                      item.task.frontmatter.status === 'failed' ||
-                      item.task.frontmatter.status === 'cancelled'
-                    }
-                  >
-                    <button
-                      type="button"
-                      class="shrink-0 px-1.5 py-0.5 text-[10px] text-text-muted hover:text-text border border-border rounded hover:border-primary cursor-pointer"
-                      onClick={() => retryRun(item.task.path, item.worktree.path).catch(() => {})}
-                    >
-                      Retry
-                    </button>
+                    {/* Launch button for launchable statuses */}
                     <Show
                       when={
-                        taskStore.state.activeRun?.sessionId &&
-                        taskStore.state.activeRun?.taskPath === item.task.path
+                        canLaunch() &&
+                        (item.task.frontmatter.status === 'created' ||
+                          item.task.frontmatter.status === 'failed' ||
+                          item.task.frontmatter.status === 'cancelled')
                       }
                     >
                       <button
                         type="button"
-                        class="shrink-0 px-1.5 py-0.5 text-[10px] text-text-muted hover:text-text border border-border rounded hover:border-info cursor-pointer"
-                        onClick={() =>
-                          resumeRun(item.task.path, item.worktree.path).catch(() => {})
-                        }
+                        class="shrink-0 px-1.5 py-0.5 text-[10px] text-text-muted hover:text-text border border-border rounded hover:border-primary cursor-pointer"
+                        onClick={() => handleLaunch(item.task, item.worktree.path)}
                       >
-                        Resume
+                        Launch
                       </button>
                     </Show>
-                  </Show>
+                    {/* Cancel button for running tasks */}
+                    <Show
+                      when={taskStore.state.activeRun && item.task.frontmatter.status === 'running'}
+                    >
+                      <button
+                        type="button"
+                        class="shrink-0 px-1.5 py-0.5 text-[10px] text-red-400 hover:text-red-300 border border-border rounded hover:border-red-400 cursor-pointer"
+                        onClick={() => cancelRun().catch(() => {})}
+                      >
+                        Cancel
+                      </button>
+                    </Show>
+                    {/* Retry/Resume for failed/cancelled */}
+                    <Show
+                      when={
+                        !canLaunch() &&
+                        (item.task.frontmatter.status === 'failed' ||
+                          item.task.frontmatter.status === 'cancelled')
+                      }
+                    >
+                      <button
+                        type="button"
+                        class="shrink-0 px-1.5 py-0.5 text-[10px] text-text-muted hover:text-text border border-border rounded hover:border-primary cursor-pointer"
+                        onClick={() => retryRun(item.task.path, item.worktree.path).catch(() => {})}
+                      >
+                        Retry
+                      </button>
+                      <Show
+                        when={
+                          taskStore.state.activeRun?.sessionId &&
+                          taskStore.state.activeRun?.taskPath === item.task.path
+                        }
+                      >
+                        <button
+                          type="button"
+                          class="shrink-0 px-1.5 py-0.5 text-[10px] text-text-muted hover:text-text border border-border rounded hover:border-info cursor-pointer"
+                          onClick={() =>
+                            resumeRun(item.task.path, item.worktree.path).catch(() => {})
+                          }
+                        >
+                          Resume
+                        </button>
+                      </Show>
+                    </Show>
+                  </div>
+                  {/* Task details row */}
+                  <div class="flex items-center gap-2 mt-0.5 text-[10px] text-text-muted">
+                    <span class="capitalize">{item.task.frontmatter.type.replace('-', ' ')}</span>
+                    <Show when={item.task.frontmatter.pr}>
+                      <span>PR #{item.task.frontmatter.pr}</span>
+                    </Show>
+                    <Show when={item.task.frontmatter['run-count'] > 0}>
+                      <span>{item.task.frontmatter['run-count']} runs</span>
+                    </Show>
+                  </div>
                 </div>
               )}
             </For>
           </div>
-        </div>
-        <Show when={taskStore.state.runLog.length > 0 || taskStore.state.activeRun}>
-          <RunTimeline
-            entries={taskStore.state.runLog}
-            visible={true}
-            activeRun={taskStore.state.activeRun}
-          />
         </Show>
+        <Show when={launchError()}>
+          <p class="px-2 mt-1 text-[10px] text-error truncate">{launchError()}</p>
+        </Show>
+      </div>
+      <Show when={taskStore.state.runLog.length > 0 || taskStore.state.activeRun}>
+        <RunTimeline
+          entries={taskStore.state.runLog}
+          visible={true}
+          activeRun={taskStore.state.activeRun}
+        />
       </Show>
 
       {/* Permission Approval Dialog */}
@@ -282,6 +379,19 @@ export function TeamSidebar() {
             + New Claude Session
           </button>
         </div>
+      </Show>
+
+      {/* Create Task Modal */}
+      <Show when={activeWorktree()}>
+        {(wt) => (
+          <CreateTaskModal
+            open={showCreateTask()}
+            worktreePath={wt().path}
+            repo={repoStore.getActiveRepo()?.name ?? ''}
+            branch={wt().branch}
+            onClose={() => setShowCreateTask(false)}
+          />
+        )}
       </Show>
     </div>
   );

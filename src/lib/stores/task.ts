@@ -222,6 +222,11 @@ function createTaskStore() {
     return Math.max(0, Math.floor((Date.now() - startMs) / 1000));
   }
 
+  function hasTaskForWorktree(wtPath: string): boolean {
+    const key = normalizePath(wtPath);
+    return key in state.tasksByWorktree;
+  }
+
   return {
     state,
     loadTasks,
@@ -229,6 +234,7 @@ function createTaskStore() {
     stopListening,
     clearAll,
     getRunDuration,
+    hasTaskForWorktree,
   };
 }
 
