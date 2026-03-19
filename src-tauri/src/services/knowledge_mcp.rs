@@ -100,7 +100,10 @@ async fn handle_connection(
         "/knowledge/query" => handle_query(knowledge, body_str).await,
         "/knowledge/remember" => handle_remember(knowledge, body_str).await,
         "/knowledge/health" => Ok(r#"{"status":"ok"}"#.to_string()),
-        _ => Err("unknown endpoint".to_string()),
+        _ => {
+            let err_json = serde_json::json!({"error": "unknown endpoint"}).to_string();
+            return respond_json(&mut writer, 404, &err_json).await;
+        }
     };
 
     match response {
