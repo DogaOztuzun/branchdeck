@@ -327,7 +327,11 @@ fn format_task_md(fm: &TaskFrontmatter, body: &str) -> String {
     if let Some(pr) = fm.pr {
         let _ = write!(yaml, "\npr: {pr}");
     }
-    let _ = write!(yaml, "\ncreated: {}\nrun-count: {}", fm.created, fm.run_count);
+    let _ = write!(
+        yaml,
+        "\ncreated: {}\nrun-count: {}",
+        fm.created, fm.run_count
+    );
 
     format!("---\n{yaml}\n---\n{body}")
 }

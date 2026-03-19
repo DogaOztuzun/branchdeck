@@ -49,7 +49,9 @@ pub async fn check_permission_timeout<R: tauri::Runtime>(
     let now = now_epoch_ms();
     let timed_out: Vec<String> = pending_permissions
         .iter()
-        .filter(|(_, perm)| (now.saturating_sub(perm.requested_at)) / 1000 >= PERMISSION_TIMEOUT_SECS)
+        .filter(|(_, perm)| {
+            (now.saturating_sub(perm.requested_at)) / 1000 >= PERMISSION_TIMEOUT_SECS
+        })
         .map(|(id, _)| id.clone())
         .collect();
 

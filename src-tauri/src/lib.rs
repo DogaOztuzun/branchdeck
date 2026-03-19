@@ -231,7 +231,9 @@ pub fn run() {
             };
 
             log::info!("Sidecar path resolved to: {}", sidecar_path.display());
-            app.manage(services::run_manager::create_run_manager_state(sidecar_path));
+            app.manage(services::run_manager::create_run_manager_state(
+                sidecar_path,
+            ));
 
             recover_stale_runs(app.handle());
             setup_agent_monitoring(app, &event_bus, &activity_store);

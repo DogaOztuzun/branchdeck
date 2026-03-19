@@ -352,10 +352,13 @@ impl RunManager {
         decision: &str,
         reason: Option<&str>,
     ) -> Result<(), AppError> {
-        let pending = self.pending_permissions.remove(tool_use_id).ok_or_else(|| {
-            error!("No pending permission for tool_use_id: {tool_use_id}");
-            AppError::RunError("No matching pending permission request".to_owned())
-        })?;
+        let pending = self
+            .pending_permissions
+            .remove(tool_use_id)
+            .ok_or_else(|| {
+                error!("No pending permission for tool_use_id: {tool_use_id}");
+                AppError::RunError("No matching pending permission request".to_owned())
+            })?;
 
         info!(
             "Responding to permission for tool {:?}: {decision}",
