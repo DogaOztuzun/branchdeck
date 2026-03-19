@@ -28,6 +28,21 @@ export function CreateTaskModal(props: CreateTaskModalProps) {
     }
   });
 
+  const templates: Record<TaskType, string> = {
+    'issue-fix': '',
+    'pr-shepherd': `Review all changes in this branch/PR.\n\n1. Read the diff (git diff main...HEAD)\n2. Check for bugs, security issues, missing error handling\n3. Verify code follows project conventions\n4. Run lint and typecheck\n5. Summarize findings in a review comment`,
+  };
+
+  function handleTypeChange(newType: TaskType) {
+    const prev = taskType();
+    setTaskType(newType);
+    // Auto-fill template if description is empty or still matches previous template
+    const desc = description().trim();
+    if (!desc || desc === templates[prev].trim()) {
+      setDescription(templates[newType]);
+    }
+  }
+
   const isPrShepherd = createMemo(() => taskType() === 'pr-shepherd');
 
   const isCreateDisabled = createMemo(() => {
@@ -86,7 +101,7 @@ export function CreateTaskModal(props: CreateTaskModalProps) {
               <select
                 id="task-type-select"
                 value={taskType()}
-                onChange={(e) => setTaskType(e.currentTarget.value as TaskType)}
+                onChange={(e) => handleTypeChange(e.currentTarget.value as TaskType)}
                 style={{ 'background-color': 'var(--color-bg)', color: 'var(--color-text)' }}
                 class="w-full mt-1 px-3 py-1.5 text-xs border border-border rounded focus:outline-none focus:border-primary appearance-none [&>option]:bg-bg [&>option]:text-text"
               >
