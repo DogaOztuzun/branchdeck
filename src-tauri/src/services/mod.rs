@@ -9,6 +9,7 @@ pub mod hook_config;
 pub mod hook_receiver;
 pub mod knowledge;
 pub mod knowledge_ingestion;
+pub mod knowledge_mcp;
 pub mod knowledge_merge;
 pub mod knowledge_query;
 pub mod run_manager;

@@ -246,6 +246,82 @@ fn remove_hooks_at(settings_path: &Path, script_path: &Path) -> Result<(), AppEr
     atomic_write_json(settings_path, &settings)
 }
 
+/// Install MCP server config into `~/.claude/settings.json`.
+///
+/// Merges `mcpServers.branchdeck-knowledge` with the sidecar command and port.
+///
+/// # Errors
+///
+/// Returns `AppError` if settings cannot be read or written.
+pub fn install_mcp_config(port: u16, sidecar_path: &Path) -> Result<(), AppError> {
+    let home = dirs::home_dir()
+        .ok_or_else(|| AppError::Agent("Could not determine home directory".to_string()))?;
+    let settings_path = home.join(".claude").join("settings.json");
+    let mut settings = load_settings(&settings_path)?;
+
+    let root = settings
+        .as_object_mut()
+        .ok_or_else(|| AppError::Agent("settings.json root is not an object".to_string()))?;
+
+    let mcp_servers = root
+        .entry("mcpServers")
+        .or_insert_with(|| serde_json::json!({}));
+
+    let mcp_obj = mcp_servers
+        .as_object_mut()
+        .ok_or_else(|| AppError::Agent("mcpServers is not an object".to_string()))?;
+
+    mcp_obj.insert(
+        "branchdeck-knowledge".to_string(),
+        serde_json::json!({
+            "command": "node",
+            "args": [sidecar_path.to_string_lossy()],
+            "env": {
+                "BRANCHDECK_KNOWLEDGE_PORT": port.to_string()
+            }
+        }),
+    );
+
+    atomic_write_json(&settings_path, &settings)?;
+    info!("Installed MCP config for branchdeck-knowledge (port {port})");
+    Ok(())
+}
+
+/// Remove MCP server config from `~/.claude/settings.json`.
+///
+/// # Errors
+///
+/// Returns `AppError` if settings cannot be read or written.
+pub fn remove_mcp_config() -> Result<(), AppError> {
+    let home = dirs::home_dir()
+        .ok_or_else(|| AppError::Agent("Could not determine home directory".to_string()))?;
+    let settings_path = home.join(".claude").join("settings.json");
+
+    if !settings_path.exists() {
+        return Ok(());
+    }
+
+    let mut settings = load_settings(&settings_path)?;
+
+    let root = settings
+        .as_object_mut()
+        .ok_or_else(|| AppError::Agent("settings.json root is not an object".to_string()))?;
+
+    if let Some(mcp_servers) = root
+        .get_mut("mcpServers")
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        mcp_servers.remove("branchdeck-knowledge");
+        if mcp_servers.is_empty() {
+            root.remove("mcpServers");
+        }
+    }
+
+    atomic_write_json(&settings_path, &settings)?;
+    info!("Removed MCP config for branchdeck-knowledge");
+    Ok(())
+}
+
 fn load_settings(path: &Path) -> Result<serde_json::Value, AppError> {
     if !path.exists() {
         return Ok(serde_json::json!({}));
