@@ -1,6 +1,7 @@
 use crate::error::AppError;
 use crate::models::run::{LaunchOptions, RunInfo, RunStatus, SidecarRequest, SidecarResponse};
 use crate::models::task::TaskStatus;
+use crate::services::{run_state, task};
 use log::{debug, error, info, warn};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -37,12 +38,27 @@ impl RunManager {
         app_handle: tauri::AppHandle<R>,
         state: RunManagerState,
     ) -> Result<(), AppError> {
-        if self.process.is_some() {
-            debug!("Sidecar already running");
-            return Ok(());
+        if let Some(ref mut child) = self.process {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    warn!("Sidecar process exited with {status}, will respawn");
+                    self.process = None;
+                    self.stdin = None;
+                }
+                Ok(None) => {
+                    debug!("Sidecar already running");
+                    return Ok(());
+                }
+                Err(e) => {
+                    warn!("Failed to check sidecar process status: {e}, will respawn");
+                    self.process = None;
+                    self.stdin = None;
+                }
+            }
         }
 
         info!("Spawning sidecar at {}", self.sidecar_path.display());
+        let start = std::time::Instant::now();
 
         let mut child = tokio::process::Command::new("node")
             .arg(&self.sidecar_path)
@@ -72,7 +88,7 @@ impl RunManager {
         let reader = BufReader::new(child_stdout);
         start_stdout_reader(state, app_handle, reader);
 
-        info!("Sidecar spawned successfully");
+        info!("Sidecar spawned in {:?}", start.elapsed());
         Ok(())
     }
 
@@ -81,6 +97,21 @@ impl RunManager {
     pub fn get_status(&self) -> Option<RunInfo> {
         debug!("Getting run status");
         self.active_run.clone()
+    }
+
+    /// Check if a response's `session_id` matches the active run's `session_id`.
+    /// Returns `true` if they match or if either is `None` (not yet assigned).
+    /// Returns `false` (mismatch) only when both are `Some` and differ.
+    fn session_matches(&self, response_session_id: Option<&String>) -> bool {
+        if let (Some(active_sid), Some(resp_sid)) = (
+            self.active_run.as_ref().and_then(|r| r.session_id.as_ref()),
+            response_session_id,
+        ) {
+            if active_sid != resp_sid {
+                return false;
+            }
+        }
+        true
     }
 
     /// Update the active run from a sidecar response.
@@ -95,27 +126,42 @@ impl RunManager {
                     run.session_id = Some(session_id.clone());
                     run.status = RunStatus::Running;
                     info!("Run session started: {session_id}");
-                    update_task_status(&run.task_path, TaskStatus::Running);
+                    task::update_task_status(&run.task_path, TaskStatus::Running);
+                    run_state::save_run_state(&run.task_path, run);
                     if let Err(e) = app_handle.emit("run:status_changed", &*run) {
                         error!("Failed to emit run:status_changed: {e}");
                     }
                 }
             }
-            SidecarResponse::RunStep { .. }
-            | SidecarResponse::AssistantText { .. }
-            | SidecarResponse::ToolCall { .. } => {
+            SidecarResponse::RunStep { session_id, .. }
+            | SidecarResponse::AssistantText { session_id, .. }
+            | SidecarResponse::ToolCall { session_id, .. } => {
+                if !self.session_matches(session_id.as_ref()) {
+                    warn!("Ignoring run step with mismatched session_id: {session_id:?}");
+                    return;
+                }
                 if let Err(e) = app_handle.emit("run:step", response) {
                     error!("Failed to emit run:step: {e}");
                 }
             }
-            SidecarResponse::RunComplete { cost_usd, .. } => {
+            SidecarResponse::RunComplete {
+                cost_usd,
+                session_id,
+                ..
+            } => {
+                if !self.session_matches(session_id.as_ref()) {
+                    warn!("Ignoring run complete with mismatched session_id: {session_id:?}");
+                    return;
+                }
                 if let Some(ref mut run) = self.active_run {
                     run.status = RunStatus::Succeeded;
                     if let Some(cost) = cost_usd {
                         run.cost_usd = *cost;
                     }
                     info!("Run completed successfully, cost: ${:.4}", run.cost_usd);
-                    update_task_status(&run.task_path, TaskStatus::Succeeded);
+                    task::update_task_status(&run.task_path, TaskStatus::Succeeded);
+                    run_state::save_run_state(&run.task_path, run);
+                    run_state::delete_run_state(&run.task_path);
                     if let Err(e) = app_handle.emit("run:status_changed", &*run) {
                         error!("Failed to emit run:status_changed: {e}");
                     }
@@ -126,8 +172,12 @@ impl RunManager {
                 error: err_msg,
                 status,
                 cost_usd,
-                ..
+                session_id,
             } => {
+                if !self.session_matches(session_id.as_ref()) {
+                    warn!("Ignoring run error with mismatched session_id: {session_id:?}");
+                    return;
+                }
                 if let Some(ref mut run) = self.active_run {
                     let (run_status, task_status) = if status == "cancelled" {
                         (RunStatus::Cancelled, TaskStatus::Cancelled)
@@ -139,7 +189,9 @@ impl RunManager {
                         run.cost_usd = *cost;
                     }
                     error!("Run failed: {err_msg}");
-                    update_task_status(&run.task_path, task_status);
+                    task::update_task_status(&run.task_path, task_status);
+                    run_state::save_run_state(&run.task_path, run);
+                    run_state::delete_run_state(&run.task_path);
                     if let Err(e) = app_handle.emit("run:status_changed", &*run) {
                         error!("Failed to emit run:status_changed: {e}");
                     }
@@ -154,7 +206,9 @@ impl RunManager {
         if let Some(ref mut run) = self.active_run {
             run.status = RunStatus::Failed;
             warn!("Marking active run as failed due to sidecar crash");
-            update_task_status(&run.task_path, TaskStatus::Failed);
+            task::update_task_status(&run.task_path, TaskStatus::Failed);
+            run_state::save_run_state(&run.task_path, run);
+            run_state::delete_run_state(&run.task_path);
             if let Err(e) = app_handle.emit("run:status_changed", &*run) {
                 error!("Failed to emit run:status_changed: {e}");
             }
@@ -162,6 +216,29 @@ impl RunManager {
         self.active_run = None;
         self.process = None;
         self.stdin = None;
+    }
+
+    /// Shut down the run manager during app exit.
+    ///
+    /// If there is an active run, kills the sidecar child process,
+    /// marks the run as failed, updates task.md, and cleans up run.json.
+    pub fn shutdown<R: tauri::Runtime>(&mut self, app_handle: &tauri::AppHandle<R>) {
+        if self.active_run.is_none() {
+            debug!("Shutdown: no active run to clean up");
+            return;
+        }
+
+        // Kill the sidecar child process if it's running
+        if let Some(ref mut child) = self.process {
+            info!("Shutdown: killing sidecar child process");
+            if let Err(e) = child.start_kill() {
+                error!("Shutdown: failed to kill sidecar process: {e}");
+            }
+        }
+
+        // Mark run as failed (also saves + deletes run.json)
+        self.mark_run_failed(app_handle);
+        info!("Shutdown: cleaned up active run");
     }
 
     /// Cancel the active run.
@@ -273,6 +350,7 @@ pub async fn launch_run<R: tauri::Runtime>(
     };
 
     manager.active_run = Some(run_info.clone());
+    run_state::save_run_state(task_path, &run_info);
 
     info!("Launched run for task {task_path}");
 
@@ -325,73 +403,6 @@ fn start_stdout_reader<R: tauri::Runtime>(
             }
         }
     });
-}
-
-/// Update the status field in a task.md file's YAML frontmatter.
-///
-/// Uses simple string replacement within the frontmatter section.
-/// Logs errors but does not propagate them — task status on disk is
-/// best-effort and must not break the run state machine.
-fn update_task_status(task_path: &str, new_status: TaskStatus) {
-    let status_str = match new_status {
-        TaskStatus::Created => "created",
-        TaskStatus::Running => "running",
-        TaskStatus::Blocked => "blocked",
-        TaskStatus::Succeeded => "succeeded",
-        TaskStatus::Failed => "failed",
-        TaskStatus::Cancelled => "cancelled",
-    };
-
-    let content = match std::fs::read_to_string(task_path) {
-        Ok(c) => c,
-        Err(e) => {
-            error!("Failed to read task file for status update {task_path}: {e}");
-            return;
-        }
-    };
-
-    // Find the frontmatter section (between first and second ---)
-    // and replace the status field within it.
-    let Some(updated) = replace_frontmatter_status(&content, status_str) else {
-        error!("Failed to locate status field in frontmatter of {task_path}");
-        return;
-    };
-
-    if let Err(e) = std::fs::write(task_path, updated) {
-        error!("Failed to write updated task status to {task_path}: {e}");
-    } else {
-        debug!("Updated task status to {status_str} in {task_path}");
-    }
-}
-
-/// Replace the `status: <value>` line in YAML frontmatter.
-/// Returns `None` if the frontmatter or status field cannot be found.
-fn replace_frontmatter_status(content: &str, new_status: &str) -> Option<String> {
-    // Frontmatter is delimited by `---\n` at start and `\n---\n` later
-    let rest = content.strip_prefix("---\n")?;
-    let end_idx = rest.find("\n---\n").or_else(|| rest.find("\n---"))?;
-    let frontmatter = &rest[..end_idx];
-
-    // Find and replace the status line
-    let mut found = false;
-    let new_fm: String = frontmatter
-        .lines()
-        .map(|line| {
-            if line.starts_with("status:") {
-                found = true;
-                format!("status: {new_status}")
-            } else {
-                line.to_owned()
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    if !found {
-        return None;
-    }
-
-    Some(format!("---\n{new_fm}{}", &rest[end_idx..]))
 }
 
 /// Type alias for the managed state.

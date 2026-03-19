@@ -38,3 +38,12 @@ export async function getRunStatus(): Promise<RunInfo | null> {
     throw e;
   }
 }
+
+export async function recoverRuns(worktreePaths: string[]): Promise<RunInfo[]> {
+  try {
+    return await invoke<RunInfo[]>('recover_runs_cmd', { worktreePaths });
+  } catch (e) {
+    logError(`recoverRuns failed: ${e}`);
+    throw e;
+  }
+}

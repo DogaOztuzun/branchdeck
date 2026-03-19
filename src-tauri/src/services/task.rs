@@ -5,6 +5,72 @@ use std::io::Write;
 use std::path::Path;
 use yaml_front_matter::YamlFrontMatter;
 
+/// Update the status field in a task.md file's YAML frontmatter.
+///
+/// Uses simple string replacement within the frontmatter section.
+/// Logs errors but does not propagate them — task status on disk is
+/// best-effort and must not break the run state machine.
+pub fn update_task_status(task_path: &str, new_status: TaskStatus) {
+    let status_str = match new_status {
+        TaskStatus::Created => "created",
+        TaskStatus::Running => "running",
+        TaskStatus::Blocked => "blocked",
+        TaskStatus::Succeeded => "succeeded",
+        TaskStatus::Failed => "failed",
+        TaskStatus::Cancelled => "cancelled",
+    };
+
+    let content = match std::fs::read_to_string(task_path) {
+        Ok(c) => c,
+        Err(e) => {
+            error!("Failed to read task file for status update {task_path}: {e}");
+            return;
+        }
+    };
+
+    let Some(updated) = replace_frontmatter_status(&content, status_str) else {
+        error!("Failed to locate status field in frontmatter of {task_path}");
+        return;
+    };
+
+    if let Err(e) = std::fs::write(task_path, updated) {
+        error!("Failed to write updated task status to {task_path}: {e}");
+    } else {
+        debug!("Updated task status to {status_str} in {task_path}");
+    }
+}
+
+/// Replace the `status: <value>` line in YAML frontmatter.
+/// Returns `None` if the frontmatter or status field cannot be found.
+#[must_use]
+pub fn replace_frontmatter_status(content: &str, new_status: &str) -> Option<String> {
+    // Frontmatter is delimited by `---\n` at start and `\n---\n` later
+    let rest = content.strip_prefix("---\n")?;
+    let end_idx = rest.find("\n---\n").or_else(|| rest.find("\n---"))?;
+    let frontmatter = &rest[..end_idx];
+
+    // Find and replace the status line
+    let mut found = false;
+    let new_fm: String = frontmatter
+        .lines()
+        .map(|line| {
+            if line.starts_with("status:") {
+                found = true;
+                format!("status: {new_status}")
+            } else {
+                line.to_owned()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    if !found {
+        return None;
+    }
+
+    Some(format!("---\n{new_fm}{}", &rest[end_idx..]))
+}
+
 const TASK_DIR: &str = ".branchdeck";
 const TASK_FILE: &str = "task.md";
 

@@ -1,6 +1,6 @@
 use crate::error::AppError;
 use crate::services::task;
-use log::{debug, error, info, warn};
+use log::{debug, error, info, trace, warn};
 use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -158,7 +158,7 @@ fn handle_file_change<R: tauri::Runtime>(handle: &tauri::AppHandle<R>, path: &Pa
         return;
     }
 
-    debug!("Task file changed: {}", path.display());
+    trace!("Task file changed: {}", path.display());
 
     let content = match std::fs::read_to_string(path) {
         Ok(c) => c,
@@ -171,7 +171,7 @@ fn handle_file_change<R: tauri::Runtime>(handle: &tauri::AppHandle<R>, path: &Pa
     let path_str = path.display().to_string();
     match task::parse_task_md(&content, &path_str) {
         Ok(task_info) => {
-            debug!("Emitting task:updated for {}", path.display());
+            trace!("Emitting task:updated for {}", path.display());
             if let Err(e) = handle.emit("task:updated", &task_info) {
                 error!("Failed to emit task:updated event: {e}");
             }

@@ -1,6 +1,7 @@
 use crate::error::AppError;
 use crate::models::run::{LaunchOptions, RunInfo};
 use crate::services::run_manager::{self, RunManagerState};
+use crate::services::run_state;
 use std::sync::Arc;
 use tauri::State;
 
@@ -34,4 +35,10 @@ pub async fn get_run_status_cmd(
 ) -> Result<Option<RunInfo>, AppError> {
     let rm = run_manager.lock().await;
     Ok(rm.get_status())
+}
+
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub fn recover_runs_cmd(worktree_paths: Vec<String>) -> Vec<RunInfo> {
+    run_state::scan_all_run_states(&worktree_paths)
 }

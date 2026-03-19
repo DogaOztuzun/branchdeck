@@ -3,6 +3,7 @@ import { batch } from 'solid-js';
 import { createStore, produce } from 'solid-js/store';
 import type { AssistantTextEvent, RunInfo, RunStepEvent, ToolCallEvent } from '../../types/run';
 import type { TaskInfo } from '../../types/task';
+import { getRunStatus } from '../commands/run';
 import { listTasks } from '../commands/task';
 
 const MAX_LOG_ENTRIES = 200;
@@ -60,6 +61,16 @@ function createTaskStore() {
     } catch {
       // Tasks that fail to load are silently skipped
     }
+
+    // Check if there is an active run that was recovered on startup
+    try {
+      const runStatus = await getRunStatus();
+      if (runStatus) {
+        setState('activeRun', runStatus);
+      }
+    } catch {
+      // Run status check is best-effort
+    }
   }
 
   function handleTaskUpdated(task: TaskInfo) {
@@ -107,12 +118,14 @@ function createTaskStore() {
         break;
     }
 
+    const truncated = detail.length > 500 ? `${detail.slice(0, 497)}...` : detail;
+
     setState(
       produce((s) => {
         const entry: RunLogEntry = {
           id: `${++logCounter}`,
           type,
-          detail,
+          detail: truncated,
           sessionId: event.sessionId,
           ts: Date.now(),
         };
