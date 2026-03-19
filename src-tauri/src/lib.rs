@@ -235,6 +235,10 @@ pub fn run() {
             };
 
             log::info!("Sidecar path resolved to: {}", sidecar_path.display());
+            let sidecar_dir = sidecar_path
+                .parent()
+                .unwrap_or(std::path::Path::new("."))
+                .to_path_buf();
             app.manage(services::run_manager::create_run_manager_state(
                 sidecar_path,
                 Arc::clone(&event_bus),
@@ -254,6 +258,40 @@ pub fn run() {
                                 let knowledge_service = Arc::new(knowledge_service);
                                 knowledge_service.start_subscriber(&event_bus);
                                 app.manage(Arc::clone(&knowledge_service));
+
+                                // Start MCP TCP endpoint and configure settings.json
+                                let mcp_ks = Arc::clone(&knowledge_service);
+                                let (mcp_tx, mcp_rx) = tokio::sync::oneshot::channel();
+                                tauri::async_runtime::spawn(async move {
+                                    services::knowledge_mcp::start(mcp_ks, mcp_tx).await;
+                                });
+
+                                let mcp_sidecar = sidecar_dir.join("knowledge-mcp.js");
+
+                                tauri::async_runtime::spawn(async move {
+                                    match mcp_rx.await {
+                                        Ok(Ok(port)) => {
+                                            log::info!(
+                                                "Knowledge MCP endpoint ready on port {port}"
+                                            );
+                                            if let Err(e) =
+                                                services::hook_config::install_mcp_config(
+                                                    port,
+                                                    &mcp_sidecar,
+                                                )
+                                            {
+                                                log::warn!("Failed to install MCP config: {e}");
+                                            }
+                                        }
+                                        Ok(Err(e)) => {
+                                            log::warn!("Knowledge MCP endpoint failed: {e}");
+                                        }
+                                        Err(_) => {
+                                            log::warn!("Knowledge MCP startup channel dropped");
+                                        }
+                                    }
+                                });
+
                                 log::info!("Knowledge service initialized");
                             }
                             Err(e) => {
@@ -335,6 +373,12 @@ pub fn run() {
                     if let Ok(mut manager) = run_state.try_lock() {
                         manager.shutdown(app_handle);
                     }
+                }
+
+                // Clean up MCP config from settings.json
+                #[cfg(feature = "knowledge")]
+                if let Err(e) = services::hook_config::remove_mcp_config() {
+                    log::warn!("Failed to remove MCP config on shutdown: {e}");
                 }
 
                 // Close all terminal sessions
