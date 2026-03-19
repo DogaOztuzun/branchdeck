@@ -260,14 +260,13 @@ pub fn run() {
                                 app.manage(Arc::clone(&knowledge_service));
 
                                 // Start MCP TCP endpoint and configure settings.json
-                                let mcp_ks = Arc::clone(&knowledge_service);
-                                let (mcp_tx, mcp_rx) = tokio::sync::oneshot::channel();
-                                tauri::async_runtime::spawn(async move {
-                                    services::knowledge_mcp::start(mcp_ks, mcp_tx).await;
-                                });
-
                                 let mcp_sidecar = sidecar_dir.join("knowledge-mcp.js");
                                 if mcp_sidecar.exists() {
+                                    let mcp_ks = Arc::clone(&knowledge_service);
+                                    let (mcp_tx, mcp_rx) = tokio::sync::oneshot::channel();
+                                    tauri::async_runtime::spawn(async move {
+                                        services::knowledge_mcp::start(mcp_ks, mcp_tx).await;
+                                    });
                                     tauri::async_runtime::spawn(async move {
                                         match mcp_rx.await {
                                             Ok(Ok(port)) => {

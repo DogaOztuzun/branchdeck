@@ -158,6 +158,10 @@ async fn handle_remember(knowledge: &KnowledgeService, body: &str) -> Result<Str
     let req: RememberReq =
         serde_json::from_str(body).map_err(|e| format!("invalid remember request: {e}"))?;
 
+    if req.content.trim().is_empty() {
+        return Err("content must not be empty".to_string());
+    }
+
     let id = knowledge
         .ingest_explicit(
             &req.repo_path,
@@ -235,7 +239,12 @@ async fn respond_json(
     status: u16,
     body: &str,
 ) -> Result<(), String> {
-    let status_text = if status == 200 { "OK" } else { "Bad Request" };
+    let status_text = match status {
+        200 => "OK",
+        400 => "Bad Request",
+        404 => "Not Found",
+        _ => "Internal Server Error",
+    };
     let response = format!(
         "HTTP/1.1 {status} {status_text}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
         body.len()
