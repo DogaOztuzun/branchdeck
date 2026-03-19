@@ -26,7 +26,7 @@ type TaskStoreState = {
   tasksByWorktree: Record<string, TaskInfo>;
   activeRun: RunInfo | null;
   runLog: RunLogEntry[];
-  pendingPermission: PermissionRequestEvent | null;
+  pendingPermissions: PermissionRequestEvent[];
 };
 
 function normalizePath(p: string): string {
@@ -48,7 +48,7 @@ function createTaskStore() {
     tasksByWorktree: {},
     activeRun: null,
     runLog: [],
-    pendingPermission: null,
+    pendingPermissions: [],
   });
 
   let logCounter = 0;
@@ -87,15 +87,31 @@ function createTaskStore() {
   }
 
   function handlePermissionRequest(perm: PermissionRequestEvent) {
-    setState('pendingPermission', perm);
+    setState(
+      produce((s) => {
+        // Avoid duplicates
+        if (!s.pendingPermissions.some((p) => p.toolUseId === perm.toolUseId)) {
+          s.pendingPermissions.push(perm);
+        }
+      }),
+    );
+  }
+
+  function removePermission(toolUseId: string) {
+    setState(
+      produce((s) => {
+        const idx = s.pendingPermissions.findIndex((p) => p.toolUseId === toolUseId);
+        if (idx !== -1) s.pendingPermissions.splice(idx, 1);
+      }),
+    );
   }
 
   function handleRunStatusChanged(run: RunInfo) {
     batch(() => {
       setState('activeRun', run);
-      // Clear pending permission when status leaves blocked
-      if (run.status !== 'blocked') {
-        setState('pendingPermission', null);
+      // Clear all pending permissions when run completes
+      if (run.status !== 'blocked' && run.status !== 'running') {
+        setState('pendingPermissions', []);
       }
       setState(
         produce((s) => {
@@ -208,7 +224,7 @@ function createTaskStore() {
         s.tasksByWorktree = {};
         s.activeRun = null;
         s.runLog = [];
-        s.pendingPermission = null;
+        s.pendingPermissions = [];
       }),
     );
     logCounter = 0;
@@ -235,6 +251,7 @@ function createTaskStore() {
     clearAll,
     getRunDuration,
     hasTaskForWorktree,
+    removePermission,
   };
 }
 

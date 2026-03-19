@@ -54,7 +54,7 @@ pub fn handle_run_complete<R: tauri::Runtime>(
     active_run: &mut Option<RunInfo>,
     started_at_epoch_ms: &mut u64,
     last_activity_ms: &mut u64,
-    pending_permission: &mut Option<PendingPermission>,
+    pending_permissions: &mut std::collections::HashMap<String, PendingPermission>,
     cost_usd: Option<&f64>,
     app_handle: &tauri::AppHandle<R>,
 ) {
@@ -77,13 +77,13 @@ pub fn handle_run_complete<R: tauri::Runtime>(
     *active_run = None;
     *last_activity_ms = 0;
     *started_at_epoch_ms = 0;
-    *pending_permission = None;
+    pending_permissions.clear();
 }
 
 /// Handle a `PermissionRequest` response from the sidecar.
 pub fn handle_permission_request<R: tauri::Runtime>(
     active_run: &mut Option<RunInfo>,
-    pending_permission: &mut Option<PendingPermission>,
+    pending_permissions: &mut std::collections::HashMap<String, PendingPermission>,
     tool: Option<&String>,
     command: Option<&String>,
     tool_use_id: &str,
@@ -100,7 +100,7 @@ pub fn handle_permission_request<R: tauri::Runtime>(
         tool_use_id: tool_use_id.to_owned(),
         requested_at: now_epoch_ms(),
     };
-    *pending_permission = Some(pending.clone());
+    pending_permissions.insert(tool_use_id.to_owned(), pending.clone());
     if let Some(ref mut run) = active_run {
         run.status = RunStatus::Blocked;
         run_state::save_run_state(&run.task_path, run);
@@ -119,7 +119,7 @@ pub fn handle_run_error<R: tauri::Runtime>(
     active_run: &mut Option<RunInfo>,
     started_at_epoch_ms: &mut u64,
     last_activity_ms: &mut u64,
-    pending_permission: &mut Option<PendingPermission>,
+    pending_permissions: &mut std::collections::HashMap<String, PendingPermission>,
     err_msg: &str,
     status: &str,
     cost_usd: Option<&f64>,
@@ -150,5 +150,5 @@ pub fn handle_run_error<R: tauri::Runtime>(
     *active_run = None;
     *last_activity_ms = 0;
     *started_at_epoch_ms = 0;
-    *pending_permission = None;
+    pending_permissions.clear();
 }

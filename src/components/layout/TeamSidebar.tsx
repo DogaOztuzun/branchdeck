@@ -265,19 +265,20 @@ export function TeamSidebar() {
         />
       </Show>
 
-      {/* Permission Approval Dialog */}
-      <Show when={taskStore.state.pendingPermission}>
+      {/* Permission Approval Dialogs */}
+      <For each={taskStore.state.pendingPermissions}>
         {(perm) => (
           <div class="border-b border-border">
             <ApprovalDialog
-              permission={perm()}
+              permission={perm}
               onRespond={(decision) => {
-                respondToPermission(perm().toolUseId, decision).catch(() => {});
+                taskStore.removePermission(perm.toolUseId);
+                respondToPermission(perm.toolUseId, decision).catch(() => {});
               }}
             />
           </div>
         )}
-      </Show>
+      </For>
 
       {/* Active Agents */}
       <Show when={activeAgents().length > 0}>

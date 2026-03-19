@@ -1,5 +1,6 @@
 use crate::models::run::{PendingPermission, PermissionResponseMsg, RunInfo, RunStatus};
 use log::{error, warn};
+use std::collections::HashMap;
 use tauri::Emitter;
 use tokio::io::AsyncWriteExt;
 use tokio::process::ChildStdin;
@@ -32,47 +33,53 @@ pub fn check_run_stale(last_activity_ms: u64) -> bool {
     false
 }
 
-/// Check if a pending permission request has timed out.
-/// If timed out, sends an auto-deny to the sidecar, clears the pending permission,
-/// and resets the run status to Running.
+/// Check if any pending permission requests have timed out.
+/// If timed out, sends an auto-deny to the sidecar, removes from the map,
+/// and resets the run status to Running if no permissions remain.
 pub async fn check_permission_timeout<R: tauri::Runtime>(
-    pending_permission: &mut Option<PendingPermission>,
+    pending_permissions: &mut HashMap<String, PendingPermission>,
     active_run: &mut Option<RunInfo>,
-    stdin: Option<&mut ChildStdin>,
+    mut stdin: Option<&mut ChildStdin>,
     app_handle: &tauri::AppHandle<R>,
 ) {
-    let Some(perm) = pending_permission.as_ref() else {
-        return;
-    };
-
-    let now = now_epoch_ms();
-    let perm_elapsed = (now.saturating_sub(perm.requested_at)) / 1000;
-    if perm_elapsed < PERMISSION_TIMEOUT_SECS {
+    if pending_permissions.is_empty() {
         return;
     }
 
-    warn!("Permission request timed out for tool {:?}", perm.tool);
-    let tool_use_id = perm.tool_use_id.clone();
+    let now = now_epoch_ms();
+    let timed_out: Vec<String> = pending_permissions
+        .iter()
+        .filter(|(_, perm)| (now.saturating_sub(perm.requested_at)) / 1000 >= PERMISSION_TIMEOUT_SECS)
+        .map(|(id, _)| id.clone())
+        .collect();
 
-    // Auto-deny the timed-out permission
-    let deny_msg = PermissionResponseMsg::PermissionResponse {
-        tool_use_id,
-        decision: "deny".to_owned(),
-        reason: Some("Timed out after 5 minutes".to_owned()),
-    };
-    if let Some(stdin) = stdin {
-        if let Ok(json) = serde_json::to_string(&deny_msg) {
-            let bytes = format!("{json}\n");
-            if let Err(e) = stdin.write_all(bytes.as_bytes()).await {
-                error!("Failed to send auto-deny to sidecar: {e}");
+    for tool_use_id in &timed_out {
+        if let Some(perm) = pending_permissions.remove(tool_use_id) {
+            warn!("Permission request timed out for tool {:?}", perm.tool);
+
+            let deny_msg = PermissionResponseMsg::PermissionResponse {
+                tool_use_id: tool_use_id.clone(),
+                decision: "deny".to_owned(),
+                reason: Some("Timed out after 5 minutes".to_owned()),
+            };
+            if let Some(ref mut stdin) = stdin {
+                if let Ok(json) = serde_json::to_string(&deny_msg) {
+                    let bytes = format!("{json}\n");
+                    if let Err(e) = stdin.write_all(bytes.as_bytes()).await {
+                        error!("Failed to send auto-deny to sidecar: {e}");
+                    }
+                }
             }
         }
     }
-    *pending_permission = None;
-    if let Some(ref mut run) = active_run {
-        run.status = RunStatus::Running;
-        if let Err(e) = app_handle.emit("run:status_changed", &*run) {
-            error!("Failed to emit run:status_changed after permission timeout: {e}");
+
+    // If no permissions remain, restore run status to Running
+    if !timed_out.is_empty() && pending_permissions.is_empty() {
+        if let Some(ref mut run) = active_run {
+            run.status = RunStatus::Running;
+            if let Err(e) = app_handle.emit("run:status_changed", &*run) {
+                error!("Failed to emit run:status_changed after permission timeout: {e}");
+            }
         }
     }
 }

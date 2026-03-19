@@ -44,8 +44,8 @@ pub struct RunManager {
     last_activity_ms: u64,
     /// Epoch milliseconds when the current run started.
     started_at_epoch_ms: u64,
-    /// Pending permission request awaiting user decision.
-    pending_permission: Option<PendingPermission>,
+    /// Pending permission requests awaiting user decisions, keyed by tool_use_id.
+    pending_permissions: std::collections::HashMap<String, PendingPermission>,
 }
 
 impl RunManager {
@@ -58,7 +58,7 @@ impl RunManager {
             sidecar_path,
             last_activity_ms: 0,
             started_at_epoch_ms: 0,
-            pending_permission: None,
+            pending_permissions: std::collections::HashMap::new(),
         }
     }
 
@@ -161,7 +161,7 @@ impl RunManager {
         }
 
         run_stale::check_permission_timeout(
-            &mut self.pending_permission,
+            &mut self.pending_permissions,
             &mut self.active_run,
             self.stdin.as_mut(),
             app_handle,
@@ -212,7 +212,7 @@ impl RunManager {
                     &mut self.active_run,
                     &mut self.started_at_epoch_ms,
                     &mut self.last_activity_ms,
-                    &mut self.pending_permission,
+                    &mut self.pending_permissions,
                     cost_usd.as_ref(),
                     app_handle,
                 );
@@ -229,7 +229,7 @@ impl RunManager {
                 }
                 run_responses::handle_permission_request(
                     &mut self.active_run,
-                    &mut self.pending_permission,
+                    &mut self.pending_permissions,
                     tool.as_ref(),
                     command.as_ref(),
                     tool_use_id,
@@ -250,7 +250,7 @@ impl RunManager {
                     &mut self.active_run,
                     &mut self.started_at_epoch_ms,
                     &mut self.last_activity_ms,
-                    &mut self.pending_permission,
+                    &mut self.pending_permissions,
                     err_msg,
                     status,
                     cost_usd.as_ref(),
@@ -290,7 +290,7 @@ impl RunManager {
         self.stdin = None;
         self.last_activity_ms = 0;
         self.started_at_epoch_ms = 0;
-        self.pending_permission = None;
+        self.pending_permissions.clear();
     }
 
     /// Shut down the run manager during app exit.
@@ -351,19 +351,10 @@ impl RunManager {
         decision: &str,
         reason: Option<&str>,
     ) -> Result<(), AppError> {
-        let pending = self.pending_permission.take().ok_or_else(|| {
-            error!("No pending permission to respond to");
-            AppError::RunError("No pending permission request".to_owned())
+        let pending = self.pending_permissions.remove(tool_use_id).ok_or_else(|| {
+            error!("No pending permission for tool_use_id: {tool_use_id}");
+            AppError::RunError("No matching pending permission request".to_owned())
         })?;
-
-        if pending.tool_use_id != tool_use_id {
-            // Restore the pending permission since it didn't match
-            self.pending_permission = Some(pending);
-            error!("Permission response tool_use_id mismatch: expected different id");
-            return Err(AppError::RunError(
-                "Permission tool_use_id mismatch".to_owned(),
-            ));
-        }
 
         info!(
             "Responding to permission for tool {:?}: {decision}",
