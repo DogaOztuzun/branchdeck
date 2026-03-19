@@ -39,13 +39,19 @@ function createAgentStore() {
   let listenPromise: Promise<() => void> | null = null;
 
   let isKnownTab: ((tabId: string) => boolean) | null = null;
+  const extraTabs = new Set<string>();
 
   function setTabFilter(fn: (tabId: string) => boolean) {
     isKnownTab = fn;
   }
 
+  function includeTab(tabId: string) {
+    extraTabs.add(tabId);
+  }
+
   function handleEvent(event: AgentEvent) {
-    if (isKnownTab && !isKnownTab(event.tabId)) return;
+    const known = extraTabs.has(event.tabId) || isKnownTab?.(event.tabId);
+    if (!known) return;
 
     batch(() => {
       const entry: AgentLogEntry = {
@@ -131,6 +137,7 @@ function createAgentStore() {
   }
 
   function removeTab(tabId: string) {
+    extraTabs.delete(tabId);
     setState(
       produce((s) => {
         delete s.agentsByTab[tabId];
@@ -151,6 +158,7 @@ function createAgentStore() {
     startListening,
     stopListening,
     setTabFilter,
+    includeTab,
     removeTab,
     getTabAgent,
     getLogForTab,

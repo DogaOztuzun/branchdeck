@@ -8,3 +8,5 @@ pub use repo::{
 pub use session::{PtyEvent, PtySession, SessionId};
 
 pub mod agent;
+pub mod run;
+pub mod task;

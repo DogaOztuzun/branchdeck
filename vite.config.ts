@@ -19,7 +19,7 @@ export default defineConfig(async () => ({
         }
       : undefined,
     watch: {
-      ignored: ['**/src-tauri/**', '**/.claude/**'],
+      ignored: ['**/src-tauri/**', '**/.claude/**', '**/.branchdeck/**', '**/sidecar/**'],
     },
   },
 }));

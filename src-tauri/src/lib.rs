@@ -4,11 +4,12 @@ pub mod models;
 pub mod services;
 
 use std::sync::{Arc, Mutex};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tauri_plugin_log::{Target, TargetKind};
 
-const HOOK_RECEIVER_PORT: u16 = 13_370;
+pub const HOOK_RECEIVER_PORT: u16 = 13_370;
 const ACTIVITY_GC_TTL_MS: u64 = 300_000; // 5 minutes
+const STALE_CHECK_INTERVAL_SECS: u64 = 30;
 
 fn init_agent_config() -> commands::agent::AgentMonitorConfig {
     match services::hook_config::ensure_notify_script() {
@@ -30,6 +31,130 @@ fn init_agent_config() -> commands::agent::AgentMonitorConfig {
             }
         }
     }
+}
+
+/// Scan all worktrees for stale `run.json` files from a previous session.
+///
+/// Active runs (Starting/Running/Blocked) are marked failed and their
+/// task.md is updated. Terminal runs (Succeeded/Failed/Cancelled) just
+/// have their run.json deleted. Emits `task:updated` events so the
+/// frontend picks up corrected task statuses.
+fn recover_stale_runs(app_handle: &tauri::AppHandle) {
+    let config = match services::config::load_global_config() {
+        Ok(c) => c,
+        Err(e) => {
+            log::warn!("Recovery: failed to load global config, skipping: {e}");
+            return;
+        }
+    };
+
+    if config.repos.is_empty() {
+        log::debug!("Recovery: no repos configured, nothing to scan");
+        return;
+    }
+
+    let mut worktree_paths: Vec<String> = Vec::new();
+    for repo_path in &config.repos {
+        match services::git::list_worktrees(std::path::Path::new(repo_path)) {
+            Ok(worktrees) => {
+                for wt in worktrees {
+                    worktree_paths.push(wt.path.display().to_string());
+                }
+            }
+            Err(e) => {
+                log::error!("Recovery: failed to list worktrees for {repo_path}: {e}");
+            }
+        }
+    }
+
+    let stale_runs = services::run_state::scan_all_run_states(&worktree_paths);
+    if stale_runs.is_empty() {
+        log::debug!("Recovery: no stale run states found");
+        return;
+    }
+
+    log::info!("Recovery: found {} stale run state(s)", stale_runs.len());
+
+    for run_info in stale_runs {
+        match run_info.status {
+            models::run::RunStatus::Starting
+            | models::run::RunStatus::Running
+            | models::run::RunStatus::Blocked => {
+                log::info!(
+                    "Recovery: marking orphaned run as failed for task {}",
+                    run_info.task_path
+                );
+
+                // Update task.md to failed status
+                services::task::update_task_status(
+                    &run_info.task_path,
+                    models::task::TaskStatus::Failed,
+                );
+
+                // Emit a task:updated event so the frontend refreshes
+                emit_task_updated(app_handle, &run_info.task_path);
+
+                // Emit a run:status_changed with failed status
+                let mut failed_run = run_info.clone();
+                failed_run.status = models::run::RunStatus::Failed;
+                if let Err(e) = app_handle.emit("run:status_changed", &failed_run) {
+                    log::error!("Recovery: failed to emit run:status_changed: {e}");
+                }
+
+                // Clean up run.json
+                services::run_state::delete_run_state(&run_info.task_path);
+            }
+            models::run::RunStatus::Succeeded
+            | models::run::RunStatus::Failed
+            | models::run::RunStatus::Cancelled
+            | models::run::RunStatus::Created => {
+                log::debug!(
+                    "Recovery: cleaning up terminal run state for task {}",
+                    run_info.task_path
+                );
+                services::run_state::delete_run_state(&run_info.task_path);
+            }
+        }
+    }
+}
+
+/// Emit a `task:updated` event by re-reading the task file.
+fn emit_task_updated(app_handle: &tauri::AppHandle, task_path: &str) {
+    // Derive worktree path from task path (strip .branchdeck/task.md)
+    let wt_path = std::path::Path::new(task_path)
+        .parent() // .branchdeck/
+        .and_then(std::path::Path::parent); // worktree root
+
+    if let Some(wt) = wt_path {
+        match services::task::get_task(&wt.display().to_string()) {
+            Ok(task_info) => {
+                if let Err(e) = app_handle.emit("task:updated", &task_info) {
+                    log::error!("Recovery: failed to emit task:updated: {e}");
+                }
+            }
+            Err(e) => {
+                log::warn!("Recovery: failed to read task for event emission: {e}");
+            }
+        }
+    }
+}
+
+fn start_stale_checker(app: &tauri::App) {
+    let run_state: services::run_manager::RunManagerState = app
+        .state::<services::run_manager::RunManagerState>()
+        .inner()
+        .clone();
+    let app_handle = app.handle().clone();
+    tauri::async_runtime::spawn(async move {
+        let mut interval =
+            tokio::time::interval(std::time::Duration::from_secs(STALE_CHECK_INTERVAL_SECS));
+        loop {
+            interval.tick().await;
+            let mut manager = run_state.lock().await;
+            manager.check_stale(&app_handle).await;
+        }
+    });
+    log::info!("Stale run checker started (interval: {STALE_CHECK_INTERVAL_SECS}s)");
 }
 
 fn setup_agent_monitoring(
@@ -62,7 +187,7 @@ fn setup_agent_monitoring(
 ///
 /// Panics if the Tauri application fails to initialize.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
-#[allow(clippy::expect_used)]
+#[allow(clippy::expect_used, clippy::too_many_lines)]
 pub fn run() {
     let event_bus = Arc::new(services::event_bus::EventBus::new());
     let activity_store = Arc::new(services::activity_store::ActivityStore::new());
@@ -85,8 +210,34 @@ pub fn run() {
         .manage(Arc::clone(&activity_store))
         .manage(Arc::clone(&event_bus))
         .manage(init_agent_config())
+        .manage(services::task_watcher::create_watcher_state())
         .setup(move |app| {
+            let dev_path = || {
+                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .parent()
+                    .expect("CARGO_MANIFEST_DIR has parent")
+                    .join("sidecar/agent-bridge.js")
+            };
+            let sidecar_path = app
+                .path()
+                .resource_dir()
+                .map_or_else(|_| dev_path(), |dir| dir.join("sidecar/agent-bridge.js"));
+
+            // If the resource-dir resolved path doesn't exist, fall back to dev path
+            let sidecar_path = if sidecar_path.exists() {
+                sidecar_path
+            } else {
+                dev_path()
+            };
+
+            log::info!("Sidecar path resolved to: {}", sidecar_path.display());
+            app.manage(services::run_manager::create_run_manager_state(
+                sidecar_path,
+            ));
+
+            recover_stale_runs(app.handle());
             setup_agent_monitoring(app, &event_bus, &activity_store);
+            start_stale_checker(app);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -122,9 +273,35 @@ pub fn run() {
             commands::agent::list_agent_definitions,
             commands::agent::install_agent_hooks,
             commands::agent::remove_agent_hooks,
+            // Run
+            commands::run::launch_run_cmd,
+            commands::run::cancel_run_cmd,
+            commands::run::get_run_status_cmd,
+            commands::run::recover_runs_cmd,
+            commands::run::retry_run_cmd,
+            commands::run::resume_run_cmd,
+            commands::run::respond_to_permission_cmd,
+            // Task
+            commands::task::create_task_cmd,
+            commands::task::get_task_cmd,
+            commands::task::list_tasks_cmd,
+            commands::task::start_task_watcher,
+            commands::task::stop_task_watcher,
+            commands::task::watch_task_path,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
+                // Shut down RunManager: kill sidecar, mark active run failed, clean up run.json
+                if let Some(run_state) =
+                    window.try_state::<services::run_manager::RunManagerState>()
+                {
+                    let app_handle = window.app_handle();
+                    if let Ok(mut manager) = run_state.try_lock() {
+                        manager.shutdown(app_handle);
+                    }
+                }
+
+                // Close all terminal sessions
                 if let Some(state) =
                     window.try_state::<Mutex<services::terminal::TerminalService>>()
                 {
