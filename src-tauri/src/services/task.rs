@@ -302,7 +302,6 @@ pub fn parse_task_md(content: &str, path: &str) -> Result<TaskInfo, AppError> {
 ///
 /// Best-effort: logs errors but never propagates them. Run completion
 /// must not be blocked by artifact capture failures.
-#[allow(clippy::cast_possible_truncation)]
 pub fn capture_run_artifacts(task_path: &str, status: &str, started_at_epoch_ms: u64) {
     // Derive worktree path from task path (strip .branchdeck/task.md)
     let Some(wt_path) = Path::new(task_path).parent().and_then(Path::parent) else {
@@ -347,9 +346,9 @@ pub fn capture_run_artifacts(task_path: &str, status: &str, started_at_epoch_ms:
         .and_then(|h| h.shorthand().map(String::from))
         .unwrap_or_else(|| "HEAD".to_string());
 
-    let head_sha = head_ref
-        .and_then(|h| h.peel_to_commit().ok())
-        .map(|c| c.id().to_string());
+    let head_commit = head_ref.and_then(|h| h.peel_to_commit().ok());
+
+    let head_sha = head_commit.as_ref().map(|c| c.id().to_string());
 
     let short_sha = head_sha
         .as_deref()
@@ -358,10 +357,11 @@ pub fn capture_run_artifacts(task_path: &str, status: &str, started_at_epoch_ms:
     // Collect commits made during this run (since started_at_epoch_ms).
     // If started_at_epoch_ms is 0 (run crashed before session started), skip
     // commit collection to avoid dumping unrelated historical commits.
-    let commits = if started_at_epoch_ms > 0 {
-        collect_recent_commits(&repo, started_at_epoch_ms)
-    } else {
-        Vec::new()
+    let commits = match (&head_commit, started_at_epoch_ms) {
+        (Some(commit), ms) if ms > 0 => {
+            collect_recent_commits(&repo, commit.id(), started_at_epoch_ms)
+        }
+        _ => Vec::new(),
     };
 
     // Format the artifact block
@@ -391,11 +391,12 @@ pub fn capture_run_artifacts(task_path: &str, status: &str, started_at_epoch_ms:
 
 /// Collect one-line summaries of commits made since `since_epoch_ms`.
 /// Returns at most 20 commits to avoid bloating task.md.
-fn collect_recent_commits(repo: &Repository, since_epoch_ms: u64) -> Vec<String> {
+fn collect_recent_commits(
+    repo: &Repository,
+    head_oid: git2::Oid,
+    since_epoch_ms: u64,
+) -> Vec<String> {
     let mut commits = Vec::new();
-    let Ok(head) = repo.head().and_then(|h| h.peel_to_commit()) else {
-        return commits;
-    };
 
     let Ok(mut revwalk) = repo.revwalk() else {
         return commits;
@@ -403,7 +404,7 @@ fn collect_recent_commits(repo: &Repository, since_epoch_ms: u64) -> Vec<String>
 
     revwalk.set_sorting(git2::Sort::TIME).ok();
 
-    if revwalk.push(head.id()).is_err() {
+    if revwalk.push(head_oid).is_err() {
         return commits;
     }
 
@@ -431,7 +432,7 @@ fn collect_recent_commits(repo: &Repository, since_epoch_ms: u64) -> Vec<String>
 /// Append an artifact block to the `## Artifacts` section of task.md.
 /// Creates the section if it doesn't exist.
 fn append_artifacts_section(content: &str, task_path: &str, block: &str) {
-    let updated = if content.contains("\n## Artifacts\n") {
+    let updated = if content.contains("## Artifacts") {
         // Section exists — append at the end of the file
         format!("{content}{block}")
     } else {
