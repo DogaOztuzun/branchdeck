@@ -34,7 +34,7 @@ function normalizePath(p: string): string {
   return p.endsWith('/') ? p : `${p}/`;
 }
 
-function worktreePathFromTaskPath(taskPath: string): string {
+export function worktreePathFromTaskPath(taskPath: string): string {
   // Task path is like /foo/bar/.branchdeck/task.md — strip the suffix
   // Normalize to trailing slash to match worktree paths from git
   const suffix = '.branchdeck/task.md';
