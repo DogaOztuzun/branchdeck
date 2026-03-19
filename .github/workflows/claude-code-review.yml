@@ -43,12 +43,20 @@ jobs:
             - Logging: every service function must follow the structured logging convention
             - Performance: no hot-path debug! logging, no unnecessary clones
 
-            Instructions:
-            - Use `gh pr diff ${{ github.event.pull_request.number }}` to read the full diff
-            - Use `mcp__github_inline_comment__create_inline_comment` (with `confirmed: true`) for specific code issues
-            - Post a single summary via `gh pr comment ${{ github.event.pull_request.number }}` at the end
-            - If no issues found, still post a short summary confirming the PR looks good
+            Process:
+            1. Read the full diff: `gh pr diff ${{ github.event.pull_request.number }}`
+            2. Read ALL existing review comments: `gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments` — do NOT re-report anything already raised or acknowledged by the author
+            3. Read the changed files fully (not just the diff) to understand context
+            4. Review EVERY changed file systematically — do not stop after finding a few issues
+            5. Post inline comments with `mcp__github_inline_comment__create_inline_comment` (with `confirmed: true`)
+            6. Post a single summary via `gh pr comment ${{ github.event.pull_request.number }}`
+
+            Rules:
+            - Be exhaustive — review all files in one pass, do not leave files unreviewed
+            - NEVER re-report an issue that already has an inline comment from a previous review
+            - If the author replied to a finding explaining it's intentional, respect that and skip it
+            - If no new issues found, post a short summary confirming the changes look good
             - Be concise — skip praise, focus on actionable findings
 
           claude_args: |
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Glob,Grep" --max-turns 25
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh api:*),Read,Glob,Grep" --max-turns 100
