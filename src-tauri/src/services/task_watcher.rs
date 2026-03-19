@@ -2,8 +2,9 @@ use crate::error::AppError;
 use crate::services::task;
 use log::{debug, error, info, trace, warn};
 use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 use tauri::Emitter;
 use tokio::sync::Mutex;
@@ -11,6 +12,10 @@ use tokio::sync::Mutex;
 const TASK_DIR: &str = ".branchdeck";
 const TASK_FILE: &str = "task.md";
 const DEBOUNCE_MS: u64 = 500;
+
+/// Tracks content hashes to avoid re-emitting unchanged task files.
+/// Uses a simple content length + first/last bytes as a fast fingerprint.
+type ContentCache = Arc<StdMutex<HashMap<PathBuf, u64>>>;
 
 pub struct TaskWatcher {
     watcher: Option<notify_debouncer_mini::Debouncer<notify::RecommendedWatcher>>,
@@ -40,6 +45,7 @@ impl TaskWatcher {
         self.stop();
 
         let handle = app_handle.clone();
+        let cache: ContentCache = Arc::new(StdMutex::new(HashMap::new()));
 
         let mut debouncer = new_debouncer(
             Duration::from_millis(DEBOUNCE_MS),
@@ -50,8 +56,9 @@ impl TaskWatcher {
                             if event.kind == DebouncedEventKind::Any {
                                 let path = event.path.clone();
                                 let h = handle.clone();
+                                let c = Arc::clone(&cache);
                                 tauri::async_runtime::spawn(async move {
-                                    handle_file_change(&h, &path);
+                                    handle_file_change(&h, &path, &c);
                                 });
                             }
                         }
@@ -152,13 +159,25 @@ impl Default for TaskWatcher {
     }
 }
 
-fn handle_file_change<R: tauri::Runtime>(handle: &tauri::AppHandle<R>, path: &Path) {
+/// Simple hash for content change detection.
+fn content_hash(content: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    content.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn handle_file_change<R: tauri::Runtime>(
+    handle: &tauri::AppHandle<R>,
+    path: &Path,
+    cache: &ContentCache,
+) {
     let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     if file_name != TASK_FILE {
         return;
     }
 
-    trace!("Task file changed: {}", path.display());
+    trace!("Task file change event: {}", path.display());
 
     let content = match std::fs::read_to_string(path) {
         Ok(c) => c,
@@ -168,10 +187,26 @@ fn handle_file_change<R: tauri::Runtime>(handle: &tauri::AppHandle<R>, path: &Pa
         }
     };
 
+    // Skip if content hasn't actually changed
+    let hash = content_hash(&content);
+    {
+        let Ok(mut map) = cache.lock() else {
+            warn!("Content cache lock poisoned, skipping dedup");
+            return;
+        };
+        if let Some(prev) = map.get(path) {
+            if *prev == hash {
+                trace!("Task file unchanged, skipping emit: {}", path.display());
+                return;
+            }
+        }
+        map.insert(path.to_path_buf(), hash);
+    }
+
     let path_str = path.display().to_string();
     match task::parse_task_md(&content, &path_str) {
         Ok(task_info) => {
-            trace!("Emitting task:updated for {}", path.display());
+            debug!("Emitting task:updated for {}", path.display());
             if let Err(e) = handle.emit("task:updated", &task_info) {
                 error!("Failed to emit task:updated event: {e}");
             }

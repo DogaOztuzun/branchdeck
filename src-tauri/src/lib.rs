@@ -212,7 +212,10 @@ pub fn run() {
         .manage(init_agent_config())
         .manage(services::task_watcher::create_watcher_state())
         .manage(services::run_manager::create_run_manager_state(
-            std::path::PathBuf::from("sidecar/agent-bridge.js"),
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .parent()
+                .expect("CARGO_MANIFEST_DIR has parent")
+                .join("sidecar/agent-bridge.js"),
         ))
         .setup(move |app| {
             recover_stale_runs(app.handle());
