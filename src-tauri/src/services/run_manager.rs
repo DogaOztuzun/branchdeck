@@ -1,10 +1,9 @@
 use crate::error::AppError;
 use crate::models::run::{
-    LaunchOptions, PendingPermission, PermissionResponseMsg, RunInfo, RunStatus, SidecarRequest,
-    SidecarResponse,
+    LaunchOptions, PendingPermission, RunInfo, RunStatus, SidecarRequest, SidecarResponse,
 };
 use crate::models::task::TaskStatus;
-use crate::services::{run_state, task};
+use crate::services::{run_responses, run_stale, run_state, task};
 use log::{debug, error, info, warn};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -15,8 +14,9 @@ use tokio::process::{Child, ChildStdin};
 use tokio::sync::Mutex;
 
 /// Get the current time as epoch milliseconds.
+#[must_use]
 #[allow(clippy::cast_possible_truncation)]
-fn now_epoch_ms() -> u64 {
+pub fn now_epoch_ms() -> u64 {
     // Truncation from u128 won't occur before year ~584 million
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -34,12 +34,6 @@ fn epoch_ms_to_rfc3339(epoch_ms: u64) -> String {
         .unwrap_or_default()
         .to_rfc3339()
 }
-
-/// Stale threshold: if no heartbeat or activity for this many seconds, mark run failed.
-const STALE_THRESHOLD_SECS: u64 = 120;
-
-/// Permission timeout: auto-deny if no response within this many seconds.
-const PERMISSION_TIMEOUT_SECS: u64 = 300;
 
 pub struct RunManager {
     process: Option<Child>,
@@ -153,79 +147,30 @@ impl RunManager {
         self.last_activity_ms = now_epoch_ms();
     }
 
-    /// Check if the active run is stale (no activity for `STALE_THRESHOLD_SECS`).
+    /// Check if the active run is stale (no activity for the stale threshold).
     /// If stale, marks the run as failed with a "stalled" reason.
+    /// Also checks for permission request timeouts.
     pub async fn check_stale<R: tauri::Runtime>(&mut self, app_handle: &tauri::AppHandle<R>) {
         if self.active_run.is_none() {
             return;
         }
 
-        if self.last_activity_ms == 0 {
-            return;
-        }
-
-        let now = now_epoch_ms();
-        let elapsed_secs = (now.saturating_sub(self.last_activity_ms)) / 1000;
-
-        if elapsed_secs >= STALE_THRESHOLD_SECS {
-            warn!(
-                "Stale run detected: no activity for {elapsed_secs}s (threshold: {STALE_THRESHOLD_SECS}s)"
-            );
+        if run_stale::check_run_stale(self.last_activity_ms) {
             self.mark_run_failed_with_reason(app_handle, "stalled: no heartbeat for 120s");
             return;
         }
 
-        // Check permission timeout
-        if let Some(ref perm) = self.pending_permission {
-            let perm_elapsed = (now.saturating_sub(perm.requested_at)) / 1000;
-            if perm_elapsed >= PERMISSION_TIMEOUT_SECS {
-                warn!(
-                    "Permission request timed out after {perm_elapsed}s for tool {:?}",
-                    perm.tool
-                );
-                let tool_use_id = perm.tool_use_id.clone();
-                // Auto-deny the timed-out permission
-                let deny_msg = PermissionResponseMsg::PermissionResponse {
-                    tool_use_id,
-                    decision: "deny".to_owned(),
-                    reason: Some("Timed out after 5 minutes".to_owned()),
-                };
-                if let Some(stdin) = self.stdin.as_mut() {
-                    if let Ok(json) = serde_json::to_string(&deny_msg) {
-                        let bytes = format!("{json}\n");
-                        if let Err(e) = stdin.write_all(bytes.as_bytes()).await {
-                            error!("Failed to send auto-deny to sidecar: {e}");
-                        }
-                    }
-                }
-                self.pending_permission = None;
-                if let Some(ref mut run) = self.active_run {
-                    run.status = RunStatus::Running;
-                    if let Err(e) = app_handle.emit("run:status_changed", &*run) {
-                        error!("Failed to emit run:status_changed after permission timeout: {e}");
-                    }
-                }
-            }
-        }
-    }
-
-    /// Check if a response's `session_id` matches the active run's `session_id`.
-    /// Returns `true` if they match or if either is `None` (not yet assigned).
-    /// Returns `false` (mismatch) only when both are `Some` and differ.
-    fn session_matches(&self, response_session_id: Option<&String>) -> bool {
-        if let (Some(active_sid), Some(resp_sid)) = (
-            self.active_run.as_ref().and_then(|r| r.session_id.as_ref()),
-            response_session_id,
-        ) {
-            if active_sid != resp_sid {
-                return false;
-            }
-        }
-        true
+        run_stale::check_permission_timeout(
+            &mut self.pending_permission,
+            &mut self.active_run,
+            self.stdin.as_mut(),
+            app_handle,
+        )
+        .await;
     }
 
     /// Update the active run from a sidecar response.
-    #[allow(clippy::too_many_lines)]
+    /// Dispatches to handler functions in `run_responses`.
     pub fn handle_response<R: tauri::Runtime>(
         &mut self,
         response: &SidecarResponse,
@@ -236,65 +181,41 @@ impl RunManager {
 
         match response {
             SidecarResponse::Heartbeat { session_id } => {
-                if !self.session_matches(session_id.as_ref()) {
+                if !run_responses::session_matches(self.active_run.as_ref(), session_id.as_ref()) {
                     warn!("Ignoring heartbeat with mismatched session_id: {session_id:?}");
                     return;
                 }
                 debug!("Heartbeat received");
             }
             SidecarResponse::SessionStarted { session_id } => {
-                if let Some(ref mut run) = self.active_run {
-                    run.session_id = Some(session_id.clone());
-                    run.status = RunStatus::Running;
-                    info!("Run session started: {session_id}");
-                    task::update_task_status(&run.task_path, TaskStatus::Running);
-                    run_state::save_run_state(&run.task_path, run);
-                    if let Err(e) = app_handle.emit("run:status_changed", &*run) {
-                        error!("Failed to emit run:status_changed: {e}");
-                    }
-                }
+                run_responses::handle_session_started(&mut self.active_run, session_id, app_handle);
             }
             SidecarResponse::RunStep { session_id, .. }
             | SidecarResponse::AssistantText { session_id, .. }
             | SidecarResponse::ToolCall { session_id, .. } => {
-                if !self.session_matches(session_id.as_ref()) {
+                if !run_responses::session_matches(self.active_run.as_ref(), session_id.as_ref()) {
                     warn!("Ignoring run step with mismatched session_id: {session_id:?}");
                     return;
                 }
-                if let Err(e) = app_handle.emit("run:step", response) {
-                    error!("Failed to emit run:step: {e}");
-                }
+                run_responses::handle_run_step(response, app_handle);
             }
             SidecarResponse::RunComplete {
                 cost_usd,
                 session_id,
                 ..
             } => {
-                if !self.session_matches(session_id.as_ref()) {
+                if !run_responses::session_matches(self.active_run.as_ref(), session_id.as_ref()) {
                     warn!("Ignoring run complete with mismatched session_id: {session_id:?}");
                     return;
                 }
-                if let Some(ref mut run) = self.active_run {
-                    run.status = RunStatus::Succeeded;
-                    if let Some(cost) = cost_usd {
-                        run.cost_usd = *cost;
-                    }
-                    if self.started_at_epoch_ms > 0 {
-                        run.elapsed_secs =
-                            (now_epoch_ms().saturating_sub(self.started_at_epoch_ms)) / 1000;
-                    }
-                    info!("Run completed successfully, cost: ${:.4}", run.cost_usd);
-                    task::update_task_status(&run.task_path, TaskStatus::Succeeded);
-                    run_state::save_run_state(&run.task_path, run);
-                    run_state::delete_run_state(&run.task_path);
-                    if let Err(e) = app_handle.emit("run:status_changed", &*run) {
-                        error!("Failed to emit run:status_changed: {e}");
-                    }
-                }
-                self.active_run = None;
-                self.last_activity_ms = 0;
-                self.started_at_epoch_ms = 0;
-                self.pending_permission = None;
+                run_responses::handle_run_complete(
+                    &mut self.active_run,
+                    &mut self.started_at_epoch_ms,
+                    &mut self.last_activity_ms,
+                    &mut self.pending_permission,
+                    cost_usd.as_ref(),
+                    app_handle,
+                );
             }
             SidecarResponse::PermissionRequest {
                 tool,
@@ -302,34 +223,18 @@ impl RunManager {
                 tool_use_id,
                 session_id,
             } => {
-                if !self.session_matches(session_id.as_ref()) {
+                if !run_responses::session_matches(self.active_run.as_ref(), session_id.as_ref()) {
                     warn!("Ignoring permission request with mismatched session_id: {session_id:?}");
                     return;
                 }
-                if self.active_run.is_none() {
-                    warn!("Ignoring permission request: no active run");
-                    return;
-                }
-                info!(
-                    "Permission requested for tool {tool:?}, command: {command:?}, id: {tool_use_id}"
+                run_responses::handle_permission_request(
+                    &mut self.active_run,
+                    &mut self.pending_permission,
+                    tool,
+                    command.as_ref(),
+                    tool_use_id,
+                    app_handle,
                 );
-                let pending = PendingPermission {
-                    tool: tool.clone(),
-                    command: command.clone(),
-                    tool_use_id: tool_use_id.clone(),
-                    requested_at: now_epoch_ms(),
-                };
-                self.pending_permission = Some(pending.clone());
-                if let Some(ref mut run) = self.active_run {
-                    run.status = RunStatus::Blocked;
-                    run_state::save_run_state(&run.task_path, run);
-                    if let Err(e) = app_handle.emit("run:permission_request", &pending) {
-                        error!("Failed to emit run:permission_request: {e}");
-                    }
-                    if let Err(e) = app_handle.emit("run:status_changed", &*run) {
-                        error!("Failed to emit run:status_changed: {e}");
-                    }
-                }
             }
             SidecarResponse::RunError {
                 error: err_msg,
@@ -337,37 +242,20 @@ impl RunManager {
                 cost_usd,
                 session_id,
             } => {
-                if !self.session_matches(session_id.as_ref()) {
+                if !run_responses::session_matches(self.active_run.as_ref(), session_id.as_ref()) {
                     warn!("Ignoring run error with mismatched session_id: {session_id:?}");
                     return;
                 }
-                if let Some(ref mut run) = self.active_run {
-                    let (run_status, task_status) = if status == "cancelled" {
-                        (RunStatus::Cancelled, TaskStatus::Cancelled)
-                    } else {
-                        (RunStatus::Failed, TaskStatus::Failed)
-                    };
-                    run.status = run_status;
-                    if let Some(cost) = cost_usd {
-                        run.cost_usd = *cost;
-                    }
-                    if self.started_at_epoch_ms > 0 {
-                        run.elapsed_secs =
-                            (now_epoch_ms().saturating_sub(self.started_at_epoch_ms)) / 1000;
-                    }
-                    error!("Run failed: {err_msg}");
-                    task::update_task_status(&run.task_path, task_status);
-                    // Save (but do not delete) run.json so session_id is
-                    // available for a subsequent resume_run.
-                    run_state::save_run_state(&run.task_path, run);
-                    if let Err(e) = app_handle.emit("run:status_changed", &*run) {
-                        error!("Failed to emit run:status_changed: {e}");
-                    }
-                }
-                self.active_run = None;
-                self.last_activity_ms = 0;
-                self.started_at_epoch_ms = 0;
-                self.pending_permission = None;
+                run_responses::handle_run_error(
+                    &mut self.active_run,
+                    &mut self.started_at_epoch_ms,
+                    &mut self.last_activity_ms,
+                    &mut self.pending_permission,
+                    err_msg,
+                    status,
+                    cost_usd.as_ref(),
+                    app_handle,
+                );
             }
         }
     }
@@ -482,7 +370,7 @@ impl RunManager {
             pending.tool
         );
 
-        let response_msg = PermissionResponseMsg::PermissionResponse {
+        let response_msg = crate::models::run::PermissionResponseMsg::PermissionResponse {
             tool_use_id: tool_use_id.to_owned(),
             decision: decision.to_owned(),
             reason: reason.map(str::to_owned),
@@ -501,7 +389,7 @@ impl RunManager {
     /// Send a permission response JSON message to the sidecar via stdin.
     async fn send_permission_response(
         &mut self,
-        response: &PermissionResponseMsg,
+        response: &crate::models::run::PermissionResponseMsg,
     ) -> Result<(), AppError> {
         let stdin = self.stdin.as_mut().ok_or_else(|| {
             error!("Sidecar stdin not available for permission response");

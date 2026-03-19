@@ -48,202 +48,121 @@ function send(msg) {
 }
 
 /**
- * Handle a launch_run request from the Rust backend.
- * @param {object} request
- * @param {string} request.task_path
- * @param {string} request.worktree
- * @param {object} [request.options]
- * @param {number} [request.options.max_turns]
- * @param {number} [request.options.max_budget_usd]
+ * Dispatch a single SDK message to the Rust backend via stdout.
+ * @param {object} message - SDK message from the query conversation stream
  */
-async function handleLaunchRun(request) {
-  if (activeAbort) {
-    send({
-      type: "run_error",
-      status: "failed",
-      error: "A run is already active",
-      session_id: activeSessionId,
-    });
-    return;
-  }
-
-  let taskContent;
-  try {
-    taskContent = readFileSync(request.task_path, "utf-8");
-  } catch (err) {
-    send({
-      type: "run_error",
-      status: "failed",
-      error: `Failed to read task file: ${err.message}`,
-      session_id: null,
-    });
-    return;
-  }
-
-  activeAbort = new AbortController();
-
-  const queryOptions = {
-    prompt: taskContent,
-    options: {
-      cwd: request.worktree,
-      abortController: activeAbort,
-      permissionMode: "acceptEdits",
-      canUseTool: async (tool, input) => {
-        const toolUseId = crypto.randomUUID();
+function dispatchMessage(message) {
+  switch (message.type) {
+    case "system": {
+      if (message.session_id) {
+        activeSessionId = message.session_id;
         send({
-          type: "permission_request",
-          tool: tool.name,
-          command: input?.command ?? null,
-          tool_use_id: toolUseId,
-          session_id: activeSessionId,
+          type: "session_started",
+          session_id: message.session_id,
         });
-        return new Promise((resolve) => {
-          pendingPermissionResolve = resolve;
-        });
-      },
-    },
-  };
-
-  if (request.options?.max_turns) {
-    queryOptions.options.maxTurns = request.options.max_turns;
-  }
-  if (request.options?.max_budget_usd) {
-    queryOptions.options.maxBudgetUsd = request.options.max_budget_usd;
-  }
-
-  try {
-    const conversation = query(queryOptions);
-
-    for await (const message of conversation) {
-      if (!message || !message.type) {
-        continue;
+        startHeartbeat();
       }
+      break;
+    }
 
-      switch (message.type) {
-        case "system": {
-          // SystemMessage (init) - session started
-          if (message.session_id) {
-            activeSessionId = message.session_id;
+    case "assistant": {
+      if (message.content) {
+        for (const block of message.content) {
+          if (block.type === "text" && block.text) {
             send({
-              type: "session_started",
-              session_id: message.session_id,
+              type: "assistant_text",
+              text: block.text,
+              session_id: activeSessionId,
             });
-            startHeartbeat();
           }
-          break;
-        }
+          if (block.type === "tool_use") {
+            send({
+              type: "tool_call",
+              tool: block.name,
+              file_path: block.input?.file_path ?? null,
+              session_id: activeSessionId,
+            });
 
-        case "assistant": {
-          // AssistantMessage - extract text content
-          if (message.content) {
-            for (const block of message.content) {
-              if (block.type === "text" && block.text) {
-                send({
-                  type: "assistant_text",
-                  text: block.text,
-                  session_id: activeSessionId,
-                });
-              }
-              if (block.type === "tool_use") {
-                send({
-                  type: "tool_call",
-                  tool: block.name,
-                  file_path: block.input?.file_path ?? null,
-                  session_id: activeSessionId,
-                });
-
-                // Map file-related tools to run_step
-                if (
-                  ["Edit", "Write", "MultiEdit"].includes(block.name) &&
-                  block.input?.file_path
-                ) {
-                  send({
-                    type: "run_step",
-                    step: "files_changed",
-                    detail: block.input.file_path,
-                    session_id: activeSessionId,
-                  });
-                }
-              }
+            // Map file-related tools to run_step
+            if (
+              ["Edit", "Write", "MultiEdit"].includes(block.name) &&
+              block.input?.file_path
+            ) {
+              send({
+                type: "run_step",
+                step: "files_changed",
+                detail: block.input.file_path,
+                session_id: activeSessionId,
+              });
             }
           }
-          break;
-        }
-
-        case "result": {
-          // ResultMessage - run complete or error
-          const costUsd = message.total_cost_usd ?? 0;
-
-          if (
-            message.subtype === "success" ||
-            message.subtype === "end_turn"
-          ) {
-            send({
-              type: "run_complete",
-              status: "succeeded",
-              cost_usd: costUsd,
-              session_id: activeSessionId,
-            });
-          } else {
-            send({
-              type: "run_error",
-              status: "failed",
-              error: message.subtype ?? "unknown error",
-              cost_usd: costUsd,
-              session_id: activeSessionId,
-            });
-          }
-
-          stopHeartbeat();
-          pendingPermissionResolve = null;
-          activeAbort = null;
-          activeSessionId = null;
-          break;
-        }
-
-        default: {
-          // Log unhandled message types to stderr for debugging
-          console.error(
-            `Unhandled message type: ${message.type}`,
-            JSON.stringify(message).slice(0, 200),
-          );
-          break;
         }
       }
+      break;
     }
-  } catch (err) {
-    const errorMsg =
-      err.name === "AbortError" ? "Run cancelled" : err.message;
-    const status = err.name === "AbortError" ? "cancelled" : "failed";
 
-    send({
-      type: "run_error",
-      status,
-      error: errorMsg,
-      session_id: activeSessionId,
-    });
+    case "result": {
+      const costUsd = message.total_cost_usd ?? 0;
 
-    stopHeartbeat();
-    pendingPermissionResolve = null;
-    activeAbort = null;
-    activeSessionId = null;
+      if (
+        message.subtype === "success" ||
+        message.subtype === "end_turn"
+      ) {
+        send({
+          type: "run_complete",
+          status: "succeeded",
+          cost_usd: costUsd,
+          session_id: activeSessionId,
+        });
+      } else {
+        send({
+          type: "run_error",
+          status: "failed",
+          error: message.subtype ?? "unknown error",
+          cost_usd: costUsd,
+          session_id: activeSessionId,
+        });
+      }
+
+      stopHeartbeat();
+      pendingPermissionResolve = null;
+      activeAbort = null;
+      activeSessionId = null;
+      break;
+    }
+
+    default: {
+      // Log unhandled message types to stderr for debugging
+      console.error(
+        `Unhandled message type: ${message.type}`,
+        JSON.stringify(message).slice(0, 200),
+      );
+      break;
+    }
   }
 }
 
 /**
- * Handle a resume_run request from the Rust backend.
- *
- * Same as launch_run but passes `resume: session_id` to the SDK query options
- * so the SDK resumes from the previous session.
+ * Reset run state after completion or error.
+ */
+function resetRunState() {
+  stopHeartbeat();
+  pendingPermissionResolve = null;
+  activeAbort = null;
+  activeSessionId = null;
+}
+
+/**
+ * Shared session runner for both launch and resume flows.
  * @param {object} request
  * @param {string} request.task_path
  * @param {string} request.worktree
- * @param {string} request.session_id
  * @param {object} [request.options]
  * @param {number} [request.options.max_turns]
  * @param {number} [request.options.max_budget_usd]
+ * @param {string | null} resumeSessionId - If provided, resumes an existing session
  */
-async function handleResumeRun(request) {
+async function runSession(request, resumeSessionId = null) {
   if (activeAbort) {
     send({
       type: "run_error",
@@ -275,7 +194,6 @@ async function handleResumeRun(request) {
       cwd: request.worktree,
       abortController: activeAbort,
       permissionMode: "acceptEdits",
-      resume: request.session_id,
       canUseTool: async (tool, input) => {
         const toolUseId = crypto.randomUUID();
         send({
@@ -292,6 +210,10 @@ async function handleResumeRun(request) {
     },
   };
 
+  if (resumeSessionId) {
+    queryOptions.options.resume = resumeSessionId;
+  }
+
   if (request.options?.max_turns) {
     queryOptions.options.maxTurns = request.options.max_turns;
   }
@@ -306,93 +228,7 @@ async function handleResumeRun(request) {
       if (!message || !message.type) {
         continue;
       }
-
-      switch (message.type) {
-        case "system": {
-          if (message.session_id) {
-            activeSessionId = message.session_id;
-            send({
-              type: "session_started",
-              session_id: message.session_id,
-            });
-            startHeartbeat();
-          }
-          break;
-        }
-
-        case "assistant": {
-          if (message.content) {
-            for (const block of message.content) {
-              if (block.type === "text" && block.text) {
-                send({
-                  type: "assistant_text",
-                  text: block.text,
-                  session_id: activeSessionId,
-                });
-              }
-              if (block.type === "tool_use") {
-                send({
-                  type: "tool_call",
-                  tool: block.name,
-                  file_path: block.input?.file_path ?? null,
-                  session_id: activeSessionId,
-                });
-
-                if (
-                  ["Edit", "Write", "MultiEdit"].includes(block.name) &&
-                  block.input?.file_path
-                ) {
-                  send({
-                    type: "run_step",
-                    step: "files_changed",
-                    detail: block.input.file_path,
-                    session_id: activeSessionId,
-                  });
-                }
-              }
-            }
-          }
-          break;
-        }
-
-        case "result": {
-          const costUsd = message.total_cost_usd ?? 0;
-
-          if (
-            message.subtype === "success" ||
-            message.subtype === "end_turn"
-          ) {
-            send({
-              type: "run_complete",
-              status: "succeeded",
-              cost_usd: costUsd,
-              session_id: activeSessionId,
-            });
-          } else {
-            send({
-              type: "run_error",
-              status: "failed",
-              error: message.subtype ?? "unknown error",
-              cost_usd: costUsd,
-              session_id: activeSessionId,
-            });
-          }
-
-          stopHeartbeat();
-          pendingPermissionResolve = null;
-          activeAbort = null;
-          activeSessionId = null;
-          break;
-        }
-
-        default: {
-          console.error(
-            `Unhandled message type: ${message.type}`,
-            JSON.stringify(message).slice(0, 200),
-          );
-          break;
-        }
-      }
+      dispatchMessage(message);
     }
   } catch (err) {
     const errorMsg =
@@ -406,11 +242,25 @@ async function handleResumeRun(request) {
       session_id: activeSessionId,
     });
 
-    stopHeartbeat();
-    pendingPermissionResolve = null;
-    activeAbort = null;
-    activeSessionId = null;
+    resetRunState();
   }
+}
+
+/**
+ * Handle a launch_run request from the Rust backend.
+ * @param {object} request
+ */
+async function handleLaunchRun(request) {
+  return runSession(request, null);
+}
+
+/**
+ * Handle a resume_run request from the Rust backend.
+ * @param {object} request
+ * @param {string} request.session_id
+ */
+async function handleResumeRun(request) {
+  return runSession(request, request.session_id);
 }
 
 /**
