@@ -439,25 +439,29 @@ impl KnowledgeService {
         // Pre-register candidate IDs under write lock so a concurrent call
         // (tick vs shutdown race) sees them and skips, preventing double-ingest.
         let mut known_ids_guard = self.persisted_pattern_ids.write().await;
-        let candidate_ids: Vec<u64> = patterns
+        // Build index of candidates: patterns with correct dim that aren't already known
+        let candidate_indices: Vec<usize> = patterns
             .iter()
-            .filter(|p| {
+            .enumerate()
+            .filter(|(_, p)| {
                 p.centroid.len() == usize::from(EMBEDDING_DIM) && !known_ids_guard.contains(&p.id)
             })
-            .map(|p| p.id)
+            .map(|(i, _)| i)
             .collect();
-        if candidate_ids.is_empty() {
+        if candidate_indices.is_empty() {
             return;
         }
-        known_ids_guard.extend(&candidate_ids);
-        let known_ids = known_ids_guard.clone();
+        // Register IDs before releasing lock — concurrent calls will skip these
+        for &i in &candidate_indices {
+            known_ids_guard.insert(patterns[i].id);
+        }
         drop(known_ids_guard);
 
         let store_lock = Arc::clone(self.global_store());
         let mut skipped_dup = 0u64;
         let mut new_ids: Vec<u64> = Vec::new();
 
-        // Phase 1: filter candidates under read lock (dedup queries only)
+        // Phase 1: RVF cosine dedup under read lock
         let candidates: Vec<usize> = {
             let store = store_lock.read().await;
             let dedup_filter = FilterExpr::Eq(
@@ -469,30 +473,18 @@ impl KnowledgeService {
                 ..QueryOptions::default()
             };
 
-            patterns
-                .iter()
-                .enumerate()
-                .filter_map(|(i, pattern)| {
-                    if pattern.centroid.len() != usize::from(EMBEDDING_DIM) {
-                        debug!(
-                            "Skipping pattern with mismatched centroid dim: {}",
-                            pattern.centroid.len()
-                        );
-                        return None;
-                    }
-                    if known_ids.contains(&pattern.id) {
-                        skipped_dup += 1;
-                        return None;
-                    }
-                    // RVF cosine dedup: skip if near-identical centroid exists
+            candidate_indices
+                .into_iter()
+                .filter(|&i| {
+                    let pattern = &patterns[i];
                     if let Ok(existing) = store.store.query(&pattern.centroid, 1, &dedup_opts) {
                         if existing.first().is_some_and(|hit| hit.distance < 0.05) {
                             skipped_dup += 1;
                             new_ids.push(pattern.id);
-                            return None;
+                            return false;
                         }
                     }
-                    Some(i)
+                    true
                 })
                 .collect()
         };
