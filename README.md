@@ -102,16 +102,6 @@ Branchdeck is built around [Claude Code](https://github.com/anthropics/claude-co
 | **Knowledge** | ONNX Runtime — local vector embeddings, hierarchical vector store |
 | **Components** | [Kobalte](https://kobalte.dev/) + solid-resizable-panels |
 
-## Direction
-
-**Now** — workspace management, embedded sessions, PR monitoring, local knowledge, run lifecycle
-
-**Next** — run timeline, approval gates, stalled-run detection, crash recovery
-
-**Later** — cross-repo workflows, custom templates, team visibility
-
-Depth before breadth.
-
 ## Requirements
 
 | | |
