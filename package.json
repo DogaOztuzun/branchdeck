@@ -8,6 +8,7 @@
     "build": "vite build",
     "check": "biome check .",
     "check:fix": "biome check --fix .",
+    "test": "vitest run",
     "tauri": "tauri"
   },
   "license": "MIT",
@@ -32,6 +33,7 @@
     "@tauri-apps/cli": "^2",
     "tailwindcss": "^4",
     "@tailwindcss/vite": "^4",
-    "@biomejs/biome": "^2"
+    "@biomejs/biome": "^2",
+    "vitest": "^4.1.0"
   }
 }
