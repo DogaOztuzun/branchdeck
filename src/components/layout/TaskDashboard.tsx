@@ -202,21 +202,20 @@ export function TaskDashboard() {
       const result = await listAllOpenPrs(repoPaths);
       setPrs(result);
 
-      // Enrich PRs with CI status lazily after initial render
+      // Enrich PRs with CI status sequentially to avoid hitting GitHub rate limits
       for (const pr of result) {
         const rp = repoPathForName(pr.repoName);
         if (!rp) continue;
-        enrichPrSummary(rp, pr)
-          .then((enriched) => {
-            setPrs((prev) =>
-              prev.map((p) =>
-                p.number === enriched.number && p.repoName === enriched.repoName ? enriched : p,
-              ),
-            );
-          })
-          .catch(() => {
-            // Non-fatal — PR still shows without CI status
-          });
+        try {
+          const enriched = await enrichPrSummary(rp, pr);
+          setPrs((prev) =>
+            prev.map((p) =>
+              p.number === enriched.number && p.repoName === enriched.repoName ? enriched : p,
+            ),
+          );
+        } catch {
+          // Non-fatal — PR still shows without CI status
+        }
       }
     } catch (e) {
       console.error('Dashboard: failed to load PRs', e);

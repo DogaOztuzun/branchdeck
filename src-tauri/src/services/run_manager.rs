@@ -828,8 +828,12 @@ pub async fn batch_launch<R: tauri::Runtime>(
 
     // Reset queue state — clear any prior queue items
     manager.run_queue.clear();
-    manager.queue_completed = 0;
-    manager.queue_failed = 0;
+    // Only reset counters if no active run — otherwise the completing run
+    // would increment the new batch's counters incorrectly
+    if manager.active_run.is_none() {
+        manager.queue_completed = 0;
+        manager.queue_failed = 0;
+    }
     manager.queue_cancelled = false;
 
     // Enqueue all pairs
@@ -895,6 +899,15 @@ pub async fn advance_queue<R: tauri::Runtime>(
     };
 
     if let Some(next) = next {
+        // Re-check cancel flag before launching — closes race window between dequeue and launch
+        {
+            let manager = state.lock().await;
+            if manager.queue_cancelled {
+                info!("Queue cancelled after dequeue — skipping launch");
+                return Ok(());
+            }
+        }
+
         info!("Queue advancing: launching next run for {}", next.task_path);
         let options = LaunchOptions {
             max_turns: None,

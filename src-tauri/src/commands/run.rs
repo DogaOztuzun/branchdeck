@@ -95,14 +95,21 @@ pub async fn shepherd_pr_cmd(
             max_turns: None,
             max_budget_usd: None,
         };
-        run_manager::launch_run(
+        if let Err(e) = run_manager::launch_run(
             state,
             app_handle,
             &result.task.path,
             &result.worktree_path,
             options,
         )
-        .await?;
+        .await
+        {
+            // Return the shepherd result even on launch failure so the frontend
+            // knows a worktree/task was created and can offer manual launch.
+            log::error!(
+                "launch_run failed after shepherd_pr for PR #{pr_number}: {e} — returning result with worktree intact"
+            );
+        }
     }
 
     Ok(result)

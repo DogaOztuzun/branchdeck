@@ -442,10 +442,14 @@ pub async fn list_all_open_prs(
 ) -> Result<Vec<PrSummary>, AppError> {
     let mut all_prs = Vec::new();
     let mut last_error: Option<AppError> = None;
+    let mut any_succeeded = false;
 
     for repo_path in repo_paths {
         match list_open_prs(repo_path, filter.clone()).await {
-            Ok(prs) => all_prs.extend(prs),
+            Ok(prs) => {
+                any_succeeded = true;
+                all_prs.extend(prs);
+            }
             Err(e) => {
                 error!("Failed to list PRs for {repo_path}: {e}");
                 last_error = Some(e);
@@ -453,8 +457,8 @@ pub async fn list_all_open_prs(
         }
     }
 
-    // If ALL repos failed, return the last error
-    if all_prs.is_empty() {
+    // Only return error if ALL repos failed (not just empty results)
+    if !any_succeeded {
         if let Some(e) = last_error {
             return Err(e);
         }
@@ -491,8 +495,6 @@ pub async fn enrich_pr_summary(repo_path: &str, pr: &mut PrSummary) -> Result<()
             "failing".to_string()
         } else if has_pending {
             "pending".to_string()
-        } else if info.checks.is_empty() {
-            return Ok(());
         } else {
             "passing".to_string()
         });

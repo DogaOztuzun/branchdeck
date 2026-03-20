@@ -49,8 +49,11 @@ pub async fn shepherd_pr(
     let worktree = git::create_worktree(repo, branch, Some(branch), None)?;
     let worktree_path = worktree.path.display().to_string();
 
-    // 6. Check if task already exists
+    // 6. Check if task already exists — clean up worktree if so
     if task::get_task(&worktree_path).is_ok() {
+        if let Err(e) = git::remove_worktree(repo, &worktree.name, false) {
+            error!("Failed to clean up worktree after task-exists check: {e}");
+        }
         return Err(AppError::TaskAlreadyExists(format!(
             "Task already exists in worktree {worktree_path}"
         )));
