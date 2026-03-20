@@ -383,7 +383,7 @@ pub fn run() {
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
-                // Shut down RunManager: kill sidecar, mark active run failed, clean up run.json
+                // Shut down RunManager: kill sidecar, mark active run failed, keep run.json for resume
                 if let Some(run_state) =
                     window.try_state::<services::run_manager::RunManagerState>()
                 {

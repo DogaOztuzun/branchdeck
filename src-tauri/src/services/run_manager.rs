@@ -319,7 +319,7 @@ impl RunManager {
             }
         }
 
-        // Mark run as failed (also saves + deletes run.json)
+        // Mark run as failed (saves run.json with session_id for resume)
         self.mark_run_failed(app_handle);
         info!("Shutdown: cleaned up active run");
     }
