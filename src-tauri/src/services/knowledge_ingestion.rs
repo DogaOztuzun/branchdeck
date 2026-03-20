@@ -459,7 +459,6 @@ impl KnowledgeService {
 
         let store_lock = Arc::clone(self.global_store());
         let mut skipped_dup = 0u64;
-        let mut new_ids: Vec<u64> = Vec::new();
 
         // Phase 1: RVF cosine dedup under read lock
         let candidates: Vec<usize> = {
@@ -480,7 +479,6 @@ impl KnowledgeService {
                     if let Ok(existing) = store.store.query(&pattern.centroid, 1, &dedup_opts) {
                         if existing.first().is_some_and(|hit| hit.distance < 0.05) {
                             skipped_dup += 1;
-                            new_ids.push(pattern.id);
                             return false;
                         }
                     }
@@ -491,6 +489,7 @@ impl KnowledgeService {
 
         // Phase 2: ingest under write lock (only new patterns)
         let mut persisted = 0u64;
+        let mut failed_ids: Vec<u64> = Vec::new();
         if !candidates.is_empty() {
             let now = crate::models::agent::now_ms();
             let mut store = store_lock.write().await;
@@ -521,17 +520,25 @@ impl KnowledgeService {
                 };
 
                 match store.ingest(&pattern.centroid, entry) {
-                    Ok(_) => {
-                        persisted += 1;
-                        new_ids.push(pattern.id);
+                    Ok(_) => persisted += 1,
+                    Err(e) => {
+                        error!("Failed to persist SONA pattern: {e}");
+                        failed_ids.push(pattern.id);
                     }
-                    Err(e) => error!("Failed to persist SONA pattern: {e}"),
                 }
             }
         }
 
-        if !new_ids.is_empty() {
-            self.persisted_pattern_ids.write().await.extend(new_ids);
+        // Un-register failed IDs so they're eligible for retry on next tick
+        if !failed_ids.is_empty() {
+            let mut known = self.persisted_pattern_ids.write().await;
+            for id in &failed_ids {
+                known.remove(id);
+            }
+            warn!(
+                "[sona] {} pattern ingests failed, will retry on next tick",
+                failed_ids.len()
+            );
         }
 
         if persisted > 0 || skipped_dup > 0 {
