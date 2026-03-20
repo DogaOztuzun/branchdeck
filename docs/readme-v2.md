@@ -102,6 +102,7 @@ Branchdeck is built around [Claude Code](https://github.com/anthropics/claude-co
 | **Knowledge** | ONNX Runtime — local vector embeddings, hierarchical vector store |
 | **Components** | [Kobalte](https://kobalte.dev/) + solid-resizable-panels |
 
+
 ## Requirements
 
 | | |
