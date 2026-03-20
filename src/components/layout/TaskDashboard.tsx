@@ -1,11 +1,11 @@
 import { listen } from '@tauri-apps/api/event';
 import { createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
 import { enrichPrSummary, listAllOpenPrs } from '../../lib/commands/github';
-import { shepherdPr } from '../../lib/commands/run';
+import { batchLaunch, shepherdPr } from '../../lib/commands/run';
 import { listTasks } from '../../lib/commands/task';
 import { getLayoutStore } from '../../lib/stores/layout';
 import { getRepoStore } from '../../lib/stores/repo';
-import { worktreePathFromTaskPath } from '../../lib/stores/task';
+import { getTaskStore, worktreePathFromTaskPath } from '../../lib/stores/task';
 import { parseArtifactSummary } from '../../lib/utils';
 import type { PrSummary } from '../../types/github';
 import type { TaskInfo, TaskStatus } from '../../types/task';
@@ -83,6 +83,7 @@ function ReviewBadge(props: { decision: string | null }) {
 export function TaskDashboard() {
   const repoStore = getRepoStore();
   const layout = getLayoutStore();
+  const taskStore = getTaskStore();
   const [activeTab, setActiveTab] = createSignal<DashboardTab>('prs');
   const [items, setItems] = createSignal<DashboardItem[]>([]);
   const [prs, setPrs] = createSignal<PrSummary[]>([]);
@@ -91,6 +92,8 @@ export function TaskDashboard() {
   const [authorFilter, setAuthorFilter] = createSignal<string>('');
   const [ciFilter, setCiFilter] = createSignal<string>('');
   const [shepherding, setShepherding] = createSignal<number | null>(null);
+  const [selectedPrs, setSelectedPrs] = createSignal<Set<string>>(new Set());
+  const [batchRunning, setBatchRunning] = createSignal(false);
 
   const sortedItems = createMemo(() =>
     [...items()].sort(
@@ -128,6 +131,47 @@ export function TaskDashboard() {
   function repoPathForName(repoName: string): string | undefined {
     return repoStore.state.repos.find((r) => r.name === repoName || r.path.endsWith(`/${repoName}`))
       ?.path;
+  }
+
+  function prKey(pr: PrSummary): string {
+    return `${pr.repoName}:${pr.number}`;
+  }
+
+  function togglePrSelection(pr: PrSummary) {
+    setSelectedPrs((prev) => {
+      const next = new Set(prev);
+      const key = prKey(pr);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  async function handleBatchShepherd() {
+    if (batchRunning()) return;
+    const selected = selectedPrs();
+    if (selected.size === 0) return;
+    setBatchRunning(true);
+    try {
+      const pairs: [string, string][] = [];
+      for (const pr of filteredPrs()) {
+        if (!selected.has(prKey(pr))) continue;
+        const rp = repoPathForName(pr.repoName);
+        if (!rp) continue;
+        const result = await shepherdPr(rp, pr.number, false);
+        pairs.push([result.task.path, result.worktreePath]);
+      }
+      if (pairs.length > 0) {
+        await batchLaunch(pairs);
+        setActiveTab('tasks');
+        loadAllTasks();
+      }
+      setSelectedPrs(new Set());
+    } catch (e) {
+      console.error('Batch shepherd failed:', e);
+    } finally {
+      setBatchRunning(false);
+    }
   }
 
   async function handleShepherd(pr: PrSummary) {
@@ -365,6 +409,12 @@ export function TaskDashboard() {
                   {(pr) => (
                     <div class="w-full text-left px-2 py-1.5 rounded text-xs hover:bg-bg/50">
                       <div class="flex items-center justify-between gap-1">
+                        <input
+                          type="checkbox"
+                          class="shrink-0 accent-accent cursor-pointer"
+                          checked={selectedPrs().has(prKey(pr))}
+                          onChange={() => togglePrSelection(pr)}
+                        />
                         <a
                           href={pr.url}
                           target="_blank"
@@ -411,6 +461,18 @@ export function TaskDashboard() {
               </div>
             </Match>
           </Switch>
+          <Show when={selectedPrs().size > 0}>
+            <div class="px-2 py-1.5 border-t border-border/50">
+              <button
+                type="button"
+                class={`w-full text-xs px-2 py-1 rounded cursor-pointer ${batchRunning() ? 'bg-accent/10 text-accent/50' : 'bg-accent/20 text-accent hover:bg-accent/30'}`}
+                disabled={batchRunning()}
+                onClick={handleBatchShepherd}
+              >
+                {batchRunning() ? 'Starting batch...' : `Shepherd Selected (${selectedPrs().size})`}
+              </button>
+            </div>
+          </Show>
         </Show>
 
         <Show when={activeTab() === 'tasks'}>
@@ -449,21 +511,31 @@ export function TaskDashboard() {
                         </span>
                         <TaskBadge status={item.task.frontmatter.status} />
                       </div>
-                      <Show when={parseArtifactSummary(item.task.body)}>
-                        {(artifacts) => (
-                          <div class="flex items-center gap-1.5 mt-0.5 text-[10px] text-text-muted">
-                            <Show when={artifacts().totalCommits > 0}>
-                              <span>
-                                {artifacts().totalCommits} commit
-                                {artifacts().totalCommits === 1 ? '' : 's'}
-                              </span>
-                            </Show>
-                            <Show when={artifacts().pr}>
-                              <span class="text-info">PR #{artifacts().pr}</span>
-                            </Show>
-                          </div>
-                        )}
-                      </Show>
+                      <div class="flex items-center gap-1.5 mt-0.5 text-[10px] text-text-muted">
+                        <Show
+                          when={
+                            taskStore.state.activeRun?.taskPath === item.task.path &&
+                            taskStore.state.activeRun?.costUsd
+                          }
+                        >
+                          <span>${taskStore.state.activeRun?.costUsd?.toFixed(3)}</span>
+                        </Show>
+                        <Show when={parseArtifactSummary(item.task.body)}>
+                          {(artifacts) => (
+                            <>
+                              <Show when={artifacts().totalCommits > 0}>
+                                <span>
+                                  {artifacts().totalCommits} commit
+                                  {artifacts().totalCommits === 1 ? '' : 's'}
+                                </span>
+                              </Show>
+                              <Show when={artifacts().pr}>
+                                <span class="text-info">PR #{artifacts().pr}</span>
+                              </Show>
+                            </>
+                          )}
+                        </Show>
+                      </div>
                     </button>
                   )}
                 </For>

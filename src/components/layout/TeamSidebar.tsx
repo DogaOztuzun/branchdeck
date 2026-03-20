@@ -276,6 +276,73 @@ export function TeamSidebar() {
           <p class="px-2 mt-1 text-[10px] text-error truncate">{launchError()}</p>
         </Show>
       </div>
+      {/* PR Context + Prior Knowledge for pr-shepherd tasks */}
+      <For each={tasksWithWorktree()}>
+        {(item) => (
+          <Show when={item.task.frontmatter.type === 'pr-shepherd'}>
+            <Show when={item.task.frontmatter.pr}>
+              <div class="px-2 py-1.5 border-b border-border">
+                <span class="text-[10px] uppercase text-text-muted tracking-wider px-1">
+                  PR Context
+                </span>
+                <div class="px-2 mt-1 text-[10px] text-text-muted space-y-0.5">
+                  <div>PR #{item.task.frontmatter.pr}</div>
+                  <Show when={item.task.body.includes('Failing checks:')}>
+                    <div class="text-red-400">
+                      {item.task.body
+                        .split('\n')
+                        .find((l) => l.includes('Failing checks:'))
+                        ?.replace('- ', '') ?? ''}
+                    </div>
+                  </Show>
+                  <Show when={item.task.body.includes('Reviews:')}>
+                    <div>
+                      {item.task.body
+                        .split('\n')
+                        .find((l) => l.includes('Reviews:'))
+                        ?.replace('- ', '') ?? ''}
+                    </div>
+                  </Show>
+                  <Show when={item.task.body.includes('Diff:')}>
+                    <div>
+                      {item.task.body
+                        .split('\n')
+                        .find((l) => l.includes('Diff:'))
+                        ?.replace('- ', '') ?? ''}
+                    </div>
+                  </Show>
+                </div>
+              </div>
+            </Show>
+            <Show
+              when={
+                item.task.body.includes('## Prior Knowledge') &&
+                !item.task.body.includes('(none yet)')
+              }
+            >
+              <div class="px-2 py-1.5 border-b border-border">
+                <span class="text-[10px] uppercase text-text-muted tracking-wider px-1">
+                  Prior Knowledge
+                </span>
+                <div class="px-2 mt-1 text-[10px] text-text-muted space-y-0.5">
+                  <For
+                    each={
+                      item.task.body
+                        .split('## Prior Knowledge')[1]
+                        ?.split('\n')
+                        .filter((l) => l.startsWith('- '))
+                        .slice(0, 5) ?? []
+                    }
+                  >
+                    {(line) => <div class="truncate">{line.replace('- ', '')}</div>}
+                  </For>
+                </div>
+              </div>
+            </Show>
+          </Show>
+        )}
+      </For>
+
       <Show when={taskStore.state.runLog.length > 0 || taskStore.state.activeRun}>
         <RunTimeline
           entries={taskStore.state.runLog}
