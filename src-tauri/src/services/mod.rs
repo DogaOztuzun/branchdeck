@@ -15,7 +15,7 @@ pub mod knowledge_query;
 pub mod run_manager;
 pub mod run_effects;
 pub mod run_responses;
-mod run_stale;
+pub mod run_stale;
 pub mod run_state;
 pub mod task;
 pub mod task_watcher;

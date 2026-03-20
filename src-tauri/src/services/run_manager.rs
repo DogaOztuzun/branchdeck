@@ -162,7 +162,7 @@ impl RunManager {
             return;
         }
 
-        if run_stale::check_run_stale(self.last_activity_ms) {
+        if run_stale::check_run_stale(self.last_activity_ms, now_epoch_ms()) {
             self.mark_run_failed_with_reason(app_handle, "stalled: no heartbeat for 120s");
             return;
         }

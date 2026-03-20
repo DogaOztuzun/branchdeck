@@ -503,3 +503,45 @@ fn t4_sm_edge_map_sidecar_status() {
     assert_eq!(map_sidecar_status("timeout"), (RunStatus::Failed, TaskStatus::Failed));
     assert_eq!(map_sidecar_status(""), (RunStatus::Failed, TaskStatus::Failed));
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// Stale detection tests (check_run_stale — pure function)
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn stale_detection_below_threshold() {
+    use branchdeck_lib::services::run_stale::{check_run_stale, STALE_THRESHOLD_SECS};
+    let last_activity = 1_000_000;
+    let now = last_activity + (STALE_THRESHOLD_SECS - 1) * 1000; // 1 second under
+    assert!(!check_run_stale(last_activity, now));
+}
+
+#[test]
+fn stale_detection_at_threshold() {
+    use branchdeck_lib::services::run_stale::{check_run_stale, STALE_THRESHOLD_SECS};
+    let last_activity = 1_000_000;
+    let now = last_activity + STALE_THRESHOLD_SECS * 1000; // exactly at threshold
+    assert!(check_run_stale(last_activity, now));
+}
+
+#[test]
+fn stale_detection_above_threshold() {
+    use branchdeck_lib::services::run_stale::{check_run_stale, STALE_THRESHOLD_SECS};
+    let last_activity = 1_000_000;
+    let now = last_activity + (STALE_THRESHOLD_SECS + 60) * 1000; // 60s over
+    assert!(check_run_stale(last_activity, now));
+}
+
+#[test]
+fn stale_detection_zero_activity_returns_false() {
+    use branchdeck_lib::services::run_stale::check_run_stale;
+    assert!(!check_run_stale(0, 999_999_999), "zero last_activity is sentinel for 'not started'");
+}
+
+#[test]
+fn stale_threshold_constants_are_sane() {
+    use branchdeck_lib::services::run_stale::{PERMISSION_TIMEOUT_SECS, STALE_THRESHOLD_SECS};
+    assert_eq!(STALE_THRESHOLD_SECS, 120, "stale threshold should be 2 minutes");
+    assert_eq!(PERMISSION_TIMEOUT_SECS, 300, "permission timeout should be 5 minutes");
+    // Relationship: permission timeout > stale threshold (verified by pinned values above)
+}

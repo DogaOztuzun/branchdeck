@@ -14,14 +14,16 @@ pub const STALE_THRESHOLD_SECS: u64 = 120;
 pub const PERMISSION_TIMEOUT_SECS: u64 = 300;
 
 /// Check if the active run is stale (no activity for `STALE_THRESHOLD_SECS`).
-/// Returns `true` if the run was marked as stale and should be failed.
-pub fn check_run_stale(last_activity_ms: u64) -> bool {
+/// Returns `true` if the run should be marked as failed.
+///
+/// Takes `now_ms` as a parameter for testability (no internal clock dependency).
+#[must_use]
+pub fn check_run_stale(last_activity_ms: u64, now_ms: u64) -> bool {
     if last_activity_ms == 0 {
         return false;
     }
 
-    let now = now_epoch_ms();
-    let elapsed_secs = (now.saturating_sub(last_activity_ms)) / 1000;
+    let elapsed_secs = (now_ms.saturating_sub(last_activity_ms)) / 1000;
 
     if elapsed_secs >= STALE_THRESHOLD_SECS {
         warn!(
@@ -36,6 +38,7 @@ pub fn check_run_stale(last_activity_ms: u64) -> bool {
 /// Check if any pending permission requests have timed out.
 /// If timed out, sends an auto-deny to the sidecar, removes from the map,
 /// and resets the run status to Running if no permissions remain.
+#[allow(clippy::implicit_hasher)]
 pub async fn check_permission_timeout<R: tauri::Runtime>(
     pending_permissions: &mut HashMap<String, PendingPermission>,
     active_run: &mut Option<RunInfo>,
