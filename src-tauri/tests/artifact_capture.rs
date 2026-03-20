@@ -3,7 +3,13 @@
 //! Tests T2-INT-001 through T2-INT-006 from test-design-phase1.md.
 //! Requires temp git repos via git2 + tempfile.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::doc_markdown, clippy::cast_possible_wrap, clippy::cast_sign_loss)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::doc_markdown,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss
+)]
 
 mod common;
 
@@ -81,7 +87,12 @@ fn make_commit(repo_path: &Path, filename: &str, message: &str) {
 }
 
 fn base_task_md(status: &str, run_count: u32) -> String {
-    common::task_md_with_body(status, run_count, Some(42), "\n## Instructions\n\nWork on the task.\n\n## Goal\n\nFix the bug.\n")
+    common::task_md_with_body(
+        status,
+        run_count,
+        Some(42),
+        "\n## Instructions\n\nWork on the task.\n\n## Goal\n\nFix the bug.\n",
+    )
 }
 
 // ─── T2-INT-001: Capture artifacts after successful run with commits ───
@@ -114,14 +125,8 @@ fn t2_int_001_capture_artifacts_with_commits() {
         content.contains("**Branch:**"),
         "Should contain branch info"
     );
-    assert!(
-        content.contains("**HEAD:**"),
-        "Should contain HEAD SHA"
-    );
-    assert!(
-        content.contains("**PR:** #42"),
-        "Should contain PR number"
-    );
+    assert!(content.contains("**HEAD:**"), "Should contain HEAD SHA");
+    assert!(content.contains("**PR:** #42"), "Should contain PR number");
     assert!(
         content.contains("**Commits:** 2"),
         "Should show 2 commits, got:\n{content}"
@@ -157,10 +162,7 @@ fn t2_int_002_capture_artifacts_failed_run() {
         content.contains("### Run 1 — failed"),
         "Should show failed status"
     );
-    assert!(
-        content.contains("**Commits:** 1"),
-        "Should show 1 commit"
-    );
+    assert!(content.contains("**Commits:** 1"), "Should show 1 commit");
 }
 
 // ─── T2-INT-003: Capture with no commits (cancelled immediately) ───
@@ -216,10 +218,7 @@ fn t2_int_004_second_run_appends_artifacts() {
     // Verify order: Run 1 before Run 2
     let run1_pos = content.find("### Run 1").unwrap();
     let run2_pos = content.find("### Run 2").unwrap();
-    assert!(
-        run1_pos < run2_pos,
-        "Run 1 should appear before Run 2"
-    );
+    assert!(run1_pos < run2_pos, "Run 1 should appear before Run 2");
 }
 
 // ─── T2-INT-005: Capture when worktree is missing/deleted ───

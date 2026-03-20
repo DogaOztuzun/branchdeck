@@ -405,7 +405,8 @@ fn remove_worktree_basic() {
     // Branch should still exist (delete_branch = false)
     let repo = Repository::open(&rp).unwrap();
     assert!(
-        repo.find_branch("to-remove", git2::BranchType::Local).is_ok(),
+        repo.find_branch("to-remove", git2::BranchType::Local)
+            .is_ok(),
         "Branch should still exist when delete_branch=false"
     );
 }
@@ -423,7 +424,8 @@ fn remove_worktree_with_branch_deletion() {
 
     let repo = Repository::open(&rp).unwrap();
     assert!(
-        repo.find_branch("to-delete", git2::BranchType::Local).is_err(),
+        repo.find_branch("to-delete", git2::BranchType::Local)
+            .is_err(),
         "Branch should be deleted when delete_branch=true"
     );
 }
@@ -532,7 +534,10 @@ fn get_status_clean_repo() {
     let (_dir, rp) = setup_git_repo();
 
     let statuses = git::get_status(&rp).unwrap();
-    assert!(statuses.is_empty(), "Clean repo should have no status entries");
+    assert!(
+        statuses.is_empty(),
+        "Clean repo should have no status entries"
+    );
 }
 
 #[test]

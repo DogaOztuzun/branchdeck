@@ -67,7 +67,10 @@ pub fn execute_effects<R: tauri::Runtime>(
                     error!("Failed to emit run:permission_request: {e}");
                 }
             }
-            RunEffect::PublishRunComplete { ref run, ref status } => {
+            RunEffect::PublishRunComplete {
+                ref run,
+                ref status,
+            } => {
                 let _ = event_bus.publish(Event::RunComplete {
                     session_id: run.session_id.clone().unwrap_or_default(),
                     tab_id: run.tab_id.clone().unwrap_or_default(),
@@ -84,8 +87,9 @@ pub fn execute_effects<R: tauri::Runtime>(
 // ── Pure state transition functions ──
 // These mutate RunInfo and return effects as data. No I/O, no framework deps.
 
-/// Map a sidecar status string to (RunStatus, TaskStatus).
+/// Map a sidecar status string to (`RunStatus`, `TaskStatus`).
 /// Unknown statuses default to Failed.
+#[must_use]
 pub fn map_sidecar_status(status: &str) -> (RunStatus, TaskStatus) {
     match status {
         "cancelled" => (RunStatus::Cancelled, TaskStatus::Cancelled),

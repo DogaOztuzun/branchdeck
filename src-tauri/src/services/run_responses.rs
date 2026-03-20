@@ -66,7 +66,10 @@ pub fn handle_run_complete<R: tauri::Runtime>(
         execute_effects(effects, app_handle, event_bus);
     }
     if !pending_permissions.is_empty() {
-        warn!("Clearing {} unresolved permission requests during run cleanup", pending_permissions.len());
+        warn!(
+            "Clearing {} unresolved permission requests during run cleanup",
+            pending_permissions.len()
+        );
     }
     *active_run = None;
     *last_activity_ms = 0;
@@ -118,7 +121,10 @@ pub fn handle_run_error<R: tauri::Runtime>(
         execute_effects(effects, app_handle, event_bus);
     }
     if !pending_permissions.is_empty() {
-        warn!("Clearing {} unresolved permission requests during run cleanup", pending_permissions.len());
+        warn!(
+            "Clearing {} unresolved permission requests during run cleanup",
+            pending_permissions.len()
+        );
     }
     *active_run = None;
     *last_activity_ms = 0;

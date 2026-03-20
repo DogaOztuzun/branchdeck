@@ -32,7 +32,6 @@ fn setup_worktree() -> (TempDir, String, String) {
     (dir, task_path, worktree_path)
 }
 
-
 // ─── T4-UNIT-001: Run state persistence (save → load round trip) ───
 
 #[test]
@@ -175,10 +174,7 @@ fn t4_unit_006_corrupt_run_state_handled() {
     std::fs::write(bd_dir.join("run.json"), "{ not valid json").unwrap();
 
     let result = run_state::load_run_state(dir.path().to_str().unwrap());
-    assert!(
-        result.is_none(),
-        "Should return None for corrupt run.json"
-    );
+    assert!(result.is_none(), "Should return None for corrupt run.json");
 
     // Corrupt file should be cleaned up
     assert!(
@@ -297,9 +293,15 @@ fn t4_sm_001_apply_session_started() {
 
     // Effects produced
     assert_eq!(effects.len(), 3);
-    assert!(effects.iter().any(|e| matches!(e, RunEffect::UpdateTaskStatus(_, TaskStatus::Running))));
-    assert!(effects.iter().any(|e| matches!(e, RunEffect::SaveRunState(..))));
-    assert!(effects.iter().any(|e| matches!(e, RunEffect::EmitStatusChanged(_))));
+    assert!(effects
+        .iter()
+        .any(|e| matches!(e, RunEffect::UpdateTaskStatus(_, TaskStatus::Running))));
+    assert!(effects
+        .iter()
+        .any(|e| matches!(e, RunEffect::SaveRunState(..))));
+    assert!(effects
+        .iter()
+        .any(|e| matches!(e, RunEffect::EmitStatusChanged(_))));
 }
 
 // ─── T4-SM-002: Running → Succeeded (run complete) ───
@@ -319,11 +321,21 @@ fn t4_sm_002_apply_run_complete() {
 
     // Effects: all expected effects present
     assert_eq!(effects.len(), 5);
-    assert!(effects.iter().any(|e| matches!(e, RunEffect::PublishRunComplete { status, .. } if status == "succeeded")));
-    assert!(effects.iter().any(|e| matches!(e, RunEffect::CaptureArtifacts { status, .. } if status == "succeeded")));
-    assert!(effects.iter().any(|e| matches!(e, RunEffect::UpdateTaskStatus(_, TaskStatus::Succeeded))));
-    assert!(effects.iter().any(|e| matches!(e, RunEffect::DeleteRunState(_))));
-    assert!(effects.iter().any(|e| matches!(e, RunEffect::EmitStatusChanged(_))));
+    assert!(effects.iter().any(
+        |e| matches!(e, RunEffect::PublishRunComplete { status, .. } if status == "succeeded")
+    ));
+    assert!(effects
+        .iter()
+        .any(|e| matches!(e, RunEffect::CaptureArtifacts { status, .. } if status == "succeeded")));
+    assert!(effects
+        .iter()
+        .any(|e| matches!(e, RunEffect::UpdateTaskStatus(_, TaskStatus::Succeeded))));
+    assert!(effects
+        .iter()
+        .any(|e| matches!(e, RunEffect::DeleteRunState(_))));
+    assert!(effects
+        .iter()
+        .any(|e| matches!(e, RunEffect::EmitStatusChanged(_))));
 }
 
 // ─── T4-SM-003: Running → Failed (run error) ───
@@ -341,8 +353,12 @@ fn t4_sm_003_apply_run_error_failed() {
     assert_eq!(run.elapsed_secs, 30);
 
     // Save (not delete) — session_id preserved for resume
-    assert!(effects.iter().any(|e| matches!(e, RunEffect::SaveRunState(..))));
-    assert!(!effects.iter().any(|e| matches!(e, RunEffect::DeleteRunState(_))));
+    assert!(effects
+        .iter()
+        .any(|e| matches!(e, RunEffect::SaveRunState(..))));
+    assert!(!effects
+        .iter()
+        .any(|e| matches!(e, RunEffect::DeleteRunState(_))));
 }
 
 // ─── T4-SM-003b: Running → Cancelled (status == "cancelled") ───
@@ -353,8 +369,14 @@ fn t4_sm_003b_apply_run_error_cancelled() {
 
     let effects = run_effects::apply_run_error(&mut run, "cancelled", None, 0, 0);
 
-    assert_eq!(run.status, RunStatus::Cancelled, "cancelled status maps to RunStatus::Cancelled");
-    assert!(effects.iter().any(|e| matches!(e, RunEffect::UpdateTaskStatus(_, TaskStatus::Cancelled))));
+    assert_eq!(
+        run.status,
+        RunStatus::Cancelled,
+        "cancelled status maps to RunStatus::Cancelled"
+    );
+    assert!(effects
+        .iter()
+        .any(|e| matches!(e, RunEffect::UpdateTaskStatus(_, TaskStatus::Cancelled))));
 }
 
 // ─── T4-SM-004: apply_* functions produce exactly the expected effect counts ───
@@ -364,18 +386,34 @@ fn t4_sm_004_apply_functions_do_not_modify_run_count() {
     let mut run = common::make_run_info(RunStatus::Starting, None);
 
     let effects = run_effects::apply_session_started(&mut run, "sess-1");
-    assert_eq!(effects.len(), 3, "session_started should produce exactly 3 effects");
+    assert_eq!(
+        effects.len(),
+        3,
+        "session_started should produce exactly 3 effects"
+    );
 
     let effects = run_effects::apply_run_complete(&mut run, Some(&1.0), 1000, 2000);
-    assert_eq!(effects.len(), 5, "run_complete should produce exactly 5 effects");
+    assert_eq!(
+        effects.len(),
+        5,
+        "run_complete should produce exactly 5 effects"
+    );
 
     let mut run = common::make_run_info(RunStatus::Running, Some("s1"));
     let effects = run_effects::apply_run_error(&mut run, "failed", None, 1000, 2000);
-    assert_eq!(effects.len(), 5, "run_error should produce exactly 5 effects");
+    assert_eq!(
+        effects.len(),
+        5,
+        "run_error should produce exactly 5 effects"
+    );
 
     let mut run = common::make_run_info(RunStatus::Running, Some("s1"));
     let effects = run_effects::apply_mark_failed(&mut run, 1000, 2000);
-    assert_eq!(effects.len(), 5, "mark_failed should produce exactly 5 effects");
+    assert_eq!(
+        effects.len(),
+        5,
+        "mark_failed should produce exactly 5 effects"
+    );
 }
 
 // ─── T4-SM-005: Running → Blocked (permission request) ───
@@ -401,9 +439,15 @@ fn t4_sm_005_apply_permission_request() {
     assert_eq!(pending.requested_at, 5_000_000);
 
     assert_eq!(effects.len(), 3);
-    assert!(effects.iter().any(|e| matches!(e, RunEffect::SaveRunState(..))));
-    assert!(effects.iter().any(|e| matches!(e, RunEffect::EmitPermissionRequest(_))));
-    assert!(effects.iter().any(|e| matches!(e, RunEffect::EmitStatusChanged(_))));
+    assert!(effects
+        .iter()
+        .any(|e| matches!(e, RunEffect::SaveRunState(..))));
+    assert!(effects
+        .iter()
+        .any(|e| matches!(e, RunEffect::EmitPermissionRequest(_))));
+    assert!(effects
+        .iter()
+        .any(|e| matches!(e, RunEffect::EmitStatusChanged(_))));
 }
 
 // ─── T4-SM-006: mark_run_failed (stale detection) ───
@@ -420,13 +464,25 @@ fn t4_sm_006_apply_mark_failed() {
     assert_eq!(run.elapsed_secs, 120);
 
     assert_eq!(effects.len(), 5);
-    assert!(effects.iter().any(|e| matches!(e, RunEffect::PublishRunComplete { status, .. } if status == "failed")));
-    assert!(effects.iter().any(|e| matches!(e, RunEffect::CaptureArtifacts { status, .. } if status == "failed")));
-    assert!(effects.iter().any(|e| matches!(e, RunEffect::UpdateTaskStatus(_, TaskStatus::Failed))));
-    assert!(effects.iter().any(|e| matches!(e, RunEffect::SaveRunState(..))));
-    assert!(effects.iter().any(|e| matches!(e, RunEffect::EmitStatusChanged(_))));
+    assert!(effects
+        .iter()
+        .any(|e| matches!(e, RunEffect::PublishRunComplete { status, .. } if status == "failed")));
+    assert!(effects
+        .iter()
+        .any(|e| matches!(e, RunEffect::CaptureArtifacts { status, .. } if status == "failed")));
+    assert!(effects
+        .iter()
+        .any(|e| matches!(e, RunEffect::UpdateTaskStatus(_, TaskStatus::Failed))));
+    assert!(effects
+        .iter()
+        .any(|e| matches!(e, RunEffect::SaveRunState(..))));
+    assert!(effects
+        .iter()
+        .any(|e| matches!(e, RunEffect::EmitStatusChanged(_))));
     // Must NOT delete run state (session_id needed for resume)
-    assert!(!effects.iter().any(|e| matches!(e, RunEffect::DeleteRunState(_))));
+    assert!(!effects
+        .iter()
+        .any(|e| matches!(e, RunEffect::DeleteRunState(_))));
 }
 
 // ─── T4-SM-007: run_complete with no cost and zero start time ───
@@ -439,7 +495,10 @@ fn t4_sm_007_apply_run_complete_no_cost_no_timing() {
 
     assert_eq!(run.status, RunStatus::Succeeded);
     assert_eq!(run.cost_usd, 0.0, "Cost should remain 0 when None passed");
-    assert_eq!(run.elapsed_secs, 0, "Elapsed should be 0 when started_at is 0");
+    assert_eq!(
+        run.elapsed_secs, 0,
+        "Elapsed should be 0 when started_at is 0"
+    );
     assert_eq!(effects.len(), 5);
 }
 
@@ -467,7 +526,8 @@ fn t4_sm_edge_run_complete_zero_cost() {
 #[test]
 fn t4_sm_edge_permission_no_tool() {
     let mut run = common::make_run_info(RunStatus::Running, Some("s1"));
-    let (pending, effects) = run_effects::apply_permission_request(&mut run, None, None, "tu-1", 1000);
+    let (pending, effects) =
+        run_effects::apply_permission_request(&mut run, None, None, "tu-1", 1000);
     assert_eq!(run.status, RunStatus::Blocked);
     assert!(pending.tool.is_none());
     assert!(pending.command.is_none());
@@ -479,7 +539,11 @@ fn t4_sm_edge_permission_no_tool() {
 fn t4_sm_edge_unknown_error_status() {
     let mut run = common::make_run_info(RunStatus::Running, Some("s1"));
     let effects = run_effects::apply_run_error(&mut run, "timeout", None, 1000, 2000);
-    assert_eq!(run.status, RunStatus::Failed, "Unknown status should default to Failed");
+    assert_eq!(
+        run.status,
+        RunStatus::Failed,
+        "Unknown status should default to Failed"
+    );
     assert_eq!(effects.len(), 5);
 }
 
@@ -497,11 +561,26 @@ fn t4_sm_edge_mark_failed_zero_timestamps() {
 #[test]
 fn t4_sm_edge_map_sidecar_status() {
     use branchdeck_lib::services::run_effects::map_sidecar_status;
-    assert_eq!(map_sidecar_status("cancelled"), (RunStatus::Cancelled, TaskStatus::Cancelled));
-    assert_eq!(map_sidecar_status("failed"), (RunStatus::Failed, TaskStatus::Failed));
-    assert_eq!(map_sidecar_status("error"), (RunStatus::Failed, TaskStatus::Failed));
-    assert_eq!(map_sidecar_status("timeout"), (RunStatus::Failed, TaskStatus::Failed));
-    assert_eq!(map_sidecar_status(""), (RunStatus::Failed, TaskStatus::Failed));
+    assert_eq!(
+        map_sidecar_status("cancelled"),
+        (RunStatus::Cancelled, TaskStatus::Cancelled)
+    );
+    assert_eq!(
+        map_sidecar_status("failed"),
+        (RunStatus::Failed, TaskStatus::Failed)
+    );
+    assert_eq!(
+        map_sidecar_status("error"),
+        (RunStatus::Failed, TaskStatus::Failed)
+    );
+    assert_eq!(
+        map_sidecar_status("timeout"),
+        (RunStatus::Failed, TaskStatus::Failed)
+    );
+    assert_eq!(
+        map_sidecar_status(""),
+        (RunStatus::Failed, TaskStatus::Failed)
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -535,13 +614,22 @@ fn stale_detection_above_threshold() {
 #[test]
 fn stale_detection_zero_activity_returns_false() {
     use branchdeck_lib::services::run_stale::check_run_stale;
-    assert!(!check_run_stale(0, 999_999_999), "zero last_activity is sentinel for 'not started'");
+    assert!(
+        !check_run_stale(0, 999_999_999),
+        "zero last_activity is sentinel for 'not started'"
+    );
 }
 
 #[test]
 fn stale_threshold_constants_are_sane() {
     use branchdeck_lib::services::run_stale::{PERMISSION_TIMEOUT_SECS, STALE_THRESHOLD_SECS};
-    assert_eq!(STALE_THRESHOLD_SECS, 120, "stale threshold should be 2 minutes");
-    assert_eq!(PERMISSION_TIMEOUT_SECS, 300, "permission timeout should be 5 minutes");
+    assert_eq!(
+        STALE_THRESHOLD_SECS, 120,
+        "stale threshold should be 2 minutes"
+    );
+    assert_eq!(
+        PERMISSION_TIMEOUT_SECS, 300,
+        "permission timeout should be 5 minutes"
+    );
     // Relationship: permission timeout > stale threshold (verified by pinned values above)
 }

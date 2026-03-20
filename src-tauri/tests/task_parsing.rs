@@ -257,7 +257,8 @@ fn t1_unit_006_increment_run_count() {
 
 #[test]
 fn t1_unit_005b_replace_frontmatter_status_preserves_body() {
-    let content = common::task_md_with_body("created", 0, Some(42), "\n## Goal\n\nFix the login bug.\n");
+    let content =
+        common::task_md_with_body("created", 0, Some(42), "\n## Goal\n\nFix the login bug.\n");
     let result = task::replace_frontmatter_status(&content, "failed");
 
     assert!(result.is_some(), "Should find and replace status field");
@@ -267,10 +268,7 @@ fn t1_unit_005b_replace_frontmatter_status_preserves_body() {
         updated.contains("status: failed"),
         "Should contain new status"
     );
-    assert!(
-        updated.contains("## Goal"),
-        "Should preserve body content"
-    );
+    assert!(updated.contains("## Goal"), "Should preserve body content");
     assert!(
         updated.contains("repo: owner/repo"),
         "Should preserve other frontmatter fields"

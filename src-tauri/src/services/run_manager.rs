@@ -195,7 +195,12 @@ impl RunManager {
                 debug!("Heartbeat received");
             }
             SidecarResponse::SessionStarted { session_id } => {
-                run_responses::handle_session_started(&mut self.active_run, session_id, app_handle, &self.event_bus);
+                run_responses::handle_session_started(
+                    &mut self.active_run,
+                    session_id,
+                    app_handle,
+                    &self.event_bus,
+                );
             }
             SidecarResponse::RunStep { session_id, .. }
             | SidecarResponse::AssistantText { session_id, .. }
@@ -284,8 +289,7 @@ impl RunManager {
         if let Some(ref mut run) = self.active_run {
             let now = now_epoch_ms();
             warn!("Marking active run as failed: {reason}");
-            let effects =
-                run_effects::apply_mark_failed(run, self.started_at_epoch_ms, now);
+            let effects = run_effects::apply_mark_failed(run, self.started_at_epoch_ms, now);
             run_effects::execute_effects(effects, app_handle, &self.event_bus);
         }
         self.active_run = None;
