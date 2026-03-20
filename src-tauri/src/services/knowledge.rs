@@ -258,7 +258,10 @@ impl KnowledgeService {
         // Brief yield to let spawned tasks observe cancellation and drop their Arc refs
         tokio::task::yield_now().await;
 
-        // Force SONA to extract remaining patterns before closing stores
+        // Force SONA to extract remaining patterns before closing stores.
+        // Note: force_learn() blocks the current thread (K-means++ clustering).
+        // Accepted at shutdown — SonaEngine is not Clone so spawn_blocking
+        // would require Arc<SonaEngine> restructuring. App is exiting anyway.
         #[cfg(feature = "sona")]
         {
             let msg = self.sona_engine.force_learn();
