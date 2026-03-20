@@ -55,6 +55,19 @@ pub async fn get_knowledge_stats(
     knowledge.get_stats(&repo_path).await
 }
 
+#[cfg(feature = "knowledge")]
+#[tauri::command]
+pub async fn forget_knowledge(
+    _knowledge: State<'_, Arc<KnowledgeService>>,
+    _entry_id: u64,
+) -> Result<(), AppError> {
+    // TODO: Implement soft-delete via metadata flag once RVF supports update-in-place.
+    // For now, entries cannot be deleted from the vector store.
+    Err(AppError::Knowledge(
+        "Forget is not yet implemented — vector store does not support deletion".to_string(),
+    ))
+}
+
 #[cfg(feature = "sona")]
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)]

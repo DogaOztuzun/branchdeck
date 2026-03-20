@@ -1,10 +1,29 @@
-import { Show } from 'solid-js';
+import { listen } from '@tauri-apps/api/event';
+import { createSignal, onCleanup, onMount, Show } from 'solid-js';
+import { cancelQueue } from '../../lib/commands/run';
 import { getLayoutStore } from '../../lib/stores/layout';
 import { getRepoStore } from '../../lib/stores/repo';
+import type { QueueStatus } from '../../types/github';
 
 export function TopBar() {
   const repoStore = getRepoStore();
   const layout = getLayoutStore();
+  const [queue, setQueue] = createSignal<QueueStatus | null>(null);
+
+  let unlistenQueue: (() => void) | null = null;
+  onMount(() => {
+    listen<QueueStatus>('run:queue_status', (e) => {
+      const qs = e.payload;
+      if (qs.queued.length === 0 && !qs.active) {
+        setQueue(null);
+      } else {
+        setQueue(qs);
+      }
+    }).then((fn) => {
+      unlistenQueue = fn;
+    });
+  });
+  onCleanup(() => unlistenQueue?.());
 
   return (
     <div class="flex items-center h-11 px-3 bg-surface border-b border-border select-none">
@@ -37,6 +56,25 @@ export function TopBar() {
           <span class="text-xs text-text-muted mr-1">/</span>
           <span class="text-xs text-info">{repoStore.getActiveWorktree()?.branch}</span>
         </Show>
+      </Show>
+      <Show when={queue()}>
+        {(qs) => (
+          <div class="ml-4 flex items-center gap-2 text-[10px] text-text-muted">
+            <span>
+              Queue: {qs().active ? '1 running' : ''}
+              {qs().queued.length > 0 ? ` · ${qs().queued.length} queued` : ''}
+              {qs().completed > 0 ? ` · ${qs().completed} done` : ''}
+              {qs().failed > 0 ? ` · ${qs().failed} failed` : ''}
+            </span>
+            <button
+              type="button"
+              class="text-[10px] text-red-400 hover:text-red-300 cursor-pointer"
+              onClick={() => cancelQueue().catch(() => {})}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
       </Show>
       <div class="ml-auto flex items-center gap-1">
         <button

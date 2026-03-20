@@ -1,4 +1,5 @@
 use crate::error::AppError;
+use crate::models::github::{PrFilter, PrSummary};
 use crate::models::PrInfo;
 use crate::services::github;
 use git2::Repository;
@@ -42,4 +43,32 @@ pub async fn check_github_available() -> Result<bool, AppError> {
         Ok(_) => Ok(true),
         Err(_) => Ok(false),
     }
+}
+
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub async fn list_open_prs(
+    repo_path: String,
+    filter: Option<PrFilter>,
+) -> Result<Vec<PrSummary>, AppError> {
+    github::list_open_prs(&repo_path, filter).await
+}
+
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub async fn list_all_open_prs(
+    repo_paths: Vec<String>,
+    filter: Option<PrFilter>,
+) -> Result<Vec<PrSummary>, AppError> {
+    github::list_all_open_prs(&repo_paths, filter).await
+}
+
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub async fn enrich_pr_summary(
+    repo_path: String,
+    mut pr: PrSummary,
+) -> Result<PrSummary, AppError> {
+    github::enrich_pr_summary(&repo_path, &mut pr).await?;
+    Ok(pr)
 }

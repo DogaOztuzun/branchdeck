@@ -5,6 +5,7 @@ use crate::models::run::{
 use crate::models::task::TaskStatus;
 use crate::services::{run_effects, run_responses, run_stale, run_state, task};
 use log::{debug, error, info, warn};
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -36,6 +37,24 @@ fn epoch_ms_to_rfc3339(epoch_ms: u64) -> String {
         .to_rfc3339()
 }
 
+/// A queued run waiting for the active run to complete.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueuedRun {
+    pub task_path: String,
+    pub worktree_path: String,
+}
+
+/// Status of the run queue.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueueStatus {
+    pub active: Option<String>,
+    pub queued: Vec<QueuedRun>,
+    pub completed: u32,
+    pub failed: u32,
+}
+
 pub struct RunManager {
     process: Option<Child>,
     stdin: Option<ChildStdin>,
@@ -49,6 +68,13 @@ pub struct RunManager {
     pending_permissions: std::collections::HashMap<String, PendingPermission>,
     /// `EventBus` for publishing `RunComplete` events to `KnowledgeService`.
     event_bus: Arc<crate::services::event_bus::EventBus>,
+    /// Sequential queue for batch runs.
+    run_queue: VecDeque<QueuedRun>,
+    /// Counts for queue progress tracking.
+    queue_completed: u32,
+    queue_failed: u32,
+    /// Set when queue is cancelled to prevent race with `advance_queue`.
+    queue_cancelled: bool,
 }
 
 impl RunManager {
@@ -66,6 +92,10 @@ impl RunManager {
             started_at_epoch_ms: 0,
             pending_permissions: std::collections::HashMap::new(),
             event_bus,
+            run_queue: VecDeque::new(),
+            queue_completed: 0,
+            queue_failed: 0,
+            queue_cancelled: false,
         }
     }
 
@@ -322,6 +352,43 @@ impl RunManager {
         // Mark run as failed (saves run.json with session_id for resume)
         self.mark_run_failed(app_handle);
         info!("Shutdown: cleaned up active run");
+    }
+
+    /// Get the current queue status.
+    #[must_use]
+    pub fn get_queue_status(&self) -> QueueStatus {
+        QueueStatus {
+            active: self.active_run.as_ref().map(|r| r.task_path.clone()),
+            queued: self.run_queue.iter().cloned().collect(),
+            completed: self.queue_completed,
+            failed: self.queue_failed,
+        }
+    }
+
+    /// Cancel the queue — cancels the active run and clears remaining queued items.
+    /// Queued tasks remain in Created status.
+    pub fn cancel_queue(&mut self) {
+        let cleared = self.run_queue.len();
+        self.run_queue.clear();
+        self.queue_completed = 0;
+        self.queue_failed = 0;
+        self.queue_cancelled = true;
+        info!("Cancelled queue: cleared {cleared} queued items");
+    }
+
+    /// Check if there's a next item in the queue and return it.
+    /// Called after a run completes or fails to trigger auto-advance.
+    fn dequeue_next(&mut self) -> Option<QueuedRun> {
+        self.run_queue.pop_front()
+    }
+
+    /// Record a queue run completion (for progress tracking).
+    pub fn record_queue_completion(&mut self, succeeded: bool) {
+        if succeeded {
+            self.queue_completed += 1;
+        } else {
+            self.queue_failed += 1;
+        }
     }
 
     /// Cancel the active run.
@@ -678,8 +745,31 @@ fn start_stdout_reader<R: tauri::Runtime>(
                     }
                     match serde_json::from_str::<SidecarResponse>(trimmed) {
                         Ok(response) => {
-                            let mut manager = state.lock().await;
-                            manager.handle_response(&response, &app_handle);
+                            let is_complete =
+                                matches!(&response, SidecarResponse::RunComplete { .. });
+                            let is_terminal = is_complete
+                                || matches!(&response, SidecarResponse::RunError { .. });
+
+                            let should_advance = {
+                                let mut manager = state.lock().await;
+                                let was_active = manager.active_run.is_some();
+                                manager.handle_response(&response, &app_handle);
+                                let still_active = manager.active_run.is_some();
+                                let queue_nonempty = !manager.run_queue.is_empty();
+                                is_terminal && was_active && !still_active && queue_nonempty
+                            };
+
+                            if should_advance {
+                                if let Err(e) = advance_queue(
+                                    Arc::clone(&state),
+                                    app_handle.clone(),
+                                    is_complete,
+                                )
+                                .await
+                                {
+                                    error!("Queue advance failed: {e}");
+                                }
+                            }
                         }
                         Err(e) => {
                             warn!("Failed to parse sidecar response: {e} — line: {trimmed}");
@@ -689,19 +779,163 @@ fn start_stdout_reader<R: tauri::Runtime>(
                 Ok(None) => {
                     // Stdout closed — sidecar process has exited
                     warn!("Sidecar stdout closed (process exited)");
-                    let mut manager = state.lock().await;
-                    manager.mark_run_failed(&app_handle);
+                    let has_queue = {
+                        let mut manager = state.lock().await;
+                        manager.mark_run_failed(&app_handle);
+                        !manager.run_queue.is_empty()
+                    };
+                    if has_queue {
+                        if let Err(e) =
+                            advance_queue(Arc::clone(&state), app_handle.clone(), false).await
+                        {
+                            error!("Queue advance after sidecar death failed: {e}");
+                        }
+                    }
                     break;
                 }
                 Err(e) => {
                     error!("Error reading sidecar stdout: {e}");
-                    let mut manager = state.lock().await;
-                    manager.mark_run_failed(&app_handle);
+                    let has_queue = {
+                        let mut manager = state.lock().await;
+                        manager.mark_run_failed(&app_handle);
+                        !manager.run_queue.is_empty()
+                    };
+                    if has_queue {
+                        if let Err(e) =
+                            advance_queue(Arc::clone(&state), app_handle.clone(), false).await
+                        {
+                            error!("Queue advance after read error failed: {e}");
+                        }
+                    }
                     break;
                 }
             }
         }
     });
+}
+
+/// Batch-launch multiple runs sequentially. Enqueues all pairs, starts the first.
+///
+/// # Errors
+///
+/// Returns `RunError` if a run is already active (and no queue advancement is possible).
+pub async fn batch_launch<R: tauri::Runtime>(
+    state: RunManagerState,
+    app_handle: tauri::AppHandle<R>,
+    pairs: Vec<(String, String)>,
+) -> Result<QueueStatus, AppError> {
+    let mut manager = state.lock().await;
+
+    // Reset queue state — clear any prior queue items
+    manager.run_queue.clear();
+    // Only reset counters if no active run — otherwise the completing run
+    // would increment the new batch's counters incorrectly
+    if manager.active_run.is_none() {
+        manager.queue_completed = 0;
+        manager.queue_failed = 0;
+    }
+    manager.queue_cancelled = false;
+
+    // Enqueue all pairs
+    for (task_path, worktree_path) in &pairs {
+        manager.run_queue.push_back(QueuedRun {
+            task_path: task_path.clone(),
+            worktree_path: worktree_path.clone(),
+        });
+    }
+
+    // If no active run, start the first one
+    if manager.active_run.is_none() {
+        if let Some(next) = manager.dequeue_next() {
+            drop(manager); // Release lock before launching
+            let options = LaunchOptions {
+                max_turns: None,
+                max_budget_usd: None,
+            };
+            launch_run(
+                Arc::clone(&state),
+                app_handle,
+                &next.task_path,
+                &next.worktree_path,
+                options,
+            )
+            .await?;
+        }
+    }
+
+    // Return status AFTER dequeue so it reflects the actual queue state
+    let manager = state.lock().await;
+    let status = manager.get_queue_status();
+    Ok(status)
+}
+
+/// Advance the queue after a run completes. Called outside the lock.
+///
+/// # Errors
+///
+/// Returns `AppError` if the next run cannot be launched.
+pub async fn advance_queue<R: tauri::Runtime>(
+    state: RunManagerState,
+    app_handle: tauri::AppHandle<R>,
+    succeeded: bool,
+) -> Result<(), AppError> {
+    let next = {
+        let mut manager = state.lock().await;
+        manager.record_queue_completion(succeeded);
+
+        // Emit queue status update
+        let queue_status = manager.get_queue_status();
+        if let Err(e) = app_handle.emit("run:queue_status", &queue_status) {
+            error!("Failed to emit queue status: {e}");
+        }
+
+        // Check if queue was cancelled between run completion and this call
+        if manager.queue_cancelled {
+            info!("Queue was cancelled — not advancing");
+            None
+        } else {
+            manager.dequeue_next()
+        }
+    };
+
+    if let Some(next) = next {
+        // Re-check cancel flag before launching — closes race window between dequeue and launch
+        {
+            let manager = state.lock().await;
+            if manager.queue_cancelled {
+                info!("Queue cancelled after dequeue — skipping launch");
+                return Ok(());
+            }
+        }
+
+        info!("Queue advancing: launching next run for {}", next.task_path);
+        let options = LaunchOptions {
+            max_turns: None,
+            max_budget_usd: None,
+        };
+        if let Err(e) = launch_run(
+            Arc::clone(&state),
+            app_handle,
+            &next.task_path,
+            &next.worktree_path,
+            options,
+        )
+        .await
+        {
+            // Re-enqueue the failed item so it's not silently dropped
+            error!(
+                "Queue advance failed for {}: {e} — re-enqueuing",
+                next.task_path
+            );
+            let mut manager = state.lock().await;
+            manager.run_queue.push_front(next);
+            return Err(e);
+        }
+    } else {
+        info!("Queue empty — all batch runs complete");
+    }
+
+    Ok(())
 }
 
 /// Type alias for the managed state.

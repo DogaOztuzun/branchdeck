@@ -3,12 +3,19 @@
   "version": "0.2.0",
   "description": "Terminal-first workflow manager for git repositories and worktrees",
   "type": "module",
+  "workspaces": [
+    "sidecar"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "check": "biome check .",
     "check:fix": "biome check --fix .",
     "test": "vitest run",
+    "test:rust": "cd src-tauri && cargo test",
+    "test:all": "vitest run && cd src-tauri && cargo test",
+    "lint:all": "biome check . && cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings",
+    "verify": "biome check . && vitest run && cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test",
     "tauri": "tauri"
   },
   "license": "MIT",

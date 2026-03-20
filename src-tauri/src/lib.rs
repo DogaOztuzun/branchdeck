@@ -350,6 +350,9 @@ pub fn run() {
             // GitHub
             commands::github::get_pr_status,
             commands::github::check_github_available,
+            commands::github::list_open_prs,
+            commands::github::list_all_open_prs,
+            commands::github::enrich_pr_summary,
             // Agent monitoring
             commands::agent::get_agents,
             commands::agent::get_file_activity,
@@ -364,6 +367,10 @@ pub fn run() {
             commands::run::retry_run_cmd,
             commands::run::resume_run_cmd,
             commands::run::respond_to_permission_cmd,
+            commands::run::shepherd_pr_cmd,
+            commands::run::batch_launch_cmd,
+            commands::run::cancel_queue_cmd,
+            commands::run::queue_status_cmd,
             // Task
             commands::task::create_task_cmd,
             commands::task::get_task_cmd,
@@ -378,6 +385,8 @@ pub fn run() {
             commands::knowledge::ingest_knowledge,
             #[cfg(feature = "knowledge")]
             commands::knowledge::get_knowledge_stats,
+            #[cfg(feature = "knowledge")]
+            commands::knowledge::forget_knowledge,
             #[cfg(feature = "sona")]
             commands::knowledge::suggest_next,
         ])
