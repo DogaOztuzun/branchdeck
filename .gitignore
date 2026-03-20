@@ -3,4 +3,5 @@ dist
 target
 .claude/settings.local.json
 _bmad-output/
+docs/_archive/
 

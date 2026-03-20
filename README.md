@@ -153,6 +153,10 @@ Run the full check suite — CI will reject PRs that fail any of these:
 bun run check && bun test && cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 ```
 
+## Documentation
+
+See [docs/index.md](docs/index.md) for full project documentation — architecture, data models, component inventory, and development guide.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, branch strategy, code standards, and PR guidelines.
