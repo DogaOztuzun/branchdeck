@@ -413,9 +413,15 @@ impl KnowledgeService {
                     _ = interval.tick() => {
                         // Run tick on blocking thread pool — K-means++ is CPU-intensive
                         let sona_ref = Arc::clone(&service);
-                        let tick_result = tokio::task::spawn_blocking(move || {
+                        let tick_result = match tokio::task::spawn_blocking(move || {
                             sona_ref.sona().tick()
-                        }).await.unwrap_or(None);
+                        }).await {
+                            Ok(result) => result,
+                            Err(e) => {
+                                error!("[sona] tick panicked: {e}");
+                                None
+                            }
+                        };
                         if let Some(msg) = tick_result {
                             info!("[sona] {msg}");
                             service.persist_sona_patterns().await;
