@@ -18,12 +18,13 @@ Branchdeck is a Tauri v2 desktop app — terminal-first workflow manager for git
 ## Commands
 
 ```bash
-bun install                    # Install frontend deps
+bun install                    # Install frontend + sidecar deps (workspaces)
 bunx tauri dev                 # Dev mode (hot reload + Rust rebuild)
 bunx tauri build               # Production build
 bun run check                  # Biome lint + format check
 bun run check:fix              # Biome auto-fix
 bun test                       # Frontend tests (vitest)
+bun run verify                 # Full check suite (Biome + vitest + fmt + clippy + cargo test)
 cargo clippy --all-targets     # Rust linting (run from src-tauri/)
 cargo fmt --check              # Rust format check (run from src-tauri/)
 cargo test                     # Rust tests (run from src-tauri/)
@@ -34,7 +35,8 @@ cargo test                     # Rust tests (run from src-tauri/)
 Run the full check suite. CI will reject PRs that fail any step:
 
 ```bash
-bun run check && bun test && cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
+bun run verify
+# Or manually: bun run check && bun test && cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 ```
 
 ## Architecture
@@ -102,7 +104,7 @@ No business logic in Tauri command handlers — commands validate args, call a s
 6. IPC wrapper: `src/lib/commands/` — with try/catch + `logError`
 7. Store: `src/lib/stores/` — if feature needs reactive state
 8. Component: `src/components/{category}/`
-9. **Verify before commit:** `bun run check && bun test && cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
+9. **Verify before commit:** `bun run verify`
 
 ### Logging
 All service code must include structured logging via `tauri-plugin-log` (Rust) and `@tauri-apps/plugin-log` (frontend).
@@ -178,7 +180,10 @@ src-tauri/tests/
 ├── artifact_capture.rs    # T2-INT: git artifact capture with temp repos
 ├── run_lifecycle.rs       # T4-UNIT: pure state machine + persistence + stale detection
 ├── git_operations.rs      # T6-INT: worktree CRUD, branches, status
-└── agent_monitoring.rs    # T5-INT: event bus, activity store, hook receiver (pre-existing)
+├── agent_monitoring.rs    # T5-INT: event bus, activity store, hook receiver (pre-existing)
+├── github_prs.rs          # PR discovery: resolve_owner_repo, parse_github_remote edge cases
+├── pr_shepherd.rs         # Shepherd: worktree conflict detection, branch guard logic
+└── run_queue.rs           # Batch queue: queue status, completion tracking, cancel, serde
 
 src/lib/__tests__/
 └── utils.test.ts          # T7-UNIT: parseArtifactSummary, statusColor, shortPath
