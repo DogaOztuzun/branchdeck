@@ -388,8 +388,13 @@ pub fn run() {
                     window.try_state::<services::run_manager::RunManagerState>()
                 {
                     let app_handle = window.app_handle();
-                    if let Ok(mut manager) = run_state.try_lock() {
-                        manager.shutdown(app_handle);
+                    match run_state.try_lock() {
+                        Ok(mut manager) => manager.shutdown(app_handle),
+                        Err(_) => {
+                            log::warn!(
+                                "Shutdown: RunManager lock contended, sidecar may not be killed"
+                            );
+                        }
                     }
                 }
 

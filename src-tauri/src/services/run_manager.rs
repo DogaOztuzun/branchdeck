@@ -303,7 +303,8 @@ impl RunManager {
     /// Shut down the run manager during app exit.
     ///
     /// If there is an active run, kills the sidecar child process,
-    /// marks the run as failed, updates task.md, and cleans up run.json.
+    /// marks the run as failed, and updates task.md. Keeps run.json
+    /// with `session_id` so the user can manually resume later.
     pub fn shutdown<R: tauri::Runtime>(&mut self, app_handle: &tauri::AppHandle<R>) {
         if self.active_run.is_none() {
             debug!("Shutdown: no active run to clean up");
@@ -578,7 +579,14 @@ pub async fn resume_run<R: tauri::Runtime>(
     task_path: &str,
     worktree_path: &str,
 ) -> Result<RunInfo, AppError> {
-    // Validate task exists and is in a resumable state
+    let mut manager = state.lock().await;
+
+    if manager.active_run.is_some() {
+        error!("Cannot resume run: a run is already active");
+        return Err(AppError::RunError("A run is already active".to_owned()));
+    }
+
+    // Validate task exists and is in a resumable state (under lock to avoid TOCTOU)
     let task_info = task::get_task(worktree_path)?;
     match task_info.frontmatter.status {
         TaskStatus::Failed | TaskStatus::Cancelled => {}
@@ -596,13 +604,6 @@ pub async fn resume_run<R: tauri::Runtime>(
         error!("Cannot resume: no session_id found for {task_path}");
         AppError::RunError("No session to resume — try retry instead".to_owned())
     })?;
-
-    let mut manager = state.lock().await;
-
-    if manager.active_run.is_some() {
-        error!("Cannot resume run: a run is already active");
-        return Err(AppError::RunError("A run is already active".to_owned()));
-    }
 
     let task_file = Path::new(task_path);
     if !task_file.exists() {
