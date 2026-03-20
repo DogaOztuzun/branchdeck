@@ -38,10 +38,15 @@ notify = "8"
 rvf-runtime = { version = "0.2", optional = true }
 fastembed = { version = "5", optional = true }
 bincode = { version = "2", optional = true }
+tokio-util = { version = "0.7", features = ["rt"], optional = true }
+
+# SONA learning engine (feature-gated)
+ruvector-sona = { version = "0.1", optional = true, features = ["serde-support"] }
 
 [features]
 default = ["knowledge"]
-knowledge = ["dep:rvf-runtime", "dep:fastembed", "dep:bincode"]
+knowledge = ["dep:rvf-runtime", "dep:fastembed", "dep:bincode", "dep:tokio-util"]
+sona = ["dep:ruvector-sona", "knowledge"]
 
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json"] }

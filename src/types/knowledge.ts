@@ -30,3 +30,16 @@ export type MergeResult = {
   discarded: number;
   deleted: number;
 };
+
+export type Suggestion = {
+  id: number;
+  content: string;
+  distance: number;
+  avgQuality: number;
+};
+
+export type SonaStats = {
+  trajectoriesBuffered: number;
+  patternsStored: number;
+  patternsPersisted: number;
+};

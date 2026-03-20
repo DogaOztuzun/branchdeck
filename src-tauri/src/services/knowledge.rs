@@ -16,7 +16,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// ONNX embedding dimension for BAAI/bge-small-en-v1.5
-const EMBEDDING_DIM: u16 = 384;
+pub(crate) const EMBEDDING_DIM: u16 = 384;
 
 /// Maximum number of entries in the embed queue before dropping oldest.
 pub(crate) const MAX_EMBED_QUEUE_SIZE: usize = 1000;
@@ -126,6 +126,12 @@ pub struct KnowledgeService {
     pub(crate) embed_queue: Arc<RwLock<Vec<PendingEntry>>>,
     #[cfg(feature = "knowledge")]
     embedder: Arc<RwLock<Option<fastembed::TextEmbedding>>>,
+    #[cfg(feature = "knowledge")]
+    shutdown_token: tokio_util::sync::CancellationToken,
+    #[cfg(feature = "sona")]
+    sona_engine: ruvector_sona::SonaEngine,
+    #[cfg(feature = "sona")]
+    pub(crate) persisted_pattern_ids: RwLock<std::collections::HashSet<u64>>,
     config_dir: PathBuf,
 }
 
@@ -146,12 +152,27 @@ impl KnowledgeService {
             global_rvf_path.display()
         );
 
+        #[cfg(feature = "sona")]
+        let sona_engine = {
+            let config = ruvector_sona::SonaConfig {
+                hidden_dim: usize::from(EMBEDDING_DIM),
+                embedding_dim: usize::from(EMBEDDING_DIM),
+                ..ruvector_sona::SonaConfig::default()
+            };
+            ruvector_sona::SonaEngine::with_config(config)
+        };
+
         let service = Self {
             global_store: Arc::new(RwLock::new(global_store)),
             repo_stores: Arc::new(RwLock::new(HashMap::new())),
             active_trajectories: Arc::new(RwLock::new(HashMap::new())),
             embed_queue: Arc::new(RwLock::new(Vec::new())),
             embedder: Arc::new(RwLock::new(None)),
+            shutdown_token: tokio_util::sync::CancellationToken::new(),
+            #[cfg(feature = "sona")]
+            sona_engine,
+            #[cfg(feature = "sona")]
+            persisted_pattern_ids: RwLock::new(std::collections::HashSet::new()),
             config_dir: config_dir.to_path_buf(),
         };
 
@@ -232,6 +253,19 @@ impl KnowledgeService {
     /// Close all repo stores and the global store. Called on app shutdown.
     #[cfg(feature = "knowledge")]
     pub async fn close_all(&self) {
+        // Signal subscriber and tick loop to stop
+        self.shutdown_token.cancel();
+        // Brief yield to let spawned tasks observe cancellation and drop their Arc refs
+        tokio::task::yield_now().await;
+
+        // Force SONA to extract remaining patterns before closing stores
+        #[cfg(feature = "sona")]
+        {
+            let msg = self.sona_engine.force_learn();
+            info!("[sona] Shutdown extraction: {msg}");
+            self.persist_sona_patterns().await;
+        }
+
         // Persist embed queue
         let queue_path = self.config_dir.join("embed_queue.jsonl");
         let queue = self.embed_queue.read().await;
@@ -253,6 +287,10 @@ impl KnowledgeService {
                 }
             }
         }
+
+        // Global store close: RvfStore::close() takes ownership (self), but
+        // self.global_store is a struct field we can't move out of. Data is safe —
+        // RVF fsyncs on each ingest. OS reclaims resources on process exit.
 
         debug!("All knowledge stores closed");
     }
@@ -409,6 +447,18 @@ impl KnowledgeService {
     #[allow(dead_code)]
     pub(crate) fn config_dir(&self) -> &Path {
         &self.config_dir
+    }
+
+    /// Get the shutdown cancellation token.
+    #[cfg(feature = "knowledge")]
+    pub(crate) fn shutdown_token(&self) -> &tokio_util::sync::CancellationToken {
+        &self.shutdown_token
+    }
+
+    /// Get a reference to the SONA engine.
+    #[cfg(feature = "sona")]
+    pub(crate) fn sona(&self) -> &ruvector_sona::SonaEngine {
+        &self.sona_engine
     }
 }
 

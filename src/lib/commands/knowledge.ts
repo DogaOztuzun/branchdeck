@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { error as logError } from '@tauri-apps/plugin-log';
-import type { KnowledgeStats, QueryResult } from '../../types/knowledge';
+import type { KnowledgeStats, QueryResult, Suggestion } from '../../types/knowledge';
 
 export async function queryKnowledge(
   repoPath: string,
@@ -47,6 +47,23 @@ export async function getKnowledgeStats(repoPath: string): Promise<KnowledgeStat
     });
   } catch (e) {
     logError(`getKnowledgeStats failed: ${e}`);
+    throw e;
+  }
+}
+
+export async function suggestNext(
+  repoPath: string,
+  context: string,
+  topK?: number,
+): Promise<Suggestion[]> {
+  try {
+    return await invoke<Suggestion[]>('suggest_next', {
+      repoPath,
+      context,
+      topK: topK ?? null,
+    });
+  } catch (e) {
+    logError(`suggestNext failed: ${e}`);
     throw e;
   }
 }
