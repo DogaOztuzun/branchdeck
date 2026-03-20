@@ -1,4 +1,5 @@
 use crate::models::run::{PendingPermission, PermissionResponseMsg, RunInfo, RunStatus};
+use crate::services::run_state;
 use log::{error, warn};
 use std::collections::HashMap;
 use tauri::Emitter;
@@ -83,6 +84,7 @@ pub async fn check_permission_timeout<R: tauri::Runtime>(
     if !timed_out.is_empty() && pending_permissions.is_empty() {
         if let Some(ref mut run) = active_run {
             run.status = RunStatus::Running;
+            run_state::save_run_state(&run.task_path, run);
             if let Err(e) = app_handle.emit("run:status_changed", &*run) {
                 error!("Failed to emit run:status_changed after permission timeout: {e}");
             }

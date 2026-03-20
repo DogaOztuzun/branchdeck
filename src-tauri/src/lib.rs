@@ -383,13 +383,18 @@ pub fn run() {
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
-                // Shut down RunManager: kill sidecar, mark active run failed, clean up run.json
+                // Shut down RunManager: kill sidecar, mark active run failed, keep run.json for resume
                 if let Some(run_state) =
                     window.try_state::<services::run_manager::RunManagerState>()
                 {
                     let app_handle = window.app_handle();
-                    if let Ok(mut manager) = run_state.try_lock() {
-                        manager.shutdown(app_handle);
+                    match run_state.try_lock() {
+                        Ok(mut manager) => manager.shutdown(app_handle),
+                        Err(_) => {
+                            log::warn!(
+                                "Shutdown: RunManager lock contended, sidecar may not be killed"
+                            );
+                        }
                     }
                 }
 
