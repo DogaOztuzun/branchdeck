@@ -5,6 +5,8 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::doc_markdown, clippy::cast_possible_wrap, clippy::cast_sign_loss)]
 
+mod common;
+
 use branchdeck_lib::services::task;
 use git2::{Repository, Signature};
 use std::path::Path;
@@ -79,28 +81,7 @@ fn make_commit(repo_path: &Path, filename: &str, message: &str) {
 }
 
 fn base_task_md(status: &str, run_count: u32) -> String {
-    format!(
-        "\
----
-type: issue-fix
-scope: worktree
-status: {status}
-repo: owner/repo
-branch: fix/bug-123
-pr: 42
-created: 2026-03-20T10:00:00+00:00
-run-count: {run_count}
----
-
-## Instructions
-
-Work on the task.
-
-## Goal
-
-Fix the bug.
-"
-    )
+    common::task_md_with_body(status, run_count, Some(42), "\n## Instructions\n\nWork on the task.\n\n## Goal\n\nFix the bug.\n")
 }
 
 // ─── T2-INT-001: Capture artifacts after successful run with commits ───

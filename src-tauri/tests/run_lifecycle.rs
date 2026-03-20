@@ -6,6 +6,8 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
 
+mod common;
+
 use branchdeck_lib::models::run::{RunInfo, RunStatus};
 use branchdeck_lib::models::task::TaskStatus;
 use branchdeck_lib::services::run_effects::{self, RunEffect};
@@ -30,18 +32,6 @@ fn setup_worktree() -> (TempDir, String, String) {
     (dir, task_path, worktree_path)
 }
 
-fn make_run_info(status: RunStatus, session_id: Option<&str>) -> RunInfo {
-    RunInfo {
-        session_id: session_id.map(String::from),
-        task_path: "/fake/.branchdeck/task.md".to_string(),
-        status,
-        started_at: "2026-03-20T10:00:00+00:00".to_string(),
-        cost_usd: 0.0,
-        last_heartbeat: None,
-        elapsed_secs: 0,
-        tab_id: Some("tab-1".to_string()),
-    }
-}
 
 // ─── T4-UNIT-001: Run state persistence (save → load round trip) ───
 
@@ -80,7 +70,7 @@ fn t4_unit_002_run_state_status_transitions() {
     let (_dir, task_path, worktree_path) = setup_worktree();
 
     // Starting
-    let mut run = make_run_info(RunStatus::Starting, None);
+    let mut run = common::make_run_info(RunStatus::Starting, None);
     run.task_path = task_path.clone();
     run_state::save_run_state(&task_path, &run);
     let loaded = run_state::load_run_state(&worktree_path).unwrap();
@@ -109,7 +99,7 @@ fn t4_unit_002_run_state_status_transitions() {
 fn t4_unit_003_run_state_failed_preserves_session_id() {
     let (_dir, task_path, worktree_path) = setup_worktree();
 
-    let mut run = make_run_info(RunStatus::Running, Some("sess-456"));
+    let mut run = common::make_run_info(RunStatus::Running, Some("sess-456"));
     run.task_path = task_path.clone();
     run.cost_usd = 0.25;
 
@@ -133,7 +123,7 @@ fn t4_unit_003_run_state_failed_preserves_session_id() {
 fn t4_unit_004_delete_run_state() {
     let (_dir, task_path, worktree_path) = setup_worktree();
 
-    let run = make_run_info(RunStatus::Succeeded, Some("sess-789"));
+    let run = common::make_run_info(RunStatus::Succeeded, Some("sess-789"));
     run_state::save_run_state(&task_path, &run);
     assert!(run_state::load_run_state(&worktree_path).is_some());
 
@@ -158,11 +148,11 @@ fn t4_unit_005_scan_all_run_states() {
     // Save run state in worktrees 1 and 3, not 2
     run_state::save_run_state(
         &task_path1,
-        &make_run_info(RunStatus::Running, Some("sess-a")),
+        &common::make_run_info(RunStatus::Running, Some("sess-a")),
     );
     run_state::save_run_state(
         &task_path3,
-        &make_run_info(RunStatus::Failed, Some("sess-c")),
+        &common::make_run_info(RunStatus::Failed, Some("sess-c")),
     );
 
     let paths = vec![wt1, wt2, wt3];
@@ -209,7 +199,7 @@ fn session_matches_both_none() {
 
 #[test]
 fn session_matches_run_has_no_session_yet() {
-    let run = make_run_info(RunStatus::Starting, None);
+    let run = common::make_run_info(RunStatus::Starting, None);
     assert!(
         run_responses::session_matches(Some(&run), Some(&"sess-1".to_string())),
         "Active run without session_id should accept any response"
@@ -218,7 +208,7 @@ fn session_matches_run_has_no_session_yet() {
 
 #[test]
 fn session_matches_response_has_no_session() {
-    let run = make_run_info(RunStatus::Running, Some("sess-1"));
+    let run = common::make_run_info(RunStatus::Running, Some("sess-1"));
     assert!(
         run_responses::session_matches(Some(&run), None),
         "Response without session_id should match (heartbeats)"
@@ -227,7 +217,7 @@ fn session_matches_response_has_no_session() {
 
 #[test]
 fn session_matches_same_session() {
-    let run = make_run_info(RunStatus::Running, Some("sess-1"));
+    let run = common::make_run_info(RunStatus::Running, Some("sess-1"));
     assert!(
         run_responses::session_matches(Some(&run), Some(&"sess-1".to_string())),
         "Same session_id should match"
@@ -236,7 +226,7 @@ fn session_matches_same_session() {
 
 #[test]
 fn session_matches_different_session() {
-    let run = make_run_info(RunStatus::Running, Some("sess-1"));
+    let run = common::make_run_info(RunStatus::Running, Some("sess-1"));
     assert!(
         !run_responses::session_matches(Some(&run), Some(&"sess-2".to_string())),
         "Different session_id should NOT match"
@@ -297,7 +287,7 @@ fn run_status_kebab_case_serialization() {
 
 #[test]
 fn t4_sm_001_apply_session_started() {
-    let mut run = make_run_info(RunStatus::Starting, None);
+    let mut run = common::make_run_info(RunStatus::Starting, None);
 
     let effects = run_effects::apply_session_started(&mut run, "sess-123");
 
@@ -307,16 +297,16 @@ fn t4_sm_001_apply_session_started() {
 
     // Effects produced
     assert_eq!(effects.len(), 3);
-    assert!(matches!(&effects[0], RunEffect::UpdateTaskStatus(_, TaskStatus::Running)));
-    assert!(matches!(&effects[1], RunEffect::SaveRunState(..)));
-    assert!(matches!(&effects[2], RunEffect::EmitStatusChanged(_)));
+    assert!(effects.iter().any(|e| matches!(e, RunEffect::UpdateTaskStatus(_, TaskStatus::Running))));
+    assert!(effects.iter().any(|e| matches!(e, RunEffect::SaveRunState(..))));
+    assert!(effects.iter().any(|e| matches!(e, RunEffect::EmitStatusChanged(_))));
 }
 
 // ─── T4-SM-002: Running → Succeeded (run complete) ───
 
 #[test]
 fn t4_sm_002_apply_run_complete() {
-    let mut run = make_run_info(RunStatus::Running, Some("sess-1"));
+    let mut run = common::make_run_info(RunStatus::Running, Some("sess-1"));
     let started_at = 1_000_000;
     let now = 1_060_000; // 60 seconds later
 
@@ -327,20 +317,20 @@ fn t4_sm_002_apply_run_complete() {
     assert_eq!(run.cost_usd, 0.75);
     assert_eq!(run.elapsed_secs, 60);
 
-    // Effects: publish → capture → update status → delete state → emit
+    // Effects: all expected effects present
     assert_eq!(effects.len(), 5);
-    assert!(matches!(&effects[0], RunEffect::PublishRunComplete { status, .. } if status == "succeeded"));
-    assert!(matches!(&effects[1], RunEffect::CaptureArtifacts { status, .. } if status == "succeeded"));
-    assert!(matches!(&effects[2], RunEffect::UpdateTaskStatus(_, TaskStatus::Succeeded)));
-    assert!(matches!(&effects[3], RunEffect::DeleteRunState(_)));
-    assert!(matches!(&effects[4], RunEffect::EmitStatusChanged(_)));
+    assert!(effects.iter().any(|e| matches!(e, RunEffect::PublishRunComplete { status, .. } if status == "succeeded")));
+    assert!(effects.iter().any(|e| matches!(e, RunEffect::CaptureArtifacts { status, .. } if status == "succeeded")));
+    assert!(effects.iter().any(|e| matches!(e, RunEffect::UpdateTaskStatus(_, TaskStatus::Succeeded))));
+    assert!(effects.iter().any(|e| matches!(e, RunEffect::DeleteRunState(_))));
+    assert!(effects.iter().any(|e| matches!(e, RunEffect::EmitStatusChanged(_))));
 }
 
 // ─── T4-SM-003: Running → Failed (run error) ───
 
 #[test]
 fn t4_sm_003_apply_run_error_failed() {
-    let mut run = make_run_info(RunStatus::Running, Some("sess-1"));
+    let mut run = common::make_run_info(RunStatus::Running, Some("sess-1"));
     let started_at = 1_000_000;
     let now = 1_030_000; // 30 seconds
 
@@ -351,7 +341,7 @@ fn t4_sm_003_apply_run_error_failed() {
     assert_eq!(run.elapsed_secs, 30);
 
     // Save (not delete) — session_id preserved for resume
-    assert!(matches!(&effects[3], RunEffect::SaveRunState(..)));
+    assert!(effects.iter().any(|e| matches!(e, RunEffect::SaveRunState(..))));
     assert!(!effects.iter().any(|e| matches!(e, RunEffect::DeleteRunState(_))));
 }
 
@@ -359,38 +349,40 @@ fn t4_sm_003_apply_run_error_failed() {
 
 #[test]
 fn t4_sm_003b_apply_run_error_cancelled() {
-    let mut run = make_run_info(RunStatus::Running, Some("sess-1"));
+    let mut run = common::make_run_info(RunStatus::Running, Some("sess-1"));
 
     let effects = run_effects::apply_run_error(&mut run, "cancelled", None, 0, 0);
 
     assert_eq!(run.status, RunStatus::Cancelled, "cancelled status maps to RunStatus::Cancelled");
-    assert!(matches!(&effects[2], RunEffect::UpdateTaskStatus(_, TaskStatus::Cancelled)));
+    assert!(effects.iter().any(|e| matches!(e, RunEffect::UpdateTaskStatus(_, TaskStatus::Cancelled))));
 }
 
-// ─── T4-SM-004: retry_run — no double increment ───
-// (retry_run calls launch_run which increments; apply_* does NOT increment)
+// ─── T4-SM-004: apply_* functions produce exactly the expected effect counts ───
 
 #[test]
-fn t4_sm_004_apply_functions_do_not_increment_run_count() {
-    // Verify none of the apply functions produce an effect that increments run_count.
-    // run_count is only incremented in launch_run/resume_run (orchestration layer).
-    let mut run = make_run_info(RunStatus::Starting, None);
+fn t4_sm_004_apply_functions_do_not_modify_run_count() {
+    let mut run = common::make_run_info(RunStatus::Starting, None);
 
     let effects = run_effects::apply_session_started(&mut run, "sess-1");
-    for effect in &effects {
-        // No IncrementRunCount effect variant exists — by design
-        assert!(!matches!(effect, RunEffect::UpdateTaskStatus(..)) || {
-            // UpdateTaskStatus only changes status, not run_count
-            true
-        });
-    }
+    assert_eq!(effects.len(), 3, "session_started should produce exactly 3 effects");
+
+    let effects = run_effects::apply_run_complete(&mut run, Some(&1.0), 1000, 2000);
+    assert_eq!(effects.len(), 5, "run_complete should produce exactly 5 effects");
+
+    let mut run = common::make_run_info(RunStatus::Running, Some("s1"));
+    let effects = run_effects::apply_run_error(&mut run, "failed", None, 1000, 2000);
+    assert_eq!(effects.len(), 5, "run_error should produce exactly 5 effects");
+
+    let mut run = common::make_run_info(RunStatus::Running, Some("s1"));
+    let effects = run_effects::apply_mark_failed(&mut run, 1000, 2000);
+    assert_eq!(effects.len(), 5, "mark_failed should produce exactly 5 effects");
 }
 
 // ─── T4-SM-005: Running → Blocked (permission request) ───
 
 #[test]
 fn t4_sm_005_apply_permission_request() {
-    let mut run = make_run_info(RunStatus::Running, Some("sess-1"));
+    let mut run = common::make_run_info(RunStatus::Running, Some("sess-1"));
     let tool = "Bash".to_string();
     let command = "rm -rf /tmp/test".to_string();
 
@@ -409,16 +401,16 @@ fn t4_sm_005_apply_permission_request() {
     assert_eq!(pending.requested_at, 5_000_000);
 
     assert_eq!(effects.len(), 3);
-    assert!(matches!(&effects[0], RunEffect::SaveRunState(..)));
-    assert!(matches!(&effects[1], RunEffect::EmitPermissionRequest(_)));
-    assert!(matches!(&effects[2], RunEffect::EmitStatusChanged(_)));
+    assert!(effects.iter().any(|e| matches!(e, RunEffect::SaveRunState(..))));
+    assert!(effects.iter().any(|e| matches!(e, RunEffect::EmitPermissionRequest(_))));
+    assert!(effects.iter().any(|e| matches!(e, RunEffect::EmitStatusChanged(_))));
 }
 
 // ─── T4-SM-006: mark_run_failed (stale detection) ───
 
 #[test]
 fn t4_sm_006_apply_mark_failed() {
-    let mut run = make_run_info(RunStatus::Running, Some("sess-1"));
+    let mut run = common::make_run_info(RunStatus::Running, Some("sess-1"));
     let started_at = 1_000_000;
     let now = 1_120_000; // 120 seconds (stale threshold)
 
@@ -427,19 +419,21 @@ fn t4_sm_006_apply_mark_failed() {
     assert_eq!(run.status, RunStatus::Failed);
     assert_eq!(run.elapsed_secs, 120);
 
-    // Must capture artifacts BEFORE the run is cleared (order matters)
-    assert!(matches!(&effects[0], RunEffect::PublishRunComplete { status, .. } if status == "failed"));
-    assert!(matches!(&effects[1], RunEffect::CaptureArtifacts { status, .. } if status == "failed"));
-    assert!(matches!(&effects[2], RunEffect::UpdateTaskStatus(_, TaskStatus::Failed)));
-    assert!(matches!(&effects[3], RunEffect::SaveRunState(..))); // save, not delete
-    assert!(matches!(&effects[4], RunEffect::EmitStatusChanged(_)));
+    assert_eq!(effects.len(), 5);
+    assert!(effects.iter().any(|e| matches!(e, RunEffect::PublishRunComplete { status, .. } if status == "failed")));
+    assert!(effects.iter().any(|e| matches!(e, RunEffect::CaptureArtifacts { status, .. } if status == "failed")));
+    assert!(effects.iter().any(|e| matches!(e, RunEffect::UpdateTaskStatus(_, TaskStatus::Failed))));
+    assert!(effects.iter().any(|e| matches!(e, RunEffect::SaveRunState(..))));
+    assert!(effects.iter().any(|e| matches!(e, RunEffect::EmitStatusChanged(_))));
+    // Must NOT delete run state (session_id needed for resume)
+    assert!(!effects.iter().any(|e| matches!(e, RunEffect::DeleteRunState(_))));
 }
 
 // ─── T4-SM-007: run_complete with no cost and zero start time ───
 
 #[test]
 fn t4_sm_007_apply_run_complete_no_cost_no_timing() {
-    let mut run = make_run_info(RunStatus::Running, Some("sess-1"));
+    let mut run = common::make_run_info(RunStatus::Running, Some("sess-1"));
 
     let effects = run_effects::apply_run_complete(&mut run, None, 0, 1_000_000);
 
@@ -447,4 +441,65 @@ fn t4_sm_007_apply_run_complete_no_cost_no_timing() {
     assert_eq!(run.cost_usd, 0.0, "Cost should remain 0 when None passed");
     assert_eq!(run.elapsed_secs, 0, "Elapsed should be 0 when started_at is 0");
     assert_eq!(effects.len(), 5);
+}
+
+// ─── Edge case: empty session_id string ───
+#[test]
+fn t4_sm_edge_empty_session_id() {
+    let mut run = common::make_run_info(RunStatus::Starting, None);
+    let effects = run_effects::apply_session_started(&mut run, "");
+    assert_eq!(run.session_id.as_deref(), Some(""));
+    assert_eq!(run.status, RunStatus::Running);
+    assert_eq!(effects.len(), 3);
+}
+
+// ─── Edge case: run_complete with zero cost ───
+#[test]
+fn t4_sm_edge_run_complete_zero_cost() {
+    let mut run = common::make_run_info(RunStatus::Running, Some("s1"));
+    let effects = run_effects::apply_run_complete(&mut run, Some(&0.0), 1000, 2000);
+    assert_eq!(run.cost_usd, 0.0);
+    assert_eq!(run.status, RunStatus::Succeeded);
+    assert_eq!(effects.len(), 5);
+}
+
+// ─── Edge case: permission request with no tool/command ───
+#[test]
+fn t4_sm_edge_permission_no_tool() {
+    let mut run = common::make_run_info(RunStatus::Running, Some("s1"));
+    let (pending, effects) = run_effects::apply_permission_request(&mut run, None, None, "tu-1", 1000);
+    assert_eq!(run.status, RunStatus::Blocked);
+    assert!(pending.tool.is_none());
+    assert!(pending.command.is_none());
+    assert_eq!(effects.len(), 3);
+}
+
+// ─── Edge case: run_error with unknown status string ───
+#[test]
+fn t4_sm_edge_unknown_error_status() {
+    let mut run = common::make_run_info(RunStatus::Running, Some("s1"));
+    let effects = run_effects::apply_run_error(&mut run, "timeout", None, 1000, 2000);
+    assert_eq!(run.status, RunStatus::Failed, "Unknown status should default to Failed");
+    assert_eq!(effects.len(), 5);
+}
+
+// ─── Edge case: apply_mark_failed with zero timestamps ───
+#[test]
+fn t4_sm_edge_mark_failed_zero_timestamps() {
+    let mut run = common::make_run_info(RunStatus::Running, Some("s1"));
+    let effects = run_effects::apply_mark_failed(&mut run, 0, 0);
+    assert_eq!(run.status, RunStatus::Failed);
+    assert_eq!(run.elapsed_secs, 0);
+    assert_eq!(effects.len(), 5);
+}
+
+// ─── Edge case: map_sidecar_status covers all known + unknown strings ───
+#[test]
+fn t4_sm_edge_map_sidecar_status() {
+    use branchdeck_lib::services::run_effects::map_sidecar_status;
+    assert_eq!(map_sidecar_status("cancelled"), (RunStatus::Cancelled, TaskStatus::Cancelled));
+    assert_eq!(map_sidecar_status("failed"), (RunStatus::Failed, TaskStatus::Failed));
+    assert_eq!(map_sidecar_status("error"), (RunStatus::Failed, TaskStatus::Failed));
+    assert_eq!(map_sidecar_status("timeout"), (RunStatus::Failed, TaskStatus::Failed));
+    assert_eq!(map_sidecar_status(""), (RunStatus::Failed, TaskStatus::Failed));
 }

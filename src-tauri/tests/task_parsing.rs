@@ -14,7 +14,7 @@ use branchdeck_lib::services::task;
 
 #[test]
 fn t1_unit_001_parse_valid_task_md_all_fields() {
-    let content = valid_task_md();
+    let content = common::task_md_with_body("created", 0, Some(42), "\n## Instructions\n\nAs you work, update this file.\n\n## Goal\n\nFix the login bug.\n\n## Progress\n\n- [ ] Identify approach\n- [ ] Implement\n- [ ] Verify\n\n## Log\n");
     let result = task::parse_task_md(&content, "/fake/path/task.md");
 
     assert!(result.is_ok(), "Should parse valid task.md without error");
@@ -188,7 +188,7 @@ fn t1_unit_005_update_task_status_writes_correctly() {
     let file_path = dir.path().join("task.md");
 
     // Write a task.md with status: created
-    std::fs::write(&file_path, valid_task_md()).unwrap();
+    std::fs::write(&file_path, common::valid_task_md()).unwrap();
 
     let path_str = file_path.to_str().unwrap();
 
@@ -225,7 +225,7 @@ fn t1_unit_006_increment_run_count() {
     let file_path = dir.path().join("task.md");
 
     // Write a task.md with run-count: 0
-    std::fs::write(&file_path, valid_task_md()).unwrap();
+    std::fs::write(&file_path, common::valid_task_md()).unwrap();
 
     let path_str = file_path.to_str().unwrap();
 
@@ -257,7 +257,7 @@ fn t1_unit_006_increment_run_count() {
 
 #[test]
 fn t1_unit_005b_replace_frontmatter_status_preserves_body() {
-    let content = valid_task_md();
+    let content = common::task_md_with_body("created", 0, Some(42), "\n## Goal\n\nFix the login bug.\n");
     let result = task::replace_frontmatter_status(&content, "failed");
 
     assert!(result.is_some(), "Should find and replace status field");
