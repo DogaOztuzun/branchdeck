@@ -100,14 +100,6 @@ pub struct Suggestion {
     pub avg_quality: f32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SonaStats {
-    pub trajectories_buffered: usize,
-    pub patterns_stored: usize,
-    pub patterns_persisted: u64,
-}
-
 /// Pending entry waiting for ONNX embedder to become available.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

@@ -429,11 +429,16 @@ impl KnowledgeService {
             return;
         }
 
+        // Snapshot known IDs to avoid holding persisted_pattern_ids lock during store writes
+        let known_ids: std::collections::HashSet<u64> =
+            self.persisted_pattern_ids.read().await.clone();
+
         let store_lock = Arc::clone(self.global_store());
         let mut store = store_lock.write().await;
         let now = crate::models::agent::now_ms();
         let mut persisted = 0u64;
         let mut skipped_dup = 0u64;
+        let mut new_ids: Vec<u64> = Vec::new();
 
         for pattern in &patterns {
             if pattern.centroid.len() != usize::from(EMBEDDING_DIM) {
@@ -445,12 +450,9 @@ impl KnowledgeService {
             }
 
             // Fast dedup: skip if we already persisted this pattern ID this session
-            {
-                let ids = self.persisted_pattern_ids.read().await;
-                if ids.contains(&pattern.id) {
-                    skipped_dup += 1;
-                    continue;
-                }
+            if known_ids.contains(&pattern.id) {
+                skipped_dup += 1;
+                continue;
             }
 
             // Slow dedup: check if a very similar pattern already exists in RVF
@@ -466,8 +468,7 @@ impl KnowledgeService {
                 if let Some(hit) = existing.first() {
                     if hit.distance < 0.05 {
                         skipped_dup += 1;
-                        // Cache so next tick uses fast path instead of re-querying RVF
-                        self.persisted_pattern_ids.write().await.insert(pattern.id);
+                        new_ids.push(pattern.id);
                         continue;
                     }
                 }
@@ -500,10 +501,17 @@ impl KnowledgeService {
             match store.ingest(&pattern.centroid, entry) {
                 Ok(_) => {
                     persisted += 1;
-                    self.persisted_pattern_ids.write().await.insert(pattern.id);
+                    new_ids.push(pattern.id);
                 }
                 Err(e) => error!("Failed to persist SONA pattern: {e}"),
             }
+        }
+
+        // Drop store lock before updating persisted IDs
+        drop(store);
+
+        if !new_ids.is_empty() {
+            self.persisted_pattern_ids.write().await.extend(new_ids);
         }
 
         if persisted > 0 || skipped_dup > 0 {

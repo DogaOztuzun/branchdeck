@@ -214,20 +214,9 @@ impl KnowledgeService {
         debug!(
             "suggest_next returned {} patterns for {:?}",
             results.len(),
-            context_text
+            &context_text[..context_text.len().min(100)]
         );
         Ok(results)
-    }
-
-    /// Get SONA engine statistics.
-    #[must_use]
-    pub fn get_sona_stats(&self) -> crate::models::knowledge::SonaStats {
-        let sona_stats = self.sona().stats();
-        crate::models::knowledge::SonaStats {
-            trajectories_buffered: sona_stats.trajectories_buffered,
-            patterns_stored: sona_stats.patterns_stored,
-            patterns_persisted: 0, // would require async RVF count, keep simple
-        }
     }
 }
 

@@ -37,9 +37,3 @@ export type Suggestion = {
   distance: number;
   avgQuality: number;
 };
-
-export type SonaStats = {
-  trajectoriesBuffered: number;
-  patternsStored: number;
-  patternsPersisted: number;
-};
