@@ -423,6 +423,7 @@ impl KnowledgeService {
     }
 
     /// Persist SONA-extracted patterns to the global RVF store.
+    #[allow(clippy::too_many_lines)]
     pub(crate) async fn persist_sona_patterns(&self) {
         use crate::models::knowledge::{
             KnowledgeEntry, KnowledgeMetadata, KnowledgeSource, KnowledgeType,
@@ -435,9 +436,22 @@ impl KnowledgeService {
             return;
         }
 
-        // Snapshot known IDs to avoid holding persisted_pattern_ids lock during store writes
-        let known_ids: std::collections::HashSet<u64> =
-            self.persisted_pattern_ids.read().await.clone();
+        // Pre-register candidate IDs under write lock so a concurrent call
+        // (tick vs shutdown race) sees them and skips, preventing double-ingest.
+        let mut known_ids_guard = self.persisted_pattern_ids.write().await;
+        let candidate_ids: Vec<u64> = patterns
+            .iter()
+            .filter(|p| {
+                p.centroid.len() == usize::from(EMBEDDING_DIM) && !known_ids_guard.contains(&p.id)
+            })
+            .map(|p| p.id)
+            .collect();
+        if candidate_ids.is_empty() {
+            return;
+        }
+        known_ids_guard.extend(&candidate_ids);
+        let known_ids = known_ids_guard.clone();
+        drop(known_ids_guard);
 
         let store_lock = Arc::clone(self.global_store());
         let mut skipped_dup = 0u64;

@@ -214,7 +214,7 @@ impl KnowledgeService {
         debug!(
             "suggest_next returned {} patterns for {:?}",
             results.len(),
-            &context_text[..context_text.len().min(100)]
+            context_text
         );
         Ok(results)
     }
