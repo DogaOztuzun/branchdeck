@@ -48,27 +48,34 @@ pub async fn start(
         }
     };
 
+    let token = knowledge.shutdown_token().clone();
     loop {
-        match listener.accept().await {
-            Ok((stream, addr)) => {
-                debug!("Knowledge MCP accepted connection from {addr}");
-                let ks = Arc::clone(&knowledge);
-                tokio::spawn(async move {
-                    match tokio::time::timeout(CONNECTION_TIMEOUT, handle_connection(stream, &ks))
-                        .await
-                    {
-                        Ok(Err(e)) => {
-                            debug!("Knowledge MCP connection from {addr} error: {e}");
+        tokio::select! {
+            result = listener.accept() => match result {
+                Ok((stream, addr)) => {
+                    debug!("Knowledge MCP accepted connection from {addr}");
+                    let ks = Arc::clone(&knowledge);
+                    tokio::spawn(async move {
+                        match tokio::time::timeout(CONNECTION_TIMEOUT, handle_connection(stream, &ks))
+                            .await
+                        {
+                            Ok(Err(e)) => {
+                                debug!("Knowledge MCP connection from {addr} error: {e}");
+                            }
+                            Err(_) => {
+                                warn!("Knowledge MCP connection from {addr} timed out");
+                            }
+                            Ok(Ok(())) => {}
                         }
-                        Err(_) => {
-                            warn!("Knowledge MCP connection from {addr} timed out");
-                        }
-                        Ok(Ok(())) => {}
-                    }
-                });
-            }
-            Err(e) => {
-                error!("Knowledge MCP accept error: {e}");
+                    });
+                }
+                Err(e) => {
+                    error!("Knowledge MCP accept error: {e}");
+                }
+            },
+            () = token.cancelled() => {
+                debug!("Knowledge MCP endpoint shutting down");
+                break;
             }
         }
     }

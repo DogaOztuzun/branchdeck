@@ -215,17 +215,22 @@ impl KnowledgeService {
                 #[cfg(feature = "sona")]
                 {
                     let mut builder = self.sona().begin_trajectory(embedding.clone());
-                    // Deduplicate ToolStart/ToolEnd pairs — keep ToolEnd (has real was_modified)
-                    let mut last_tool: Option<&str> = None;
+                    // Deduplicate ToolStart/ToolEnd pairs — keep only ToolEnd (has real
+                    // was_modified). Uses a counter map to handle nested tool calls:
+                    // ToolStart increments, ToolEnd decrements and adds the step.
+                    let mut pending: HashMap<&str, usize> = HashMap::new();
                     let mut sona_step_count = 0usize;
                     for step in &trajectory.steps {
-                        if last_tool == Some(step.tool_name.as_str()) {
-                            last_tool = None;
+                        let count = pending.entry(step.tool_name.as_str()).or_insert(0);
+                        if *count > 0 {
+                            // ToolEnd: pair found, add step with real was_modified
+                            *count -= 1;
                             let reward = if step.was_modified { 0.8 } else { 0.5 };
                             builder.add_named_step(&step.tool_name, vec![], vec![], reward);
                             sona_step_count += 1;
                         } else {
-                            last_tool = Some(&step.tool_name);
+                            // ToolStart: remember for pairing
+                            *count += 1;
                         }
                     }
                     let quality = trajectory.quality_score;
@@ -398,6 +403,7 @@ impl KnowledgeService {
         let token = self.shutdown_token().clone();
         tauri::async_runtime::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+            interval.tick().await; // skip immediate first tick — no trajectories yet
             loop {
                 tokio::select! {
                     _ = interval.tick() => {

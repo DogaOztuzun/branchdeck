@@ -396,15 +396,9 @@ pub fn run() {
                     window.try_state::<Arc<services::knowledge::KnowledgeService>>()
                 {
                     let ks = Arc::clone(knowledge.inner());
-                    if let Ok(handle) = tokio::runtime::Handle::try_current() {
-                        std::thread::scope(|s| {
-                            s.spawn(|| {
-                                handle.block_on(async move {
-                                    ks.close_all().await;
-                                });
-                            });
-                        });
-                    }
+                    tauri::async_runtime::block_on(async move {
+                        ks.close_all().await;
+                    });
                 }
 
                 // Close all terminal sessions
