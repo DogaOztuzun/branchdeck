@@ -235,7 +235,7 @@ impl KnowledgeService {
                     }
                     let quality = trajectory.quality_score;
                     self.sona().end_trajectory(builder, quality);
-                    trace!("Fed trajectory to SONA: {sona_step_count} steps, quality {quality}");
+                    debug!("[sona] Fed trajectory: {sona_step_count} steps, quality {quality}");
                 }
 
                 // Find the repo store for this trajectory's tab
