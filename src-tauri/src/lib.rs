@@ -222,10 +222,19 @@ pub fn run() {
                     .expect("CARGO_MANIFEST_DIR has parent")
                     .join("sidecar/agent-bridge.js")
             };
-            let sidecar_path = app
-                .path()
-                .resource_dir()
-                .map_or_else(|_| dev_path(), |dir| dir.join("sidecar/agent-bridge.js"));
+            let sidecar_path = app.path().resource_dir().map_or_else(
+                |_| dev_path(),
+                |dir| {
+                    // Tauri v2 bundles resources flat in production, so try
+                    // the flat path first, then the dev subdirectory layout.
+                    let flat = dir.join("agent-bridge.js");
+                    if flat.exists() {
+                        flat
+                    } else {
+                        dir.join("sidecar/agent-bridge.js")
+                    }
+                },
+            );
 
             // If the resource-dir resolved path doesn't exist, fall back to dev path
             let sidecar_path = if sidecar_path.exists() {
@@ -399,6 +408,7 @@ pub fn run() {
                     tauri::async_runtime::block_on(async move {
                         ks.close_all().await;
                     });
+                    log::info!("Knowledge service closed on shutdown");
                 }
 
                 // Close all terminal sessions
