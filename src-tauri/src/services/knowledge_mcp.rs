@@ -274,7 +274,7 @@ async fn read_request_head(
         }
 
         headers_read += 1;
-        if headers_read >= 32 {
+        if headers_read > 32 {
             return Err("too many headers".to_string());
         }
 
