@@ -64,6 +64,9 @@ pub async fn suggest_next(
     context: String,
     top_k: Option<usize>,
 ) -> Result<Vec<crate::models::knowledge::Suggestion>, AppError> {
+    if context.trim().is_empty() {
+        return Err(AppError::Knowledge("context must not be empty".to_string()));
+    }
     let k = top_k.unwrap_or(5).min(20);
     knowledge.suggest_next(&repo_path, &context, k).await
 }

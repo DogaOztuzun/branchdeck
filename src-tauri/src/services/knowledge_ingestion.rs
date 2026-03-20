@@ -440,28 +440,12 @@ impl KnowledgeService {
             self.persisted_pattern_ids.read().await.clone();
 
         let store_lock = Arc::clone(self.global_store());
-        let mut store = store_lock.write().await;
-        let now = crate::models::agent::now_ms();
-        let mut persisted = 0u64;
         let mut skipped_dup = 0u64;
         let mut new_ids: Vec<u64> = Vec::new();
 
-        for pattern in &patterns {
-            if pattern.centroid.len() != usize::from(EMBEDDING_DIM) {
-                debug!(
-                    "Skipping pattern with mismatched centroid dim: {}",
-                    pattern.centroid.len()
-                );
-                continue;
-            }
-
-            // Fast dedup: skip if we already persisted this pattern ID this session
-            if known_ids.contains(&pattern.id) {
-                skipped_dup += 1;
-                continue;
-            }
-
-            // Slow dedup: check if a very similar pattern already exists in RVF
+        // Phase 1: filter candidates under read lock (dedup queries only)
+        let candidates: Vec<usize> = {
+            let store = store_lock.read().await;
             let dedup_filter = FilterExpr::Eq(
                 field_ids::ENTRY_TYPE,
                 rvf_runtime::filter::FilterValue::String("pattern".to_string()),
@@ -470,51 +454,75 @@ impl KnowledgeService {
                 filter: Some(dedup_filter),
                 ..QueryOptions::default()
             };
-            if let Ok(existing) = store.store.query(&pattern.centroid, 1, &dedup_opts) {
-                if let Some(hit) = existing.first() {
-                    if hit.distance < 0.05 {
-                        skipped_dup += 1;
-                        new_ids.push(pattern.id);
-                        continue;
+
+            patterns
+                .iter()
+                .enumerate()
+                .filter_map(|(i, pattern)| {
+                    if pattern.centroid.len() != usize::from(EMBEDDING_DIM) {
+                        debug!(
+                            "Skipping pattern with mismatched centroid dim: {}",
+                            pattern.centroid.len()
+                        );
+                        return None;
                     }
+                    if known_ids.contains(&pattern.id) {
+                        skipped_dup += 1;
+                        return None;
+                    }
+                    // RVF cosine dedup: skip if near-identical centroid exists
+                    if let Ok(existing) = store.store.query(&pattern.centroid, 1, &dedup_opts) {
+                        if existing.first().is_some_and(|hit| hit.distance < 0.05) {
+                            skipped_dup += 1;
+                            new_ids.push(pattern.id);
+                            return None;
+                        }
+                    }
+                    Some(i)
+                })
+                .collect()
+        };
+
+        // Phase 2: ingest under write lock (only new patterns)
+        let mut persisted = 0u64;
+        if !candidates.is_empty() {
+            let now = crate::models::agent::now_ms();
+            let mut store = store_lock.write().await;
+            for &i in &candidates {
+                let pattern = &patterns[i];
+                let id = store.allocate_id();
+                let content = format!(
+                    "Pattern: {} trajectories, avg quality {:.2}, type {:?}",
+                    pattern.cluster_size, pattern.avg_quality, pattern.pattern_type
+                );
+
+                let entry = KnowledgeEntry {
+                    id,
+                    content,
+                    entry_type: KnowledgeType::Pattern,
+                    source: KnowledgeSource::EventBus,
+                    repo_hash: String::new(),
+                    worktree_id: None,
+                    metadata: KnowledgeMetadata {
+                        session_id: None,
+                        tool_names: Vec::new(),
+                        file_paths: Vec::new(),
+                        run_status: None,
+                        cost_usd: None,
+                        quality_score: pattern.avg_quality,
+                    },
+                    created_at: now,
+                };
+
+                match store.ingest(&pattern.centroid, entry) {
+                    Ok(_) => {
+                        persisted += 1;
+                        new_ids.push(pattern.id);
+                    }
+                    Err(e) => error!("Failed to persist SONA pattern: {e}"),
                 }
-            }
-
-            let id = store.allocate_id();
-            let content = format!(
-                "Pattern: {} trajectories, avg quality {:.2}, type {:?}",
-                pattern.cluster_size, pattern.avg_quality, pattern.pattern_type
-            );
-
-            let entry = KnowledgeEntry {
-                id,
-                content,
-                entry_type: KnowledgeType::Pattern,
-                source: KnowledgeSource::EventBus,
-                repo_hash: String::new(),
-                worktree_id: None,
-                metadata: KnowledgeMetadata {
-                    session_id: None,
-                    tool_names: Vec::new(),
-                    file_paths: Vec::new(),
-                    run_status: None,
-                    cost_usd: None,
-                    quality_score: pattern.avg_quality,
-                },
-                created_at: now,
-            };
-
-            match store.ingest(&pattern.centroid, entry) {
-                Ok(_) => {
-                    persisted += 1;
-                    new_ids.push(pattern.id);
-                }
-                Err(e) => error!("Failed to persist SONA pattern: {e}"),
             }
         }
-
-        // Drop store lock before updating persisted IDs
-        drop(store);
 
         if !new_ids.is_empty() {
             self.persisted_pattern_ids.write().await.extend(new_ids);
