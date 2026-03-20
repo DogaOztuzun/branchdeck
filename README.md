@@ -2,14 +2,13 @@
 
 # Branchdeck
 
-### Self-learning agentic orchestration across repos, worktrees, and workflows
+**An agentic workspace for managing repos, worktrees, and coding sessions — that learns as you work.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat)](LICENSE)
 
-**Linux-first** &nbsp;&bull;&nbsp; **Open Source** &nbsp;&bull;&nbsp; **~80MB RAM**
+**Linux-first** &nbsp;&bull;&nbsp; **Open Source** &nbsp;&bull;&nbsp; **Local-first** &nbsp;&bull;&nbsp; **~80MB RAM**
 
-> **Warning**
-> Branchdeck is in **alpha** — very early stage and under heavy development. Expect breaking changes, missing features, and rough edges. Contributions and feedback welcome!
+> **Alpha** — building in public. Expect rough edges.
 
 </div>
 
@@ -17,52 +16,106 @@
   <img src="docs/assets/branchdeck-alpha-screenshot.png" alt="Branchdeck screenshot" width="800" />
 </p>
 
-## Why Branchdeck?
+## What is Branchdeck?
 
-Branchdeck is a desktop app for running, coordinating, and learning from technical work across multiple repos, branches, and worktrees.
+A lightweight desktop app for working across multiple git repositories, worktrees, and coding sessions — with a knowledge layer that accumulates across everything you do.
 
-At its core, Branchdeck combines **agentic orchestration** with **persistent memory** — tasks with durable intent, runs with real execution state, and a growing knowledge layer that remembers
-what worked across every repo, every worktree, every agent session.
+Add your repos. Create worktrees. Open terminals. Launch Claude Code sessions. See PR status, file changes, branch tracking. All in one place, all at a glance.
 
-Every agent run, PR review, and code fix is captured. Succeeded patterns promote across projects. Failed approaches are filtered out. The more you use it, the more it knows.
+What makes it different: every fix, every PR review, every resolved error feeds into a local knowledge store that spans your entire workspace. The next session in a different repo benefits from what was learned in the last one. Knowledge isn't trapped in one project — it compounds across all of them.
 
-Most AI coding tools assume a single session in a single repo with no memory between sessions. Branchdeck is built for the reality that technical work spans many repos, many branches,
-many active tasks — and the tool should get smarter as that work happens, not start from zero every time.
+## The workspace
 
-## Features
+**Multi-repo, multi-worktree** — Add as many repos as you work with. Create worktrees for parallel branches. Each worktree gets its own terminal tabs, its own file status, its own context. No branch switching, no stashing.
 
-| Feature | Description |
-|:--------|:------------|
-| **Tabbed Terminals** | Shell and Claude Code tabs powered by xterm.js with WebGL rendering |
-| **Git Worktree Management** | Add repos, browse worktrees, create new worktrees, see file status at a glance |
-| **Agent Integration** | Launch Claude Code with agent teams support — more agents coming |
-| **Three-Pane Layout** | Resizable repo sidebar, terminal center, changes sidebar — all collapsible |
-| **Dark Theme** | Tokyo Night color scheme throughout |
-| **Keyboard Driven** | Shortcuts for terminals, tabs, and sidebar toggles |
-| **Config Persistence** | Window size, repo list, and active worktree restored on launch |
-| **Lightweight** | Tauri v2 backend, no Electron, under 80MB RSS idle |
+**Embedded terminals** — Shell and Claude Code sessions per worktree. WebGL-rendered, PTY-backed. Launch a Claude Code session with a specific prompt, team config, or command.
 
-## Supported Agents
+**PR monitoring** — CI check status, review state, merge readiness — live in the sidebar. See which PRs need attention without opening GitHub.
 
-| Agent | Status |
-|:------|:-------|
-| [Claude Code](https://github.com/anthropics/claude-code) | Supported |
-| Any CLI agent | Works in terminal tabs |
+**Cross-repo dashboard** — Everything across every repo in one view. What's active, what's waiting, what shipped, what failed.
 
-## Tech Stack
+**File status at a glance** — Visual dot grids showing modified, added, deleted, and conflicted files per worktree.
 
-| Layer | Technology |
-|:------|:-----------|
-| **Desktop** | [Tauri v2](https://v2.tauri.app/) (Rust backend) |
+**Persistent** — Window state, repos, worktrees, active sessions — all restored on launch. Crash-proof. No cloud, no sync, no account.
+
+## The knowledge layer
+
+Branchdeck captures what happens across your workspace and turns it into reusable context:
+
+- A PR review teaches a pattern → it's available in every repo, every worktree
+- An error gets resolved → the resolution surfaces next time the same class of error appears
+- A build/test pattern is established → new sessions in that repo start with that context
+- Conventions emerge from commits and fixes → they carry forward automatically
+
+Knowledge is stored locally with on-device vector embeddings (ONNX). It's scoped hierarchically — worktree, repo, global — so the right context surfaces at the right level. Sessions query it via MCP. Nothing leaves your machine.
+
+This is the part that compounds. The workspace gets smarter the more you use it.
+
+## Autonomous execution
+
+Branchdeck doesn't just hold terminals — it drives them. Define what needs to happen, and Branchdeck creates the worktree, launches a session, monitors execution, and captures the result.
+
+**Monday morning with Branchdeck:**
+
+You come in Monday morning.
+
+Six PRs across three repos:
+- Two have failing CI
+- One has review comments
+- Three are waiting on rebases
+
+You open Branchdeck, see the dashboard, and launch a run for each.
+
+Each gets:
+- Its own worktree
+- Its own session
+- Its own context
+
+They work in parallel.
+
+One reads the CI failure and pushes a fix.
+Another addresses the review comments.
+Another rebases and resolves conflicts.
+
+You watch them all converge from one screen.
+
+When they finish, Branchdeck captures every branch, commit, and PR link.
+
+The knowledge layer absorbs what worked — **not just the code fixes**, but *how* you orchestrated them. Which runs you retried, which you cancelled, what prompts led to clean results.
+
+Next time a similar CI failure shows up in any repo, the resolution is already there.
+
+Next time you launch a similar workflow, Branchdeck has learned how you work.
+
+## Powered by Claude Code
+
+Branchdeck is built around [Claude Code](https://github.com/anthropics/claude-code). Every terminal session, every autonomous run, every knowledge capture flows through Claude Code as the execution engine. No abstraction layer, no multi-provider juggling — one deeply integrated executor.
+
+## Tech stack
+
+| | |
+|:--|:--|
+| **Desktop** | [Tauri v2](https://v2.tauri.app/) — Rust backend, daemon-ready service layer |
 | **Frontend** | [SolidJS](https://www.solidjs.com/) + [Tailwind CSS v4](https://tailwindcss.com/) |
-| **Terminal** | [xterm.js](https://xtermjs.org/) + WebGL + portable-pty (Rust) |
-| **Git** | [git2](https://docs.rs/git2) crate (in-process, no CLI shelling) |
+| **Terminal** | [xterm.js](https://xtermjs.org/) + WebGL + portable-pty |
+| **Git** | [git2](https://docs.rs/git2) — in-process, no CLI shelling |
+| **Knowledge** | ONNX Runtime — local vector embeddings, hierarchical vector store |
 | **Components** | [Kobalte](https://kobalte.dev/) + solid-resizable-panels |
+
+## Direction
+
+**Now** — workspace management, embedded sessions, PR monitoring, local knowledge, run lifecycle
+
+**Next** — run timeline, approval gates, stalled-run detection, crash recovery
+
+**Later** — cross-repo workflows, custom templates, team visibility
+
+Depth before breadth.
 
 ## Requirements
 
-| Requirement | Details |
-|:------------|:--------|
+| | |
+|:--|:--|
 | **OS** | Linux (Ubuntu 22.04+) |
 | **Rust** | [rustup](https://rustup.rs/) stable |
 | **Bun** | [bun.sh](https://bun.sh/) v1.0+ |
@@ -78,17 +131,14 @@ sudo apt-get install -y \
   librsvg2-dev
 ```
 
-## Getting Started
+## Getting started
 
 ```bash
-# Install frontend dependencies
-bun install
-
-# Run in dev mode (hot reload + Rust rebuild)
-bunx tauri dev
-
-# Production build
-bunx tauri build
+git clone https://github.com/DogaOztuzun/branchdeck.git
+cd branchdeck
+bun install              # Install frontend deps
+bunx tauri dev           # Dev mode (hot reload + Rust rebuild)
+bunx tauri build         # Production build
 ```
 
 ## Development
@@ -101,30 +151,9 @@ cargo fmt --check          # Rust format check
 cargo test                 # Rust tests
 ```
 
-## Keyboard Shortcuts
-
-| Shortcut | Action |
-|:---------|:-------|
-| `Ctrl+Shift+T` | New terminal tab |
-| `Ctrl+Shift+A` | New Claude Code tab |
-| `Ctrl+Shift+W` | Close active tab |
-| `Ctrl+Shift+B` | Toggle repo sidebar |
-| `Ctrl+Shift+L` | Toggle changes sidebar |
-
-## Inspiration
-
-Branchdeck draws from two excellent projects:
-
-- **[Superset](https://github.com/superset-sh/superset)** — Turbocharged terminal for running parallel coding agents with worktree isolation, diff viewer, and workspace presets. Electron + React.
-- **[Arbor](https://github.com/penso/arbor)** — Fully native desktop app for repositories, worktrees, embedded terminals, diffs, and PR context with a daemon-backed architecture. Rust + GPUI.
-
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, branch strategy, code standards, and PR guidelines. All PRs target the `dev` branch.
-
-## Development Methodology
-
-This project uses the [BMAD-METHOD](https://github.com/bmadcode/BMAD-METHOD) for AI-assisted development workflow.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, branch strategy, code standards, and PR guidelines.
 
 ## License
 
