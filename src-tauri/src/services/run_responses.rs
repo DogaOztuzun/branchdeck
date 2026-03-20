@@ -2,6 +2,7 @@ use crate::models::run::{PendingPermission, RunInfo, SidecarResponse};
 use crate::services::event_bus::EventBus;
 use crate::services::run_effects::{self, execute_effects};
 use log::{error, info, warn};
+use tauri::Emitter;
 
 use super::run_manager::now_epoch_ms;
 
@@ -36,16 +37,14 @@ pub fn handle_session_started<R: tauri::Runtime>(
 }
 
 /// Handle a `RunStep`, `AssistantText`, or `ToolCall` response from the sidecar.
+/// Direct emit — no state transition, no effect abstraction needed.
 pub fn handle_run_step<R: tauri::Runtime>(
     response: &SidecarResponse,
     app_handle: &tauri::AppHandle<R>,
-    event_bus: &EventBus,
 ) {
-    execute_effects(
-        vec![run_effects::RunEffect::EmitRunStep(response.clone())],
-        app_handle,
-        event_bus,
-    );
+    if let Err(e) = app_handle.emit("run:step", response) {
+        error!("Failed to emit run:step: {e}");
+    }
 }
 
 /// Handle a `RunComplete` response from the sidecar.

@@ -86,7 +86,7 @@ fn make_commit(repo_path: &Path, filename: &str, message: &str) {
         .unwrap();
 }
 
-fn base_task_md(status: &str, run_count: u32) -> String {
+fn artifact_task_md(status: &str, run_count: u32) -> String {
     common::task_md_with_body(
         status,
         run_count,
@@ -99,7 +99,7 @@ fn base_task_md(status: &str, run_count: u32) -> String {
 
 #[test]
 fn t2_int_001_capture_artifacts_with_commits() {
-    let (dir, task_path, started_at) = setup_repo_with_task(&base_task_md("running", 1));
+    let (dir, task_path, started_at) = setup_repo_with_task(&artifact_task_md("running", 1));
 
     // Make commits after the start time
     make_commit(dir.path(), "fix1.rs", "fix: first fix");
@@ -145,7 +145,7 @@ fn t2_int_001_capture_artifacts_with_commits() {
 
 #[test]
 fn t2_int_002_capture_artifacts_failed_run() {
-    let (dir, task_path, started_at) = setup_repo_with_task(&base_task_md("running", 1));
+    let (dir, task_path, started_at) = setup_repo_with_task(&artifact_task_md("running", 1));
 
     // Only one commit before failure
     make_commit(dir.path(), "partial.rs", "wip: partial work");
@@ -169,7 +169,7 @@ fn t2_int_002_capture_artifacts_failed_run() {
 
 #[test]
 fn t2_int_003_capture_artifacts_no_commits() {
-    let (_dir, task_path, started_at) = setup_repo_with_task(&base_task_md("running", 1));
+    let (_dir, task_path, started_at) = setup_repo_with_task(&artifact_task_md("running", 1));
 
     // No commits made — started_at is after the initial commit
     task::capture_run_artifacts(&task_path, "cancelled", started_at);
@@ -196,7 +196,7 @@ fn t2_int_003_capture_artifacts_no_commits() {
 fn t2_int_004_second_run_appends_artifacts() {
     let task_content = format!(
         "{}\n## Artifacts\n\n### Run 1 — succeeded\n\n- **Branch:** `main`\n- **HEAD:** `abc1234`\n- **Commits:** none\n",
-        base_task_md("running", 2)
+        artifact_task_md("running", 2)
     );
     let (dir, task_path, started_at) = setup_repo_with_task(&task_content);
 
@@ -230,7 +230,7 @@ fn t2_int_005_capture_artifacts_missing_worktree() {
     let bd_dir = dir.path().join(TASK_DIR);
     std::fs::create_dir_all(&bd_dir).unwrap();
     let task_path = bd_dir.join(TASK_FILE);
-    std::fs::write(&task_path, base_task_md("running", 1)).unwrap();
+    std::fs::write(&task_path, artifact_task_md("running", 1)).unwrap();
 
     // No git repo exists at dir.path() (only mkdir, no git init)
     // capture_run_artifacts should log error but not panic
@@ -248,7 +248,7 @@ fn t2_int_005_capture_artifacts_missing_worktree() {
 
 #[test]
 fn t2_int_006_capture_artifacts_readonly_task() {
-    let (_dir, task_path, started_at) = setup_repo_with_task(&base_task_md("running", 1));
+    let (_dir, task_path, started_at) = setup_repo_with_task(&artifact_task_md("running", 1));
 
     // Make the task file read-only
     let mut perms = std::fs::metadata(&task_path).unwrap().permissions();

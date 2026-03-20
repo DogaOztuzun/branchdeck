@@ -1,5 +1,5 @@
 use crate::models::agent::{self, Event};
-use crate::models::run::{PendingPermission, RunInfo, RunStatus, SidecarResponse};
+use crate::models::run::{PendingPermission, RunInfo, RunStatus};
 use crate::models::task::TaskStatus;
 use crate::services::{event_bus::EventBus, run_state, task};
 use log::error;
@@ -20,7 +20,6 @@ pub enum RunEffect {
         started_at: u64,
     },
     EmitStatusChanged(RunInfo),
-    EmitRunStep(SidecarResponse),
     EmitPermissionRequest(PendingPermission),
     PublishRunComplete {
         run: RunInfo,
@@ -55,11 +54,6 @@ pub fn execute_effects<R: tauri::Runtime>(
             RunEffect::EmitStatusChanged(ref info) => {
                 if let Err(e) = app_handle.emit("run:status_changed", info) {
                     error!("Failed to emit run:status_changed: {e}");
-                }
-            }
-            RunEffect::EmitRunStep(ref resp) => {
-                if let Err(e) = app_handle.emit("run:step", resp) {
-                    error!("Failed to emit run:step: {e}");
                 }
             }
             RunEffect::EmitPermissionRequest(ref pending) => {

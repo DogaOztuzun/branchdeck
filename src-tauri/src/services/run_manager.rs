@@ -209,7 +209,7 @@ impl RunManager {
                     warn!("Ignoring run step with mismatched session_id: {session_id:?}");
                     return;
                 }
-                run_responses::handle_run_step(response, app_handle, &self.event_bus);
+                run_responses::handle_run_step(response, app_handle);
             }
             SidecarResponse::RunComplete {
                 cost_usd,
