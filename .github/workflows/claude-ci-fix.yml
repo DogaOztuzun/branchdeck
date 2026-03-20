@@ -42,25 +42,20 @@ jobs:
             1. Use `gh run list --branch ${{ github.event.check_suite.head_branch }} --status failure --limit 3` to find the failed runs
             2. Use `gh run view <run_id> --log-failed` to read the failure logs
             3. Read CLAUDE.md for project conventions
-            4. Identify the root cause
-
-            Only auto-fix these MECHANICAL failures:
-            - Biome lint/format (`bun run check:fix` can auto-fix)
-            - Clippy warnings (`cargo clippy`)
-            - Rust fmt (`cargo fmt`)
-
-            For everything else (build errors, test failures, logic bugs), post a PR comment with your analysis — do NOT attempt to fix code logic.
-
-            If fixing:
-            5. Fix only the mechanical issue
+            4. Identify the root cause — common failures:
+               - Biome lint/format (`bun run check:fix` can auto-fix)
+               - Clippy warnings (`cargo clippy`)
+               - Rust fmt (`cargo fmt`)
+               - Build errors
+               - Test failures
+            5. Fix the issues in the source code
             6. Commit with a message like `fix: resolve CI failures (biome/clippy/fmt)`
             7. Push the fix to the branch
 
             Rules:
-            - ONLY fix lint, format, and clippy issues — never change application logic
-            - If the failure is a build error or test failure, post a PR comment explaining the issue instead of changing code
+            - Only fix what CI is complaining about — no other changes
+            - If the failure is a flaky test or infrastructure issue (not code), post a PR comment explaining instead of changing code
             - If you can't determine the fix confidently, post a PR comment with your analysis instead
-            - Maximum ONE fix commit per CI failure — if the first fix doesn't work, post a comment instead of retrying
 
           claude_args: |
-            --allowedTools "Bash(gh run:*),Bash(gh pr comment:*),Bash(bun run check*),Bash(cargo fmt*),Bash(cargo clippy*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Read,Edit,Glob,Grep" --max-turns 10
+            --allowedTools "Bash(gh run:*),Bash(gh pr comment:*),Bash(bun run check*),Bash(cargo fmt*),Bash(cargo clippy*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Read,Edit,Glob,Grep" --max-turns 20
