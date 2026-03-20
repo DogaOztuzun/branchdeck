@@ -50,10 +50,11 @@ jobs:
           restore-keys: bun-
       - run: bun install --frozen-lockfile
       - run: bun run check
+      - run: bun run test
       - run: bun run build
 
   check-rust-fast:
-    name: Rust (fmt + clippy)
+    name: Rust (fmt + clippy + test)
     needs: changes
     if: needs.changes.outputs.rust == 'true' || github.event_name == 'push'
     runs-on: ubuntu-latest
@@ -75,6 +76,9 @@ jobs:
       - name: Clippy
         working-directory: src-tauri
         run: cargo clippy --all-targets -- -D warnings
+      - name: Tests
+        working-directory: src-tauri
+        run: cargo test
 
   check-rust-full:
     name: Rust (test + build)

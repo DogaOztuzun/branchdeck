@@ -3,7 +3,7 @@ use crate::models::run::{
     LaunchOptions, PendingPermission, RunInfo, RunStatus, SidecarRequest, SidecarResponse,
 };
 use crate::models::task::TaskStatus;
-use crate::services::{run_responses, run_stale, run_state, task};
+use crate::services::{run_effects, run_responses, run_stale, run_state, task};
 use log::{debug, error, info, warn};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -162,7 +162,7 @@ impl RunManager {
             return;
         }
 
-        if run_stale::check_run_stale(self.last_activity_ms) {
+        if run_stale::check_run_stale(self.last_activity_ms, now_epoch_ms()) {
             self.mark_run_failed_with_reason(app_handle, "stalled: no heartbeat for 120s");
             return;
         }
@@ -195,7 +195,12 @@ impl RunManager {
                 debug!("Heartbeat received");
             }
             SidecarResponse::SessionStarted { session_id } => {
-                run_responses::handle_session_started(&mut self.active_run, session_id, app_handle);
+                run_responses::handle_session_started(
+                    &mut self.active_run,
+                    session_id,
+                    app_handle,
+                    &self.event_bus,
+                );
             }
             SidecarResponse::RunStep { session_id, .. }
             | SidecarResponse::AssistantText { session_id, .. }
@@ -242,6 +247,7 @@ impl RunManager {
                     command.as_ref(),
                     tool_use_id,
                     app_handle,
+                    &self.event_bus,
                 );
             }
             SidecarResponse::RunError {
@@ -281,23 +287,10 @@ impl RunManager {
         reason: &str,
     ) {
         if let Some(ref mut run) = self.active_run {
-            run.status = RunStatus::Failed;
-            if self.started_at_epoch_ms > 0 {
-                run.elapsed_secs = (now_epoch_ms().saturating_sub(self.started_at_epoch_ms)) / 1000;
-            }
-
-            // Emit RunComplete event for KnowledgeService
-            run_responses::emit_run_complete_event_pub(&self.event_bus, run, "failed");
-
+            let now = now_epoch_ms();
             warn!("Marking active run as failed: {reason}");
-            task::capture_run_artifacts(&run.task_path, "failed", self.started_at_epoch_ms);
-            task::update_task_status(&run.task_path, TaskStatus::Failed);
-            // Save (but do not delete) run.json so session_id is
-            // available for a subsequent resume_run.
-            run_state::save_run_state(&run.task_path, run);
-            if let Err(e) = app_handle.emit("run:status_changed", &*run) {
-                error!("Failed to emit run:status_changed: {e}");
-            }
+            let effects = run_effects::apply_mark_failed(run, self.started_at_epoch_ms, now);
+            run_effects::execute_effects(effects, app_handle, &self.event_bus);
         }
         self.active_run = None;
         self.process = None;

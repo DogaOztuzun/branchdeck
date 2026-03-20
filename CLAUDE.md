@@ -23,9 +23,18 @@ bunx tauri dev                 # Dev mode (hot reload + Rust rebuild)
 bunx tauri build               # Production build
 bun run check                  # Biome lint + format check
 bun run check:fix              # Biome auto-fix
+bun test                       # Frontend tests (vitest)
 cargo clippy --all-targets     # Rust linting (run from src-tauri/)
 cargo fmt --check              # Rust format check (run from src-tauri/)
 cargo test                     # Rust tests (run from src-tauri/)
+```
+
+### Before every commit/PR
+
+Run the full check suite. CI will reject PRs that fail any step:
+
+```bash
+bun run check && bun test && cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 ```
 
 ## Architecture
@@ -86,12 +95,14 @@ No business logic in Tauri command handlers — commands validate args, call a s
 
 ### Adding a New Feature
 1. Models: `src-tauri/src/models/` — domain types
-2. Service: `src-tauri/src/services/` — business logic + logging
-3. Command: `src-tauri/src/commands/` — thin IPC handler, register in `lib.rs` invoke_handler
-4. Frontend types: `src/types/`
-5. IPC wrapper: `src/lib/commands/` — with try/catch + `logError`
-6. Store: `src/lib/stores/` — if feature needs reactive state
-7. Component: `src/components/{category}/`
+2. Service: `src-tauri/src/services/` — business logic as pure functions (return effects, not side effects)
+3. Tests: `src-tauri/tests/` — test pure functions, use `common/mod.rs` helpers
+4. Command: `src-tauri/src/commands/` — thin IPC handler, register in `lib.rs` invoke_handler
+5. Frontend types: `src/types/`
+6. IPC wrapper: `src/lib/commands/` — with try/catch + `logError`
+7. Store: `src/lib/stores/` — if feature needs reactive state
+8. Component: `src/components/{category}/`
+9. **Verify before commit:** `bun run check && bun test && cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
 
 ### Logging
 All service code must include structured logging via `tauri-plugin-log` (Rust) and `@tauri-apps/plugin-log` (frontend).
@@ -132,6 +143,64 @@ export async function doThing(id: string): Promise<Thing> {
 ### Conventions
 - Conventional commits (`feat:`, `fix:`, `refactor:`, `docs:`, `chore:`)
 - No commented-out code
+
+## Testing
+
+### Test Architecture
+
+**Pattern: Functional Core / Imperative Shell**
+
+Service logic is split into pure state transitions and side-effect execution:
+
+- **Pure `apply_*` functions** (`run_effects.rs`) — take state + inputs, return `(mutated_state, Vec<RunEffect>)`. No I/O, no Tauri, no async. Fully unit testable.
+- **`RunEffect` enum** — flat list of side effects as data (8 variants). Each variant is one unit of work.
+- **`execute_effects()`** — thin executor, one line per match arm. Takes `AppHandle` + `EventBus`, applies effects. Not unit tested (Tauri-coupled), trivial by design.
+- **Thin wrappers** (`run_responses.rs`) — call `apply_*`, then `execute_effects`. Glue code only.
+
+This pattern keeps business logic testable without mocking Tauri.
+
+### Designing for Testability
+
+When adding new service logic:
+
+1. **Pure functions first** — if a function can take inputs and return outputs without I/O, write it that way. Pass `now_ms` instead of calling `now_epoch_ms()`. Pass data instead of reading files.
+2. **Return effects, don't execute them** — if a function needs side effects (emit events, write files, send messages), return a `Vec<RunEffect>` and let the executor handle it. Add new variants to `RunEffect` as needed.
+3. **No `AppHandle` in business logic** — `AppHandle<R>` belongs in the executor and thin wrappers, never in pure functions.
+4. **No `now_epoch_ms()` inside pure functions** — pass time as a parameter for deterministic testing.
+5. **Keep the `RunEffect` enum flat** — one line per executor arm. If it grows past 20 variants, consider grouping into sub-enums.
+
+### Test Files
+
+```
+src-tauri/tests/
+├── common/mod.rs          # Shared helpers: YAML fixtures, make_run_info()
+├── task_parsing.rs        # T1-UNIT: parse_task_md, frontmatter manipulation
+├── artifact_capture.rs    # T2-INT: git artifact capture with temp repos
+├── run_lifecycle.rs       # T4-UNIT: pure state machine + persistence + stale detection
+├── git_operations.rs      # T6-INT: worktree CRUD, branches, status
+└── agent_monitoring.rs    # T5-INT: event bus, activity store, hook receiver (pre-existing)
+
+src/lib/__tests__/
+└── utils.test.ts          # T7-UNIT: parseArtifactSummary, statusColor, shortPath
+```
+
+### Test Conventions
+
+- Shared helpers in `tests/common/mod.rs` — single source of truth for YAML fixtures
+- Use `tempfile::TempDir` for filesystem tests, `git2::Repository` for git tests
+- Assert effects with `.iter().any(|e| matches!(e, ...))` (order-independent), not index-based
+- `#![allow(clippy::unwrap_used, clippy::expect_used)]` in test files — unwrap is fine in tests
+- Test the happy path + one obvious error case + one edge case per function. Don't over-test.
+
+### What's NOT Tested (and why)
+
+| Area | Reason |
+|:--|:--|
+| `commands/` (Tauri IPC handlers) | Require full Tauri runtime — no test harness exists |
+| `run_manager.rs` (process orchestration) | Holds child processes, stdin, Arc<Mutex> — integration-only |
+| `terminal.rs` (PTY management) | Needs real terminal — can't unit test |
+| `knowledge*.rs` (embedding + vector search) | Needs ONNX model download — deferred, needs mock infrastructure |
+| `knowledge_mcp.rs` (MCP HTTP server) | Depends on knowledge service — deferred with T3 |
 
 ## CI/CD
 

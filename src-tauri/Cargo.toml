@@ -50,6 +50,7 @@ sona = ["dep:ruvector-sona", "knowledge"]
 
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json"] }
+tempfile = "3.27.0"
 
 [lints.rust]
 unsafe_code = "deny"

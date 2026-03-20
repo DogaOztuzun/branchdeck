@@ -134,11 +134,23 @@ bunx tauri build         # Production build
 ## Development
 
 ```bash
+# Lint & format
 bun run check              # Biome lint + format check
 bun run check:fix          # Biome auto-fix
 cargo clippy --all-targets # Rust linting (from src-tauri/)
 cargo fmt --check          # Rust format check
-cargo test                 # Rust tests
+
+# Tests (run before every commit/PR)
+bun test                   # Frontend tests (vitest)
+cargo test                 # Rust tests (from src-tauri/)
+```
+
+### Before committing
+
+Run the full check suite — CI will reject PRs that fail any of these:
+
+```bash
+bun run check && bun test && cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 ```
 
 ## Contributing
