@@ -1,7 +1,8 @@
 use crate::error::AppError;
 use crate::models::run::{LaunchOptions, RunInfo};
-use crate::services::run_manager::{self, RunManagerState};
+use crate::services::run_manager::{self, QueueStatus, RunManagerState};
 use crate::services::run_state;
+use crate::services::shepherd;
 use std::sync::Arc;
 use tauri::{Emitter, State};
 
@@ -65,6 +66,76 @@ pub async fn resume_run_cmd(
 ) -> Result<RunInfo, AppError> {
     let state = Arc::clone(&run_manager);
     run_manager::resume_run(state, app_handle, &task_path, &worktree_path).await
+}
+
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub async fn shepherd_pr_cmd(
+    run_manager: State<'_, RunManagerState>,
+    #[cfg(feature = "knowledge")] knowledge: State<
+        '_,
+        std::sync::Arc<crate::services::knowledge::KnowledgeService>,
+    >,
+    app_handle: tauri::AppHandle,
+    repo_path: String,
+    pr_number: u64,
+    auto_launch: Option<bool>,
+) -> Result<shepherd::ShepherdResult, AppError> {
+    let result = shepherd::shepherd_pr(
+        &repo_path,
+        pr_number,
+        #[cfg(feature = "knowledge")]
+        Some(knowledge.inner()),
+    )
+    .await?;
+
+    if auto_launch.unwrap_or(false) {
+        let state = Arc::clone(&run_manager);
+        let options = LaunchOptions {
+            max_turns: None,
+            max_budget_usd: None,
+        };
+        run_manager::launch_run(
+            state,
+            app_handle,
+            &result.task.path,
+            &result.worktree_path,
+            options,
+        )
+        .await?;
+    }
+
+    Ok(result)
+}
+
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub async fn batch_launch_cmd(
+    run_manager: State<'_, RunManagerState>,
+    app_handle: tauri::AppHandle,
+    pairs: Vec<(String, String)>,
+) -> Result<QueueStatus, AppError> {
+    let state = Arc::clone(&run_manager);
+    run_manager::batch_launch(state, app_handle, pairs).await
+}
+
+#[tauri::command]
+pub async fn cancel_queue_cmd(run_manager: State<'_, RunManagerState>) -> Result<(), AppError> {
+    let mut rm = run_manager.lock().await;
+    // Cancel active run first (if any), then clear the queue
+    if rm.get_status().is_some() {
+        rm.cancel_run().await?;
+    }
+    rm.cancel_queue();
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn queue_status_cmd(
+    run_manager: State<'_, RunManagerState>,
+) -> Result<QueueStatus, AppError> {
+    let rm = run_manager.lock().await;
+    Ok(rm.get_queue_status())
 }
 
 #[tauri::command]

@@ -51,6 +51,15 @@ export async function getKnowledgeStats(repoPath: string): Promise<KnowledgeStat
   }
 }
 
+export async function forgetKnowledge(entryId: number): Promise<void> {
+  try {
+    await invoke('forget_knowledge', { entryId });
+  } catch (e) {
+    logError(`forgetKnowledge failed: ${e}`);
+    throw e;
+  }
+}
+
 export async function suggestNext(
   repoPath: string,
   context: string,

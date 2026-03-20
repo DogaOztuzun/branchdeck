@@ -23,3 +23,42 @@ export type PrInfo = {
   deletions: number | null;
   reviewDecision: string | null;
 };
+
+export type PrSummary = {
+  number: number;
+  title: string;
+  branch: string;
+  url: string;
+  ciStatus: string | null;
+  reviewDecision: string | null;
+  repoName: string;
+  author: string;
+  additions: number | null;
+  deletions: number | null;
+  changedFiles: number | null;
+  createdAt: string | null;
+};
+
+export type PrFilter = {
+  author?: string | null;
+  ciStatus?: string | null;
+  label?: string | null;
+};
+
+export type ShepherdResult = {
+  task: import('./task').TaskInfo;
+  worktreePath: string;
+  knowledgeRecalled: number;
+};
+
+export type QueuedRun = {
+  taskPath: string;
+  worktreePath: string;
+};
+
+export type QueueStatus = {
+  active: string | null;
+  queued: QueuedRun[];
+  completed: number;
+  failed: number;
+};

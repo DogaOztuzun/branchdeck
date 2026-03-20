@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { error as logError } from '@tauri-apps/plugin-log';
+import type { QueueStatus, ShepherdResult } from '../../types/github';
 import type { RunInfo } from '../../types/run';
 
 export async function launchRun(
@@ -62,6 +63,50 @@ export async function resumeRun(taskPath: string, worktreePath: string): Promise
     return await invoke<RunInfo>('resume_run_cmd', { taskPath, worktreePath });
   } catch (e) {
     logError(`resumeRun failed: ${e}`);
+    throw e;
+  }
+}
+
+export async function shepherdPr(
+  repoPath: string,
+  prNumber: number,
+  autoLaunch?: boolean,
+): Promise<ShepherdResult> {
+  try {
+    return await invoke<ShepherdResult>('shepherd_pr_cmd', {
+      repoPath,
+      prNumber,
+      autoLaunch: autoLaunch ?? null,
+    });
+  } catch (e) {
+    logError(`shepherdPr failed: ${e}`);
+    throw e;
+  }
+}
+
+export async function batchLaunch(pairs: [string, string][]): Promise<QueueStatus> {
+  try {
+    return await invoke<QueueStatus>('batch_launch_cmd', { pairs });
+  } catch (e) {
+    logError(`batchLaunch failed: ${e}`);
+    throw e;
+  }
+}
+
+export async function cancelQueue(): Promise<void> {
+  try {
+    await invoke('cancel_queue_cmd');
+  } catch (e) {
+    logError(`cancelQueue failed: ${e}`);
+    throw e;
+  }
+}
+
+export async function getQueueStatus(): Promise<QueueStatus> {
+  try {
+    return await invoke<QueueStatus>('queue_status_cmd');
+  } catch (e) {
+    logError(`getQueueStatus failed: ${e}`);
     throw e;
   }
 }

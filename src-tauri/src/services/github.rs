@@ -1,7 +1,10 @@
 use crate::error::AppError;
+use crate::models::github::{PrFilter, PrSummary};
 use crate::models::{CheckRunInfo, PrInfo, ReviewInfo};
+use git2::Repository;
 use log::{debug, error, info};
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -22,6 +25,14 @@ fn client_cache() -> &'static Mutex<Option<(Instant, octocrab::Octocrab)>> {
 
 const CACHE_TTL: Duration = Duration::from_secs(30);
 const CLIENT_TTL: Duration = Duration::from_secs(300);
+
+/// Get (or create) the cached octocrab client. Public for sibling services.
+///
+/// # Errors
+/// Returns `AppError` if the GitHub token cannot be resolved or the client cannot be built.
+pub async fn get_client_pub() -> Result<octocrab::Octocrab, AppError> {
+    get_client().await
+}
 
 async fn get_client() -> Result<octocrab::Octocrab, AppError> {
     // Check for a cached client (brief lock, no await)
@@ -308,6 +319,188 @@ pub async fn get_pr_for_branch(
     );
 
     Ok(Some(pr_info))
+}
+
+/// Resolve owner/repo from a local git repository's origin remote.
+///
+/// # Errors
+/// Returns `AppError` if the repo cannot be opened or has no GitHub remote.
+pub fn resolve_owner_repo(repo_path: &Path) -> Result<(String, String), AppError> {
+    let repo = Repository::open(repo_path).map_err(|e| {
+        error!("Failed to open repo at {}: {e}", repo_path.display());
+        AppError::Git(e)
+    })?;
+
+    let remote = repo.find_remote("origin").map_err(|e| {
+        debug!("No origin remote for {}: {e}", repo_path.display());
+        AppError::GitHub(format!(
+            "No GitHub remote configured for {}",
+            repo_path.display()
+        ))
+    })?;
+
+    let remote_url = remote.url().unwrap_or("").to_string();
+    parse_github_remote(&remote_url)
+        .ok_or_else(|| AppError::GitHub(format!("Not a GitHub remote: {remote_url}")))
+}
+
+/// List all open PRs for a GitHub repository.
+///
+/// # Errors
+/// Returns `AppError` on authentication, API, or rate-limit failures.
+#[allow(clippy::too_many_lines)]
+pub async fn list_open_prs(
+    repo_path: &str,
+    filter: Option<PrFilter>,
+) -> Result<Vec<PrSummary>, AppError> {
+    let (owner, repo_name) = resolve_owner_repo(Path::new(repo_path))?;
+    let display_name = repo_name.clone();
+
+    let client = get_client().await?;
+
+    let pulls = client
+        .pulls(&owner, &repo_name)
+        .list()
+        .state(octocrab::params::State::Open)
+        .per_page(100)
+        .send()
+        .await
+        .map_err(|e| {
+            let msg = e.to_string();
+            if msg.contains("rate limit") || msg.contains("403") {
+                error!("GitHub rate limit for {owner}/{repo_name}: {e}");
+                AppError::GitHub(format!(
+                    "GitHub rate limit exceeded for {owner}/{repo_name}"
+                ))
+            } else if msg.contains("401") || msg.contains("Bad credentials") {
+                error!("GitHub auth error for {owner}/{repo_name}: {e}");
+                AppError::GitHub("GitHub authentication failed — check your token".to_string())
+            } else {
+                error!("Failed to list PRs for {owner}/{repo_name}: {e}");
+                AppError::GitHub(e.to_string())
+            }
+        })?;
+
+    let filter = filter.unwrap_or_default();
+
+    let summaries: Vec<PrSummary> = pulls
+        .items
+        .iter()
+        .filter_map(|pr| {
+            let author = pr
+                .user
+                .as_ref()
+                .map(|u| u.login.clone())
+                .unwrap_or_default();
+
+            // Apply author filter
+            if let Some(ref filter_author) = filter.author {
+                if !author.eq_ignore_ascii_case(filter_author) {
+                    return None;
+                }
+            }
+
+            // CI status and review decision require enrichment (separate API calls).
+            // Set to None here — frontend enriches lazily after load.
+            let ci_status: Option<String> = None;
+            let review_decision: Option<String> = None;
+
+            Some(PrSummary {
+                number: pr.number,
+                title: pr.title.clone().unwrap_or_default(),
+                branch: pr.head.ref_field.clone(),
+                url: pr
+                    .html_url
+                    .as_ref()
+                    .map_or_else(String::new, std::string::ToString::to_string),
+                ci_status,
+                review_decision,
+                repo_name: display_name.clone(),
+                author,
+                additions: pr.additions,
+                deletions: pr.deletions,
+                changed_files: pr.changed_files,
+                created_at: pr.created_at.map(|t| t.to_rfc3339()),
+            })
+        })
+        .collect();
+
+    info!(
+        "Listed {} open PRs for {owner}/{repo_name}",
+        summaries.len()
+    );
+    Ok(summaries)
+}
+
+/// List open PRs across multiple repositories.
+///
+/// # Errors
+/// Returns errors per-repo but continues collecting from other repos.
+pub async fn list_all_open_prs(
+    repo_paths: &[String],
+    filter: Option<PrFilter>,
+) -> Result<Vec<PrSummary>, AppError> {
+    let mut all_prs = Vec::new();
+    let mut last_error: Option<AppError> = None;
+
+    for repo_path in repo_paths {
+        match list_open_prs(repo_path, filter.clone()).await {
+            Ok(prs) => all_prs.extend(prs),
+            Err(e) => {
+                error!("Failed to list PRs for {repo_path}: {e}");
+                last_error = Some(e);
+            }
+        }
+    }
+
+    // If ALL repos failed, return the last error
+    if all_prs.is_empty() {
+        if let Some(e) = last_error {
+            return Err(e);
+        }
+    }
+
+    info!(
+        "Listed {} total open PRs across {} repos",
+        all_prs.len(),
+        repo_paths.len()
+    );
+    Ok(all_prs)
+}
+
+/// Enrich a `PrSummary` with CI status and review decision by fetching checks and reviews.
+///
+/// # Errors
+/// Returns `AppError` on API failures.
+pub async fn enrich_pr_summary(repo_path: &str, pr: &mut PrSummary) -> Result<(), AppError> {
+    let (owner, repo_name) = resolve_owner_repo(Path::new(repo_path))?;
+
+    // Fetch the full PR info using existing function
+    let pr_info = get_pr_for_branch(&owner, &repo_name, &pr.branch).await?;
+
+    if let Some(info) = pr_info {
+        // Derive CI status from check conclusions
+        let has_failing = info.checks.iter().any(|c| {
+            c.conclusion
+                .as_ref()
+                .is_some_and(|conc| conc != "success" && conc != "skipped" && conc != "neutral")
+        });
+        let has_pending = info.checks.iter().any(|c| c.status != "completed");
+
+        pr.ci_status = Some(if has_failing {
+            "failing".to_string()
+        } else if has_pending {
+            "pending".to_string()
+        } else if info.checks.is_empty() {
+            return Ok(());
+        } else {
+            "passing".to_string()
+        });
+
+        pr.review_decision = info.review_decision;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

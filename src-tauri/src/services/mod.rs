@@ -17,6 +17,7 @@ pub mod run_manager;
 pub mod run_responses;
 pub mod run_stale;
 pub mod run_state;
+pub mod shepherd;
 pub mod task;
 pub mod task_watcher;
 pub mod terminal;
