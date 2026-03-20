@@ -234,8 +234,12 @@ impl KnowledgeService {
                         }
                     }
                     let quality = trajectory.quality_score;
-                    self.sona().end_trajectory(builder, quality);
-                    debug!("[sona] Fed trajectory: {sona_step_count} steps, quality {quality}");
+                    if sona_step_count > 0 {
+                        self.sona().end_trajectory(builder, quality);
+                        debug!("[sona] Fed trajectory: {sona_step_count} steps, quality {quality}");
+                    } else {
+                        debug!("[sona] Skipped empty trajectory (no paired tool steps)");
+                    }
                 }
 
                 // Find the repo store for this trajectory's tab
@@ -407,7 +411,12 @@ impl KnowledgeService {
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
-                        if let Some(msg) = service.sona().tick() {
+                        // Run tick on blocking thread pool — K-means++ is CPU-intensive
+                        let sona_ref = Arc::clone(&service);
+                        let tick_result = tokio::task::spawn_blocking(move || {
+                            sona_ref.sona().tick()
+                        }).await.unwrap_or(None);
+                        if let Some(msg) = tick_result {
                             info!("[sona] {msg}");
                             service.persist_sona_patterns().await;
                         }
