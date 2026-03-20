@@ -15,18 +15,26 @@ type TrajectoryMap = HashMap<String, TrajectoryRecord>;
 
 impl KnowledgeService {
     /// Subscribe to the `EventBus` for trajectory recording.
+    #[cfg(feature = "knowledge")]
     pub fn start_subscriber(self: &Arc<Self>, event_bus: &EventBus) {
         let service = Arc::clone(self);
         let mut rx = event_bus.subscribe();
+        let token = service.shutdown_token().clone();
         tauri::async_runtime::spawn(async move {
             loop {
-                match rx.recv().await {
-                    Ok(event) => service.handle_event(event).await,
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                        warn!("KnowledgeService lagged, missed {n} events");
-                    }
-                    Err(tokio::sync::broadcast::error::RecvError::Closed) => {
-                        debug!("EventBus closed, stopping KnowledgeService subscriber");
+                tokio::select! {
+                    result = rx.recv() => match result {
+                        Ok(event) => service.handle_event(event).await,
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                            warn!("KnowledgeService lagged, missed {n} events");
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                            debug!("EventBus closed, stopping KnowledgeService subscriber");
+                            break;
+                        }
+                    },
+                    () = token.cancelled() => {
+                        debug!("KnowledgeService subscriber shutting down");
                         break;
                     }
                 }
@@ -203,6 +211,37 @@ impl KnowledgeService {
         // Try to embed and store
         if self.ensure_embedder().await {
             if let Some(embedding) = self.embed_text(&summary).await {
+                // Feed trajectory to SONA for pattern extraction
+                #[cfg(feature = "sona")]
+                {
+                    let mut builder = self.sona().begin_trajectory(embedding.clone());
+                    // Deduplicate ToolStart/ToolEnd pairs — keep only ToolEnd (has real
+                    // was_modified). Uses a counter map to handle nested tool calls:
+                    // ToolStart increments, ToolEnd decrements and adds the step.
+                    let mut pending: HashMap<&str, usize> = HashMap::new();
+                    let mut sona_step_count = 0usize;
+                    for step in &trajectory.steps {
+                        let count = pending.entry(step.tool_name.as_str()).or_insert(0);
+                        if *count > 0 {
+                            // ToolEnd: pair found, add step with real was_modified
+                            *count -= 1;
+                            let reward = if step.was_modified { 0.8 } else { 0.5 };
+                            builder.add_named_step(&step.tool_name, vec![], vec![], reward);
+                            sona_step_count += 1;
+                        } else {
+                            // ToolStart: remember for pairing
+                            *count += 1;
+                        }
+                    }
+                    let quality = trajectory.quality_score;
+                    if sona_step_count > 0 {
+                        self.sona().end_trajectory(builder, quality);
+                        debug!("[sona] Fed trajectory: {sona_step_count} steps, quality {quality}");
+                    } else {
+                        debug!("[sona] Skipped empty trajectory (no paired tool steps)");
+                    }
+                }
+
                 // Find the repo store for this trajectory's tab
                 // For now, use global store as fallback since we don't
                 // have repo context from the event alone
@@ -357,6 +396,169 @@ impl KnowledgeService {
         queue.push(pending);
         warn!("Queued explicit entry for later embedding");
         Ok(0) // ID 0 indicates queued, not yet stored
+    }
+}
+
+#[cfg(feature = "sona")]
+impl KnowledgeService {
+    /// Start the periodic SONA tick timer (60s interval).
+    pub fn start_sona_tick(self: &Arc<Self>) {
+        let service = Arc::clone(self);
+        let token = self.shutdown_token().clone();
+        tauri::async_runtime::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+            interval.tick().await; // skip immediate first tick — no trajectories yet
+            loop {
+                tokio::select! {
+                    _ = interval.tick() => {
+                        // Run tick on blocking thread pool — K-means++ is CPU-intensive
+                        let sona_ref = Arc::clone(&service);
+                        let tick_result = match tokio::task::spawn_blocking(move || {
+                            sona_ref.sona().tick()
+                        }).await {
+                            Ok(result) => result,
+                            Err(e) => {
+                                error!("[sona] tick panicked: {e}");
+                                None
+                            }
+                        };
+                        if let Some(msg) = tick_result {
+                            info!("[sona] {msg}");
+                            service.persist_sona_patterns().await;
+                        }
+                    }
+                    () = token.cancelled() => {
+                        debug!("SONA tick loop shutting down");
+                        break;
+                    }
+                }
+            }
+        });
+        info!("SONA tick timer started (60s interval)");
+    }
+
+    /// Persist SONA-extracted patterns to the global RVF store.
+    #[allow(clippy::too_many_lines)]
+    pub(crate) async fn persist_sona_patterns(&self) {
+        use crate::models::knowledge::{
+            KnowledgeEntry, KnowledgeMetadata, KnowledgeSource, KnowledgeType,
+        };
+        use crate::services::knowledge::{field_ids, EMBEDDING_DIM};
+        use rvf_runtime::{FilterExpr, QueryOptions};
+
+        let patterns = self.sona().get_all_patterns();
+        if patterns.is_empty() {
+            return;
+        }
+
+        // Pre-register candidate IDs under write lock so a concurrent call
+        // (tick vs shutdown race) sees them and skips, preventing double-ingest.
+        let mut known_ids_guard = self.persisted_pattern_ids.write().await;
+        // Build index of candidates: patterns with correct dim that aren't already known
+        let candidate_indices: Vec<usize> = patterns
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| {
+                p.centroid.len() == usize::from(EMBEDDING_DIM) && !known_ids_guard.contains(&p.id)
+            })
+            .map(|(i, _)| i)
+            .collect();
+        if candidate_indices.is_empty() {
+            return;
+        }
+        // Register IDs before releasing lock — concurrent calls will skip these
+        for &i in &candidate_indices {
+            known_ids_guard.insert(patterns[i].id);
+        }
+        drop(known_ids_guard);
+
+        let store_lock = Arc::clone(self.global_store());
+        let mut skipped_dup = 0u64;
+
+        // Phase 1: RVF cosine dedup under read lock
+        let candidates: Vec<usize> = {
+            let store = store_lock.read().await;
+            let dedup_filter = FilterExpr::Eq(
+                field_ids::ENTRY_TYPE,
+                rvf_runtime::filter::FilterValue::String("pattern".to_string()),
+            );
+            let dedup_opts = QueryOptions {
+                filter: Some(dedup_filter),
+                ..QueryOptions::default()
+            };
+
+            candidate_indices
+                .into_iter()
+                .filter(|&i| {
+                    let pattern = &patterns[i];
+                    if let Ok(existing) = store.store.query(&pattern.centroid, 1, &dedup_opts) {
+                        if existing.first().is_some_and(|hit| hit.distance < 0.05) {
+                            skipped_dup += 1;
+                            return false;
+                        }
+                    }
+                    true
+                })
+                .collect()
+        };
+
+        // Phase 2: ingest under write lock (only new patterns)
+        let mut persisted = 0u64;
+        let mut failed_ids: Vec<u64> = Vec::new();
+        if !candidates.is_empty() {
+            let now = crate::models::agent::now_ms();
+            let mut store = store_lock.write().await;
+            for &i in &candidates {
+                let pattern = &patterns[i];
+                let id = store.allocate_id();
+                let content = format!(
+                    "Pattern: {} trajectories, avg quality {:.2}, type {:?}",
+                    pattern.cluster_size, pattern.avg_quality, pattern.pattern_type
+                );
+
+                let entry = KnowledgeEntry {
+                    id,
+                    content,
+                    entry_type: KnowledgeType::Pattern,
+                    source: KnowledgeSource::EventBus,
+                    repo_hash: String::new(),
+                    worktree_id: None,
+                    metadata: KnowledgeMetadata {
+                        session_id: None,
+                        tool_names: Vec::new(),
+                        file_paths: Vec::new(),
+                        run_status: None,
+                        cost_usd: None,
+                        quality_score: pattern.avg_quality,
+                    },
+                    created_at: now,
+                };
+
+                match store.ingest(&pattern.centroid, entry) {
+                    Ok(_) => persisted += 1,
+                    Err(e) => {
+                        error!("Failed to persist SONA pattern: {e}");
+                        failed_ids.push(pattern.id);
+                    }
+                }
+            }
+        }
+
+        // Un-register failed IDs so they're eligible for retry on next tick
+        if !failed_ids.is_empty() {
+            let mut known = self.persisted_pattern_ids.write().await;
+            for id in &failed_ids {
+                known.remove(id);
+            }
+            warn!(
+                "[sona] {} pattern ingests failed, will retry on next tick",
+                failed_ids.len()
+            );
+        }
+
+        if persisted > 0 || skipped_dup > 0 {
+            info!("[sona] Persisted {persisted} patterns, skipped {skipped_dup} duplicates");
+        }
     }
 }
 

@@ -91,6 +91,15 @@ pub struct TrajectoryStep {
     pub ts: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Suggestion {
+    pub id: u64,
+    pub content: String,
+    pub distance: f32,
+    pub avg_quality: f32,
+}
+
 /// Pending entry waiting for ONNX embedder to become available.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

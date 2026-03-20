@@ -48,27 +48,34 @@ pub async fn start(
         }
     };
 
+    let token = knowledge.shutdown_token().clone();
     loop {
-        match listener.accept().await {
-            Ok((stream, addr)) => {
-                debug!("Knowledge MCP accepted connection from {addr}");
-                let ks = Arc::clone(&knowledge);
-                tokio::spawn(async move {
-                    match tokio::time::timeout(CONNECTION_TIMEOUT, handle_connection(stream, &ks))
-                        .await
-                    {
-                        Ok(Err(e)) => {
-                            debug!("Knowledge MCP connection from {addr} error: {e}");
+        tokio::select! {
+            result = listener.accept() => match result {
+                Ok((stream, addr)) => {
+                    debug!("Knowledge MCP accepted connection from {addr}");
+                    let ks = Arc::clone(&knowledge);
+                    tokio::spawn(async move {
+                        match tokio::time::timeout(CONNECTION_TIMEOUT, handle_connection(stream, &ks))
+                            .await
+                        {
+                            Ok(Err(e)) => {
+                                debug!("Knowledge MCP connection from {addr} error: {e}");
+                            }
+                            Err(_) => {
+                                warn!("Knowledge MCP connection from {addr} timed out");
+                            }
+                            Ok(Ok(())) => {}
                         }
-                        Err(_) => {
-                            warn!("Knowledge MCP connection from {addr} timed out");
-                        }
-                        Ok(Ok(())) => {}
-                    }
-                });
-            }
-            Err(e) => {
-                error!("Knowledge MCP accept error: {e}");
+                    });
+                }
+                Err(e) => {
+                    error!("Knowledge MCP accept error: {e}");
+                }
+            },
+            () = token.cancelled() => {
+                debug!("Knowledge MCP endpoint shutting down");
+                break;
             }
         }
     }
@@ -99,6 +106,7 @@ async fn handle_connection(
     let response = match head.path.as_str() {
         "/knowledge/query" => handle_query(knowledge, body_str).await,
         "/knowledge/remember" => handle_remember(knowledge, body_str).await,
+        "/knowledge/suggest" => handle_suggest(knowledge, body_str).await,
         "/knowledge/health" => Ok(r#"{"status":"ok"}"#.to_string()),
         _ => {
             let err_json = serde_json::json!({"error": "unknown endpoint"}).to_string();
@@ -180,6 +188,41 @@ async fn handle_remember(knowledge: &KnowledgeService, body: &str) -> Result<Str
         .map_err(|e| format!("ingest failed: {e}"))?;
 
     Ok(serde_json::json!({"id": id}).to_string())
+}
+
+#[cfg(feature = "sona")]
+async fn handle_suggest(knowledge: &KnowledgeService, body: &str) -> Result<String, String> {
+    #[derive(serde::Deserialize)]
+    struct SuggestReq {
+        context: String,
+        #[serde(default = "suggest_default_top_k")]
+        top_k: usize,
+        #[serde(default)]
+        repo_path: String,
+    }
+    fn suggest_default_top_k() -> usize {
+        5
+    }
+
+    let req: SuggestReq =
+        serde_json::from_str(body).map_err(|e| format!("invalid suggest request: {e}"))?;
+
+    if req.context.trim().is_empty() {
+        return Err("context must not be empty".to_string());
+    }
+
+    let results = knowledge
+        .suggest_next(&req.repo_path, &req.context, req.top_k.min(20))
+        .await
+        .map_err(|e| format!("suggest failed: {e}"))?;
+
+    serde_json::to_string(&results).map_err(|e| format!("serialize failed: {e}"))
+}
+
+#[cfg(not(feature = "sona"))]
+#[allow(clippy::unused_async)]
+async fn handle_suggest(_knowledge: &KnowledgeService, _body: &str) -> Result<String, String> {
+    Ok("[]".to_string())
 }
 
 // --- HTTP helpers (same pattern as hook_receiver) ---

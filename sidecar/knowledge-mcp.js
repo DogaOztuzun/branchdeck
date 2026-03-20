@@ -91,6 +91,26 @@ const TOOLS = [
       required: ["content"],
     },
   },
+  {
+    name: "suggest_next",
+    description:
+      "Get workflow suggestions based on learned patterns from past sessions. Describe what you're currently doing and get pattern-based recommendations.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        context: {
+          type: "string",
+          description:
+            "Description of current context — what you're working on, what you just did",
+        },
+        top_k: {
+          type: "number",
+          description: "Number of suggestions to return (default 5, max 20)",
+        },
+      },
+      required: ["context"],
+    },
+  },
 ];
 
 const SERVER_INFO = {
@@ -202,6 +222,43 @@ async function handleRequest(msg) {
               },
             ],
           });
+        }
+
+        if (toolName === "suggest_next") {
+          const context = (args.context || "").trim();
+          if (!context) {
+            return makeResponse(id, {
+              content: [
+                { type: "text", text: "Error: context must not be empty" },
+              ],
+              isError: true,
+            });
+          }
+
+          const results = await postJSON("/knowledge/suggest", {
+            context,
+            top_k: args.top_k ?? 5,
+          });
+
+          if (results.error) {
+            return makeResponse(id, {
+              content: [{ type: "text", text: `Error: ${results.error}` }],
+              isError: true,
+            });
+          }
+
+          const entries = Array.isArray(results) ? results : [];
+          const text =
+            entries.length === 0
+              ? "No learned patterns yet. Keep working — suggestions emerge after enough sessions."
+              : entries
+                  .map(
+                    (e, i) =>
+                      `[${i + 1}] (quality: ${e.avgQuality?.toFixed(2) || "?"}) ${e.content}`,
+                  )
+                  .join("\n\n");
+
+          return makeResponse(id, { content: [{ type: "text", text }] });
         }
 
         return makeError(id, -32601, `Unknown tool: ${toolName}`);

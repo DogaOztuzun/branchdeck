@@ -157,6 +157,108 @@ async fn query_store_filtered(
     }
 }
 
+#[cfg(feature = "sona")]
+impl KnowledgeService {
+    /// Query RVF for persisted patterns similar to the given context.
+    ///
+    /// # Errors
+    ///
+    /// Returns `AppError::Knowledge` if embedding fails.
+    pub async fn suggest_next(
+        &self,
+        repo_path: &str,
+        context_text: &str,
+        top_k: usize,
+    ) -> Result<Vec<crate::models::knowledge::Suggestion>, AppError> {
+        if !self.ensure_embedder().await {
+            return Err(AppError::Knowledge(
+                "ONNX embedding model not available".to_string(),
+            ));
+        }
+
+        let embedding = self
+            .embed_text(context_text)
+            .await
+            .ok_or_else(|| AppError::Knowledge("Failed to embed context text".to_string()))?;
+
+        let hash = repo_hash(repo_path);
+        let mut results: Vec<crate::models::knowledge::Suggestion> = Vec::new();
+        let mut seen_ids: HashSet<u64> = HashSet::new();
+
+        // Query repo store for pattern entries (future: repo-specific patterns)
+        if let Some(store_lock) = self.get_repo_store(&hash).await {
+            let suggestions = query_patterns(&store_lock, &embedding, top_k).await;
+            for s in suggestions {
+                if seen_ids.insert(s.id) {
+                    results.push(s);
+                }
+            }
+        }
+
+        // Query global store for pattern entries
+        let global_suggestions = query_patterns(self.global_store(), &embedding, top_k).await;
+        for s in global_suggestions {
+            if seen_ids.insert(s.id) {
+                results.push(s);
+            }
+        }
+
+        // Re-rank by distance, take top_k
+        results.sort_by(|a, b| {
+            a.distance
+                .partial_cmp(&b.distance)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        results.truncate(top_k);
+
+        debug!(
+            "suggest_next returned {} patterns for {:?}",
+            results.len(),
+            context_text
+        );
+        Ok(results)
+    }
+}
+
+/// Query a single store for pattern entries.
+#[cfg(feature = "sona")]
+async fn query_patterns(
+    store_lock: &Arc<RwLock<StoreHandle>>,
+    embedding: &[f32],
+    top_k: usize,
+) -> Vec<crate::models::knowledge::Suggestion> {
+    let store = store_lock.read().await;
+    let filter = FilterExpr::Eq(
+        field_ids::ENTRY_TYPE,
+        rvf_runtime::filter::FilterValue::String("pattern".to_string()),
+    );
+    let options = QueryOptions {
+        filter: Some(filter),
+        ..QueryOptions::default()
+    };
+
+    match store.store.query(embedding, top_k, &options) {
+        Ok(results) => results
+            .into_iter()
+            .filter_map(|sr| {
+                store
+                    .entries
+                    .get(&sr.id)
+                    .map(|entry| crate::models::knowledge::Suggestion {
+                        id: sr.id,
+                        content: entry.content.clone(),
+                        distance: sr.distance,
+                        avg_quality: entry.metadata.quality_score,
+                    })
+            })
+            .collect(),
+        Err(e) => {
+            error!("Pattern query failed: {e}");
+            Vec::new()
+        }
+    }
+}
+
 /// Compute stats from a store handle.
 #[cfg(feature = "knowledge")]
 fn compute_stats(store: &StoreHandle) -> KnowledgeStats {

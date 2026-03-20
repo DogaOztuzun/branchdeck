@@ -257,6 +257,8 @@ pub fn run() {
                             Ok(knowledge_service) => {
                                 let knowledge_service = Arc::new(knowledge_service);
                                 knowledge_service.start_subscriber(&event_bus);
+                                #[cfg(feature = "sona")]
+                                knowledge_service.start_sona_tick();
                                 app.manage(Arc::clone(&knowledge_service));
 
                                 // Start MCP TCP endpoint and configure settings.json
@@ -367,6 +369,8 @@ pub fn run() {
             commands::knowledge::ingest_knowledge,
             #[cfg(feature = "knowledge")]
             commands::knowledge::get_knowledge_stats,
+            #[cfg(feature = "sona")]
+            commands::knowledge::suggest_next,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
@@ -384,6 +388,17 @@ pub fn run() {
                 #[cfg(feature = "knowledge")]
                 if let Err(e) = services::hook_config::remove_mcp_config() {
                     log::warn!("Failed to remove MCP config on shutdown: {e}");
+                }
+
+                // Close knowledge stores (persists embed queue, extracts SONA patterns)
+                #[cfg(feature = "knowledge")]
+                if let Some(knowledge) =
+                    window.try_state::<Arc<services::knowledge::KnowledgeService>>()
+                {
+                    let ks = Arc::clone(knowledge.inner());
+                    tauri::async_runtime::block_on(async move {
+                        ks.close_all().await;
+                    });
                 }
 
                 // Close all terminal sessions

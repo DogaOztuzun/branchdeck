@@ -54,3 +54,19 @@ pub async fn get_knowledge_stats(
 ) -> Result<KnowledgeStats, AppError> {
     knowledge.get_stats(&repo_path).await
 }
+
+#[cfg(feature = "sona")]
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub async fn suggest_next(
+    knowledge: State<'_, Arc<KnowledgeService>>,
+    repo_path: String,
+    context: String,
+    top_k: Option<usize>,
+) -> Result<Vec<crate::models::knowledge::Suggestion>, AppError> {
+    if context.trim().is_empty() {
+        return Err(AppError::Knowledge("context must not be empty".to_string()));
+    }
+    let k = top_k.unwrap_or(5).min(20);
+    knowledge.suggest_next(&repo_path, &context, k).await
+}
