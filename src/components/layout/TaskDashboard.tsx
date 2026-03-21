@@ -330,14 +330,14 @@ export function TaskDashboard() {
         <div class="flex items-center gap-0">
           <button
             type="button"
-            class={`text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-l cursor-pointer ${activeTab() === 'prs' ? 'bg-bg-main text-text-main' : 'text-text-dim hover:text-text-main'}`}
+            class={`text-xs font-bold uppercase tracking-wider px-2 py-0.5 sharp cursor-pointer ${activeTab() === 'prs' ? 'bg-bg-main text-text-main' : 'text-text-dim hover:text-text-main'}`}
             onClick={() => setActiveTab('prs')}
           >
             PRs ({prs().length})
           </button>
           <button
             type="button"
-            class={`text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-r cursor-pointer ${activeTab() === 'tasks' ? 'bg-bg-main text-text-main' : 'text-text-dim hover:text-text-main'}`}
+            class={`text-xs font-bold uppercase tracking-wider px-2 py-0.5 sharp cursor-pointer ${activeTab() === 'tasks' ? 'bg-bg-main text-text-main' : 'text-text-dim hover:text-text-main'}`}
             onClick={() => setActiveTab('tasks')}
           >
             Tasks ({items().length})
@@ -370,7 +370,7 @@ export function TaskDashboard() {
         <Show when={activeTab() === 'prs'}>
           <div class="px-2 py-1.5 flex items-center gap-1.5 border-b border-border-subtle/50">
             <select
-              class="text-[10px] bg-bg-main text-text-main rounded px-1 py-0.5 border border-border-subtle/50"
+              class="text-[10px] bg-bg-main text-text-mainpx-1 py-0.5 border border-border-subtle/50"
               value={authorFilter()}
               onChange={(e) => setAuthorFilter(e.currentTarget.value)}
             >
@@ -378,7 +378,7 @@ export function TaskDashboard() {
               <For each={authors()}>{(a) => <option value={a}>{a}</option>}</For>
             </select>
             <select
-              class="text-[10px] bg-bg-main text-text-main rounded px-1 py-0.5 border border-border-subtle/50"
+              class="text-[10px] bg-bg-main text-text-mainpx-1 py-0.5 border border-border-subtle/50"
               value={ciFilter()}
               onChange={(e) => setCiFilter(e.currentTarget.value)}
             >
@@ -392,8 +392,8 @@ export function TaskDashboard() {
           <Switch>
             <Match when={prsLoading()}>
               <div class="space-y-1 p-2">
-                <div class="animate-pulse bg-bg-main/50 rounded h-12" />
-                <div class="animate-pulse bg-bg-main/50 rounded h-12" />
+                <div class="animate-pulse bg-bg-main/50h-12" />
+                <div class="animate-pulse bg-bg-main/50h-12" />
               </div>
             </Match>
             <Match when={filteredPrs().length === 0}>
@@ -406,7 +406,7 @@ export function TaskDashboard() {
               <div class="p-1">
                 <For each={filteredPrs()}>
                   {(pr) => (
-                    <div class="w-full text-left px-2 py-1.5 rounded text-xs hover:bg-bg-main/50">
+                    <div class="w-full text-left px-2 py-1.5text-xs hover:bg-bg-main/50">
                       <div class="flex items-center justify-between gap-1">
                         <input
                           type="checkbox"
@@ -418,23 +418,31 @@ export function TaskDashboard() {
                           href={pr.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          class="truncate hover:underline"
-                          title={`PR #${pr.number} by ${pr.author}`}
+                          class="flex-1 min-w-0 hover:underline"
+                          title={pr.title}
                         >
-                          <span class="text-text-dim">{pr.repoName}</span>
-                          <span class="text-text-dim"> · </span>
-                          <span class="text-text-main">#{pr.number}</span>
-                          <span class="text-text-dim"> </span>
-                          <span class="text-text-main">{pr.title}</span>
+                          <div class="flex items-center gap-1.5">
+                            <span class="text-[11px] font-medium text-accent-primary shrink-0">
+                              #{pr.number}
+                            </span>
+                            <span class="text-[11px] text-text-main truncate">{pr.title}</span>
+                          </div>
+                          <div class="text-[10px] text-text-dim truncate mt-px">
+                            {pr.repoName}
+                          </div>
                         </a>
                         <button
                           type="button"
-                          class={`shrink-0 text-[10px] px-1.5 py-0.5 rounded cursor-pointer ${shepherding() === pr.number ? 'bg-accent/10 text-accent/50' : 'bg-accent/20 text-accent hover:bg-accent/30'}`}
+                          class={`shrink-0 text-[10px] font-medium px-2 py-0.5 border cursor-pointer transition-colors duration-150 ${
+                            shepherding() === pr.number
+                              ? 'border-accent-primary/30 text-accent-primary/50 bg-accent-primary/5'
+                              : 'border-border-subtle text-text-dim hover:text-accent-primary hover:border-accent-primary/50 hover:bg-accent-primary/5'
+                          }`}
                           title="Create worktree + task and launch shepherd"
                           disabled={shepherding() !== null}
                           onClick={() => handleShepherd(pr)}
                         >
-                          {shepherding() === pr.number ? 'Starting...' : 'Shepherd'}
+                          {shepherding() === pr.number ? '...' : 'Shepherd'}
                         </button>
                       </div>
                       <div class="flex items-center gap-2 mt-0.5 text-[10px] text-text-dim">
@@ -464,7 +472,7 @@ export function TaskDashboard() {
             <div class="px-2 py-1.5 border-t border-border-subtle/50">
               <button
                 type="button"
-                class={`w-full text-xs px-2 py-1 rounded cursor-pointer ${batchRunning() ? 'bg-accent/10 text-accent/50' : 'bg-accent/20 text-accent hover:bg-accent/30'}`}
+                class={`w-full text-[11px] font-medium px-3 py-1.5 border cursor-pointer transition-colors duration-150 ${batchRunning() ? 'border-accent-primary/30 text-accent-primary/50 bg-accent-primary/5' : 'border-accent-primary/50 text-accent-primary bg-accent-primary/10 hover:bg-accent-primary/20'}`}
                 disabled={batchRunning()}
                 onClick={handleBatchShepherd}
               >
@@ -478,9 +486,9 @@ export function TaskDashboard() {
           <Switch>
             <Match when={loading()}>
               <div class="space-y-1 p-2">
-                <div class="animate-pulse bg-bg-main/50 rounded h-10" />
-                <div class="animate-pulse bg-bg-main/50 rounded h-10" />
-                <div class="animate-pulse bg-bg-main/50 rounded h-10" />
+                <div class="animate-pulse bg-bg-main/50h-10" />
+                <div class="animate-pulse bg-bg-main/50h-10" />
+                <div class="animate-pulse bg-bg-main/50h-10" />
               </div>
             </Match>
             <Match when={items().length === 0}>
@@ -491,14 +499,24 @@ export function TaskDashboard() {
             </Match>
             <Match when={items().length > 0}>
               <Show when={!hasActiveItems()}>
-                <div class="text-xs text-text-dim text-center px-3 py-3">All quiet</div>
+                <div class="px-3 py-2 border-b border-border-subtle/30 text-[10px] text-text-dim flex items-center gap-1.5">
+                  <span class="inline-block w-1.5 h-1.5 rounded-full bg-accent-success/50" />
+                  All quiet
+                </div>
               </Show>
               <div class="p-1">
                 <For each={sortedItems()}>
                   {(item) => (
                     <button
                       type="button"
-                      class={`w-full text-left px-2 py-1.5 rounded text-xs hover:bg-bg-main/50 cursor-pointer ${item.task.frontmatter.status === 'blocked' ? 'border-l-2 border-yellow-400' : ''}`}
+                      class={`w-full text-left px-3 py-2.5 text-xs hover:bg-bg-main/30 cursor-pointer border-l-2 transition-colors duration-150 ${
+                        item.task.frontmatter.status === 'running' ? 'border-l-blue-400' :
+                        item.task.frontmatter.status === 'blocked' ? 'border-l-yellow-400' :
+                        item.task.frontmatter.status === 'failed' ? 'border-l-red-400' :
+                        item.task.frontmatter.status === 'succeeded' ? 'border-l-emerald-400' :
+                        item.task.frontmatter.status === 'cancelled' ? 'border-l-zinc-500' :
+                        'border-l-zinc-600'
+                      }`}
                       title={`${item.task.frontmatter.type} · ${item.task.frontmatter['run-count']} runs`}
                       onClick={() => handleCardClick(item)}
                     >
