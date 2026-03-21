@@ -204,10 +204,14 @@ export function TeamSidebar() {
               {(item) => (
                 <div class="px-3 py-2 text-xs hover:bg-bg-main/30 transition-colors duration-150">
                   {/* Row 1: branch name (full width) */}
-                  <div class="text-[11px] text-text-main font-medium truncate">{item.worktree.branch}</div>
+                  <div class="text-[11px] text-text-main font-medium truncate">
+                    {item.worktree.branch}
+                  </div>
                   {/* Row 2: type + badge */}
                   <div class="flex items-center justify-between mt-0.5">
-                    <span class="text-[10px] text-text-dim capitalize">{item.task.frontmatter.type.replace('-', ' ')}</span>
+                    <span class="text-[10px] text-text-dim capitalize">
+                      {item.task.frontmatter.type.replace('-', ' ')}
+                    </span>
                     <TaskBadge status={item.task.frontmatter.status} />
                   </div>
                   {/* Row 3: metadata + actions */}
@@ -222,7 +226,10 @@ export function TeamSidebar() {
                       {(artifacts) => (
                         <>
                           <Show when={artifacts().totalCommits > 0}>
-                            <span>{artifacts().totalCommits} commit{artifacts().totalCommits === 1 ? '' : 's'}</span>
+                            <span>
+                              {artifacts().totalCommits} commit
+                              {artifacts().totalCommits === 1 ? '' : 's'}
+                            </span>
                           </Show>
                           <Show when={artifacts().pr}>
                             <span class="text-accent-info">PR #{artifacts().pr}</span>
@@ -241,7 +248,11 @@ export function TeamSidebar() {
                           Launch
                         </button>
                       </Show>
-                      <Show when={taskStore.state.activeRun && item.task.frontmatter.status === 'running'}>
+                      <Show
+                        when={
+                          taskStore.state.activeRun && item.task.frontmatter.status === 'running'
+                        }
+                      >
                         <button
                           type="button"
                           class="px-1.5 py-0.5 text-[10px] text-red-400 hover:text-red-300 border border-border-subtle hover:border-red-400 cursor-pointer"
@@ -250,18 +261,28 @@ export function TeamSidebar() {
                           Cancel
                         </button>
                       </Show>
-                      <Show when={canLaunch() && (item.task.frontmatter.status === 'failed' || item.task.frontmatter.status === 'cancelled')}>
+                      <Show
+                        when={
+                          canLaunch() &&
+                          (item.task.frontmatter.status === 'failed' ||
+                            item.task.frontmatter.status === 'cancelled')
+                        }
+                      >
                         <button
                           type="button"
                           class="px-1.5 py-0.5 text-[10px] text-text-dim hover:text-text-main border border-border-subtle hover:border-accent-primary cursor-pointer"
-                          onClick={() => retryRun(item.task.path, item.worktree.path).catch(() => {})}
+                          onClick={() =>
+                            retryRun(item.task.path, item.worktree.path).catch(() => {})
+                          }
                         >
                           Retry
                         </button>
                         <button
                           type="button"
                           class="px-1.5 py-0.5 text-[10px] text-text-dim hover:text-text-main border border-border-subtle hover:border-accent-info cursor-pointer"
-                          onClick={() => resumeRun(item.task.path, item.worktree.path).catch(() => {})}
+                          onClick={() =>
+                            resumeRun(item.task.path, item.worktree.path).catch(() => {})
+                          }
                         >
                           Resume
                         </button>
@@ -325,11 +346,12 @@ export function TeamSidebar() {
                       <div class="flex items-center gap-2">
                         <span class="text-text-dim w-14 shrink-0">Diff</span>
                         {(() => {
-                          const line = item.task.body
-                            .split('\n')
-                            .find((l) => l.includes('Diff:'))
-                            ?.replace('- Diff: ', '')
-                            ?.replace('- ', '') ?? '';
+                          const line =
+                            item.task.body
+                              .split('\n')
+                              .find((l) => l.includes('Diff:'))
+                              ?.replace('- Diff: ', '')
+                              ?.replace('- ', '') ?? '';
                           const addMatch = line.match(/\+(\d+)/);
                           const delMatch = line.match(/-(\d+)/);
                           const fileMatch = line.match(/(\d+)\s*(?:file|across)/);
@@ -337,8 +359,7 @@ export function TeamSidebar() {
                             <span>
                               <Show when={addMatch}>
                                 <span class="text-green-400">+{addMatch?.[1]}</span>
-                              </Show>
-                              {' '}
+                              </Show>{' '}
                               <Show when={delMatch}>
                                 <span class="text-red-400">-{delMatch?.[1]}</span>
                               </Show>
@@ -384,7 +405,9 @@ export function TeamSidebar() {
                         }
                       >
                         {(line) => (
-                          <div class="text-[10px] leading-relaxed break-words">{line.replace('- ', '')}</div>
+                          <div class="text-[10px] leading-relaxed break-words">
+                            {line.replace('- ', '')}
+                          </div>
                         )}
                       </For>
                     </div>
@@ -518,7 +541,12 @@ export function TeamSidebar() {
       {/* Footer */}
       <Show when={worktreePath()}>
         <div class="p-2 border-t border-border-subtle">
-          <Button variant="ghost" size="compact" class="w-full justify-start" onClick={() => terminalStore.openClaudeTab(worktreePath())}>
+          <Button
+            variant="ghost"
+            size="compact"
+            class="w-full justify-start"
+            onClick={() => terminalStore.openClaudeTab(worktreePath())}
+          >
             + New Claude Session
           </Button>
         </div>

@@ -1,10 +1,10 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
-import { Button } from '../ui/Button';
 import type { Preset } from '../../lib/commands/workspace';
 import { getPresets } from '../../lib/commands/workspace';
 import { getAgentStore } from '../../lib/stores/agent';
 import { getRepoStore } from '../../lib/stores/repo';
 import { getTerminalStore } from '../../lib/stores/terminal';
+import { Button } from '../ui/Button';
 import { AgentActivity } from './AgentActivity';
 import { PresetManager } from './PresetManager';
 import { TabBar } from './TabBar';

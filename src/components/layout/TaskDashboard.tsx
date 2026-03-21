@@ -423,8 +423,9 @@ export function TaskDashboard() {
                           class="min-w-0 hover:underline"
                           title={pr.title}
                         >
-                          <span class="text-[11px] font-medium text-accent-primary">#{pr.number}</span>
-                          {' '}
+                          <span class="text-[11px] font-medium text-accent-primary">
+                            #{pr.number}
+                          </span>{' '}
                           <span class="text-[11px] text-text-main">{pr.title}</span>
                         </a>
                       </div>
@@ -508,18 +509,25 @@ export function TaskDashboard() {
                     <button
                       type="button"
                       class={`w-full text-left px-3 py-2.5 text-xs hover:bg-bg-main/30 cursor-pointer border-l-2 transition-colors duration-150 ${
-                        item.task.frontmatter.status === 'running' ? 'border-l-blue-400' :
-                        item.task.frontmatter.status === 'blocked' ? 'border-l-yellow-400' :
-                        item.task.frontmatter.status === 'failed' ? 'border-l-red-400' :
-                        item.task.frontmatter.status === 'succeeded' ? 'border-l-emerald-400' :
-                        item.task.frontmatter.status === 'cancelled' ? 'border-l-zinc-500' :
-                        'border-l-zinc-600'
+                        item.task.frontmatter.status === 'running'
+                          ? 'border-l-blue-400'
+                          : item.task.frontmatter.status === 'blocked'
+                            ? 'border-l-yellow-400'
+                            : item.task.frontmatter.status === 'failed'
+                              ? 'border-l-red-400'
+                              : item.task.frontmatter.status === 'succeeded'
+                                ? 'border-l-emerald-400'
+                                : item.task.frontmatter.status === 'cancelled'
+                                  ? 'border-l-zinc-500'
+                                  : 'border-l-zinc-600'
                       }`}
                       title={`${item.task.frontmatter.type} · ${item.task.frontmatter['run-count']} runs`}
                       onClick={() => handleCardClick(item)}
                     >
                       {/* Row 1: branch name (full width) */}
-                      <div class="text-[11px] text-text-main font-medium truncate">{item.branch}</div>
+                      <div class="text-[11px] text-text-main font-medium truncate">
+                        {item.branch}
+                      </div>
                       {/* Row 2: repo + badge */}
                       <div class="flex items-center justify-between mt-0.5">
                         <span class="text-[10px] text-text-dim">{item.repoName}</span>
@@ -527,7 +535,9 @@ export function TaskDashboard() {
                       </div>
                       {/* Row 3: metadata */}
                       <div class="flex items-center gap-2 mt-1 text-[10px] text-text-dim">
-                        <span class="capitalize">{item.task.frontmatter.type.replace('-', ' ')}</span>
+                        <span class="capitalize">
+                          {item.task.frontmatter.type.replace('-', ' ')}
+                        </span>
                         <Show when={item.task.frontmatter['run-count'] > 0}>
                           <span>{item.task.frontmatter['run-count']} runs</span>
                         </Show>
@@ -537,7 +547,9 @@ export function TaskDashboard() {
                             taskStore.state.activeRun?.costUsd
                           }
                         >
-                          <span class="text-accent-primary">${taskStore.state.activeRun?.costUsd?.toFixed(3)}</span>
+                          <span class="text-accent-primary">
+                            ${taskStore.state.activeRun?.costUsd?.toFixed(3)}
+                          </span>
                         </Show>
                         <Show when={parseArtifactSummary(item.task.body)}>
                           {(artifacts) => (

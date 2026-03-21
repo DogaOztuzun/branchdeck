@@ -1,5 +1,4 @@
 import { ChevronDown, ChevronRight, FolderGit2, GitBranch, Plus } from 'lucide-solid';
-import { Button } from '../ui/Button';
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { cn } from '../../lib/cn';
@@ -7,6 +6,7 @@ import { getRepoStore } from '../../lib/stores/repo';
 import type { RepoInfo, WorktreeInfo } from '../../types/git';
 import type { PrInfo } from '../../types/github';
 import { PrTooltip } from '../pr/PrTooltip';
+import { Button } from '../ui/Button';
 import { ContextMenu } from '../ui/ContextMenu';
 import { SectionHeader } from '../ui/SectionHeader';
 import { AddWorktreeModal } from '../worktree/AddWorktreeModal';
@@ -333,7 +333,12 @@ export function RepoSidebar() {
         </div>
       </Show>
       <div class="p-2 border-t border-border-subtle">
-        <Button variant="ghost" size="compact" class="w-full justify-start gap-1.5" onClick={() => repoStore.addRepo()}>
+        <Button
+          variant="ghost"
+          size="compact"
+          class="w-full justify-start gap-1.5"
+          onClick={() => repoStore.addRepo()}
+        >
           <Plus size={12} />
           Add Repository
         </Button>
