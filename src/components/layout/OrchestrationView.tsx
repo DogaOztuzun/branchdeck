@@ -1,11 +1,13 @@
 import { listen } from '@tauri-apps/api/event';
-import { ArrowLeft, Clock, GitBranch, Square } from 'lucide-solid';
+import { ArrowLeft, Clock, ExternalLink, GitBranch, Square } from 'lucide-solid';
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { cancelQueue, getQueueStatus } from '../../lib/commands/run';
 import { getLayoutStore } from '../../lib/stores/layout';
 import { getRepoStore } from '../../lib/stores/repo';
+import { getTaskStore } from '../../lib/stores/task';
 import type { QueuedRun, QueueStatus } from '../../types/github';
 import type { RunInfo, RunStatusEvent, RunStepEvent } from '../../types/run';
+import { TaskBadge } from '../task/TaskBadge';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 
@@ -32,40 +34,138 @@ function RunCard(props: {
   branch?: string;
   elapsed?: string;
   lastStep?: string;
-  onClick?: () => void;
+  expanded: boolean;
+  onToggle: () => void;
+  onOpenWorkspace?: () => void;
+  worktreePath?: string;
 }) {
+  const taskStore = getTaskStore();
+
+  const task = () => {
+    if (!props.worktreePath) return null;
+    const key = props.worktreePath.endsWith('/') ? props.worktreePath : `${props.worktreePath}/`;
+    return taskStore.state.tasksByWorktree[key] ?? null;
+  };
+
   return (
-    <button
-      type="button"
-      class="w-full text-left p-3 bg-bg-main border border-border-subtle hover:border-accent-primary/50 transition-colors duration-150 cursor-pointer group"
-      onClick={props.onClick}
+    <div
+      class={`bg-bg-main border transition-colors duration-150 ${
+        props.expanded
+          ? 'border-accent-primary/50 col-span-full'
+          : 'border-border-subtle hover:border-accent-primary/30'
+      }`}
     >
-      <div class="flex items-start justify-between mb-2">
-        <span class="text-xs font-medium group-hover:text-accent-primary transition-colors duration-150">
-          {props.name}
-        </span>
-        <Badge variant={statusVariant(props.status)}>{props.status.toUpperCase()}</Badge>
-      </div>
-      <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-text-dim font-mono">
-        <Show when={props.branch}>
-          <div class="flex items-center gap-1">
-            <GitBranch size={10} />
-            {props.branch}
+      <button
+        type="button"
+        class="w-full text-left p-3 cursor-pointer group"
+        onClick={props.onToggle}
+      >
+        <div class="flex items-start justify-between mb-2">
+          <span class="text-xs font-medium group-hover:text-accent-primary transition-colors duration-150">
+            {props.name}
+          </span>
+          <Badge variant={statusVariant(props.status)}>{props.status.toUpperCase()}</Badge>
+        </div>
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-text-dim font-mono">
+          <Show when={props.branch}>
+            <div class="flex items-center gap-1">
+              <GitBranch size={10} />
+              {props.branch}
+            </div>
+          </Show>
+          <Show when={props.elapsed}>
+            <div class="flex items-center gap-1">
+              <Clock size={10} />
+              {props.elapsed}
+            </div>
+          </Show>
+        </div>
+        <Show when={props.lastStep && props.status === 'running'}>
+          <div class="mt-2 p-1.5 bg-bg-sidebar border border-border-subtle text-[10px] text-text-dim leading-relaxed">
+            {props.lastStep}
           </div>
         </Show>
-        <Show when={props.elapsed}>
-          <div class="flex items-center gap-1">
-            <Clock size={10} />
-            {props.elapsed}
-          </div>
-        </Show>
-      </div>
-      <Show when={props.lastStep && props.status === 'running'}>
-        <div class="mt-2 p-1.5 bg-bg-sidebar border border-border-subtle text-[10px] text-text-dim leading-relaxed">
-          {props.lastStep}
+      </button>
+
+      {/* Expanded detail */}
+      <Show when={props.expanded}>
+        <div class="border-t border-border-subtle px-3 py-2 space-y-2">
+          <Show when={task()}>
+            {(t) => (
+              <>
+                {/* Task info */}
+                <div class="flex items-center justify-between">
+                  <span class="text-[10px] text-text-dim capitalize">
+                    {t().frontmatter.type.replace('-', ' ')}
+                  </span>
+                  <TaskBadge status={t().frontmatter.status} />
+                </div>
+
+                {/* PR context */}
+                <Show when={t().frontmatter.pr}>
+                  <div class="text-[10px] space-y-1">
+                    <div class="flex items-center gap-2">
+                      <span class="text-text-dim w-14 shrink-0">PR</span>
+                      <span class="text-accent-primary">#{t().frontmatter.pr}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span class="text-text-dim w-14 shrink-0">Checks</span>
+                      <Show
+                        when={t().body.includes('Failing checks:')}
+                        fallback={<span class="text-accent-success">passing</span>}
+                      >
+                        <span class="text-accent-error">failing</span>
+                      </Show>
+                    </div>
+                    <Show when={t().frontmatter['run-count'] > 0}>
+                      <div class="flex items-center gap-2">
+                        <span class="text-text-dim w-14 shrink-0">Runs</span>
+                        <span class="text-text-main">{t().frontmatter['run-count']}</span>
+                      </div>
+                    </Show>
+                  </div>
+                </Show>
+
+                {/* Knowledge count */}
+                <Show
+                  when={t().body.includes('## Prior Knowledge') && !t().body.includes('(none yet)')}
+                >
+                  {(() => {
+                    const count =
+                      t()
+                        .body.split('## Prior Knowledge')[1]
+                        ?.split('\n')
+                        .filter((l) => l.startsWith('- ')).length ?? 0;
+                    return (
+                      <Show when={count > 0}>
+                        <div class="text-[10px] text-accent-info">
+                          {count} knowledge pattern{count === 1 ? '' : 's'} recalled
+                        </div>
+                      </Show>
+                    );
+                  })()}
+                </Show>
+              </>
+            )}
+          </Show>
+
+          {/* Open in workspace button */}
+          <Show when={props.onOpenWorkspace}>
+            <button
+              type="button"
+              class="flex items-center gap-1 text-[10px] text-accent-primary hover:text-accent-primary/80 cursor-pointer mt-1"
+              onClick={(e) => {
+                e.stopPropagation();
+                props.onOpenWorkspace?.();
+              }}
+            >
+              <ExternalLink size={10} />
+              Open in Workspace
+            </button>
+          </Show>
         </div>
       </Show>
-    </button>
+    </div>
   );
 }
 
@@ -86,6 +186,7 @@ export function OrchestrationView() {
   const [queue, setQueue] = createSignal<QueueStatus | null>(null);
   const [activeRun, setActiveRun] = createSignal<RunInfo | null>(null);
   const [lastSteps, setLastSteps] = createSignal<Record<string, string>>({});
+  const [expandedCard, setExpandedCard] = createSignal<string | null>(null);
   const [completedRuns, setCompletedRuns] = createSignal<
     { name: string; status: RunCardStatus; elapsed: string; worktreePath: string }[]
   >([]);
@@ -142,13 +243,17 @@ export function OrchestrationView() {
   const hasActive = () => !!queue()?.active;
   const isIdle = () => !queue();
 
-  function handleCardClick(worktreePath: string) {
+  function handleOpenWorkspace(worktreePath: string) {
     if (!worktreePath) return;
     const activeRepo = repoStore.state.activeRepoPath;
     if (activeRepo) {
       repoStore.selectRepoAndWorktree(activeRepo, worktreePath);
     }
     layout.navigateToTask(worktreePath);
+  }
+
+  function toggleCard(id: string) {
+    setExpandedCard((prev) => (prev === id ? null : id));
   }
 
   return (
@@ -212,9 +317,13 @@ export function OrchestrationView() {
                 <RunCard
                   name={worktreeLabel(run().taskPath)}
                   status="running"
+                  branch={worktreeLabel(run().taskPath)}
                   elapsed={formatElapsed(run().elapsedSecs)}
                   lastStep={lastSteps()[run().sessionId ?? ''] ?? undefined}
-                  onClick={() => handleCardClick(run().taskPath)}
+                  worktreePath={run().taskPath}
+                  expanded={expandedCard() === `active:${run().taskPath}`}
+                  onToggle={() => toggleCard(`active:${run().taskPath}`)}
+                  onOpenWorkspace={() => handleOpenWorkspace(run().taskPath)}
                 />
               )}
             </Show>
@@ -226,7 +335,10 @@ export function OrchestrationView() {
                   name={worktreeLabel(qr.worktreePath)}
                   status="queued"
                   branch={worktreeLabel(qr.worktreePath)}
-                  onClick={() => handleCardClick(qr.worktreePath)}
+                  worktreePath={qr.worktreePath}
+                  expanded={expandedCard() === `queued:${qr.worktreePath}`}
+                  onToggle={() => toggleCard(`queued:${qr.worktreePath}`)}
+                  onOpenWorkspace={() => handleOpenWorkspace(qr.worktreePath)}
                 />
               )}
             </For>
@@ -238,7 +350,12 @@ export function OrchestrationView() {
                   name={r.name}
                   status={r.status}
                   elapsed={r.elapsed}
-                  onClick={() => handleCardClick(r.worktreePath)}
+                  worktreePath={r.worktreePath}
+                  expanded={expandedCard() === `done:${r.name}`}
+                  onToggle={() => toggleCard(`done:${r.name}`)}
+                  onOpenWorkspace={
+                    r.worktreePath ? () => handleOpenWorkspace(r.worktreePath) : undefined
+                  }
                 />
               )}
             </For>
