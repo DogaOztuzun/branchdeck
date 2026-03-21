@@ -58,39 +58,28 @@ export function TopBar() {
       {/* Queue badge */}
       <Show when={queue()}>
         {(qs) => (
-          <button
-            type="button"
-            class={cn(
-              'ml-4 flex items-center gap-2 text-[10px] cursor-pointer hover:bg-bg-main/50 px-2 py-1 transition-colors duration-150',
-              queueBadgeColor(),
-            )}
-            onClick={() => layout.setActiveView('orchestrations')}
-            title="View batch queue"
-          >
-            <span class={cn(qs().active ? 'animate-pulse' : '')}>
-              {qs().active ? '1 running' : ''}
-              {qs().queued.length > 0 ? ` · ${qs().queued.length} queued` : ''}
-              {qs().completed > 0 ? ` · ${qs().completed} done` : ''}
-              {qs().failed > 0 ? ` · ${qs().failed} failed` : ''}
-            </span>
-            <span
-              role="button"
-              tabIndex={0}
+          <div class={cn('ml-4 flex items-center gap-2 text-[10px]', queueBadgeColor())}>
+            <button
+              type="button"
+              class="cursor-pointer hover:bg-bg-main/50 px-2 py-1 transition-colors duration-150"
+              onClick={() => layout.setActiveView('orchestrations')}
+              title="View batch queue"
+            >
+              <span class={cn(qs().active ? 'animate-pulse' : '')}>
+                {qs().active ? '1 running' : ''}
+                {qs().queued.length > 0 ? ` · ${qs().queued.length} queued` : ''}
+                {qs().completed > 0 ? ` · ${qs().completed} done` : ''}
+                {qs().failed > 0 ? ` · ${qs().failed} failed` : ''}
+              </span>
+            </button>
+            <button
+              type="button"
               class="text-[10px] text-accent-error hover:text-accent-error/80 cursor-pointer"
-              onClick={(e) => {
-                e.stopPropagation();
-                cancelQueue().catch(() => {});
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.stopPropagation();
-                  cancelQueue().catch(() => {});
-                }
-              }}
+              onClick={() => cancelQueue().catch(() => {})}
             >
               Cancel
-            </span>
-          </button>
+            </button>
+          </div>
         )}
       </Show>
 
