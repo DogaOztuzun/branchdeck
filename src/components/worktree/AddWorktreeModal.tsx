@@ -132,7 +132,7 @@ export function AddWorktreeModal(props: AddWorktreeModalProps) {
               value={name()}
               onInput={(e) => handleNameInput(e.currentTarget.value)}
               autofocus
-              class="w-full px-3 py-1.5 text-xs bg-bg-main border border-border-subtle rounded text-text-main placeholder:text-text-dim focus:outline-none focus:border-accent-primary"
+              class="w-full px-3 py-1.5 text-xs bg-bg-main border border-border-subtle text-text-main placeholder:text-text-dim focus:outline-none focus:border-accent-primary"
             />
 
             <Show when={localBranches().length > 0}>
@@ -145,7 +145,7 @@ export function AddWorktreeModal(props: AddWorktreeModalProps) {
                   value={baseBranch()}
                   onChange={(e) => setBaseBranch(e.currentTarget.value)}
                   style={{ 'background-color': 'var(--color-bg)', color: 'var(--color-text)' }}
-                  class="w-full mt-1 px-3 py-1.5 text-xs border border-border-subtle rounded focus:outline-none focus:border-accent-primary appearance-none [&>option]:bg-bg-main [&>option]:text-text-main"
+                  class="w-full mt-1 px-3 py-1.5 text-xs border border-border-subtle focus:outline-none focus:border-accent-primary appearance-none [&>option]:bg-bg-main [&>option]:text-text-main"
                 >
                   <For each={localBranches()}>
                     {(branch) => <option value={branch.name}>{branch.name}</option>}
@@ -188,7 +188,7 @@ export function AddWorktreeModal(props: AddWorktreeModalProps) {
             <div class="mt-4 flex justify-end gap-2">
               <button
                 type="button"
-                class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer rounded hover:bg-bg-main/50"
+                class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
                 onClick={() => props.onClose()}
               >
                 Cancel
@@ -196,7 +196,7 @@ export function AddWorktreeModal(props: AddWorktreeModalProps) {
               <button
                 type="submit"
                 disabled={isCreateDisabled()}
-                class="px-3 py-1.5 text-xs bg-accent-primary text-bg rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+                class="px-3 py-1.5 text-xs bg-accent-primary text-bg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
               >
                 {creating() ? 'Creating...' : 'Create Worktree'}
               </button>

@@ -118,7 +118,7 @@ export function BranchWorktreeModal(props: BranchWorktreeModalProps) {
             value={search()}
             onInput={(e) => setSearch(e.currentTarget.value)}
             autofocus
-            class="w-full px-3 py-1.5 text-xs bg-bg-main border border-border-subtle rounded text-text-main placeholder:text-text-dim focus:outline-none focus:border-accent-primary"
+            class="w-full px-3 py-1.5 text-xs bg-bg-main border border-border-subtle text-text-main placeholder:text-text-dim focus:outline-none focus:border-accent-primary"
           />
 
           <Show when={loading()}>
@@ -138,7 +138,7 @@ export function BranchWorktreeModal(props: BranchWorktreeModalProps) {
           </Show>
 
           <Show when={!loading() && filteredBranches().length > 0}>
-            <div class="mt-3 max-h-64 overflow-y-auto border border-border-subtle rounded">
+            <div class="mt-3 max-h-64 overflow-y-auto border border-border-subtle">
               <For each={filteredBranches()}>
                 {(branch) => (
                   <button
@@ -160,12 +160,12 @@ export function BranchWorktreeModal(props: BranchWorktreeModalProps) {
                     <span class="truncate">{branch.name}</span>
                     <span class="ml-auto flex gap-1 shrink-0">
                       <Show when={branch.isRemote}>
-                        <span class="px-1.5 py-0.5 text-[10px] text-text-dim bg-bg-main rounded">
+                        <span class="px-1.5 py-0.5 text-[10px] text-text-dim bg-bg-main">
                           remote
                         </span>
                       </Show>
                       <Show when={branch.hasWorktree}>
-                        <span class="px-1.5 py-0.5 text-[10px] text-accent-info bg-bg-main rounded">
+                        <span class="px-1.5 py-0.5 text-[10px] text-accent-info bg-bg-main">
                           in use
                         </span>
                       </Show>
@@ -196,7 +196,7 @@ export function BranchWorktreeModal(props: BranchWorktreeModalProps) {
           <div class="mt-4 flex justify-end gap-2">
             <button
               type="button"
-              class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer rounded hover:bg-bg-main/50"
+              class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
               onClick={() => props.onClose()}
             >
               Cancel
@@ -204,7 +204,7 @@ export function BranchWorktreeModal(props: BranchWorktreeModalProps) {
             <button
               type="button"
               disabled={isCreateDisabled()}
-              class="px-3 py-1.5 text-xs bg-accent-primary text-bg rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+              class="px-3 py-1.5 text-xs bg-accent-primary text-bg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
               onClick={handleCreate}
             >
               {creating() ? 'Creating...' : 'Create Worktree'}

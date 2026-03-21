@@ -87,7 +87,7 @@ export function TerminalArea() {
               <div class="flex gap-4">
                 <button
                   type="button"
-                  class="px-4 py-2 text-xs border border-border-subtle rounded hover:border-accent-primary hover:text-text-main cursor-pointer"
+                  class="px-4 py-2 text-xs border border-border-subtle hover:border-accent-primary hover:text-text-main cursor-pointer"
                   onClick={() => terminalStore.openShellTab(worktreePath())}
                 >
                   Open Terminal
@@ -95,7 +95,7 @@ export function TerminalArea() {
                 </button>
                 <button
                   type="button"
-                  class="px-4 py-2 text-xs border border-border-subtle rounded hover:border-accent-primary hover:text-text-main cursor-pointer"
+                  class="px-4 py-2 text-xs border border-border-subtle hover:border-accent-primary hover:text-text-main cursor-pointer"
                   onClick={() => terminalStore.openClaudeTab(worktreePath())}
                 >
                   Start Claude Code

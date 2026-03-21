@@ -172,14 +172,14 @@ export function PresetManager(props: PresetManagerProps) {
                       placeholder="Preset name"
                       value={form().name}
                       onInput={(e) => setForm((f) => ({ ...f, name: e.currentTarget.value }))}
-                      class="w-full bg-bg-main border border-border-subtle rounded text-text-main text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary"
+                      class="w-full bg-bg-main border border-border-subtle text-text-main text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary"
                     />
                     <input
                       type="text"
                       placeholder="Command"
                       value={form().command}
                       onInput={(e) => setForm((f) => ({ ...f, command: e.currentTarget.value }))}
-                      class="w-full bg-bg-main border border-border-subtle rounded text-text-main text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary"
+                      class="w-full bg-bg-main border border-border-subtle text-text-main text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary"
                     />
                     <select
                       value={form().tabType}
@@ -190,7 +190,7 @@ export function PresetManager(props: PresetManagerProps) {
                         }))
                       }
                       style={{ 'background-color': 'var(--color-bg)', color: 'var(--color-text)' }}
-                      class="w-full border border-border-subtle rounded text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary appearance-none [&>option]:bg-bg-main [&>option]:text-text-main"
+                      class="w-full border border-border-subtle text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary appearance-none [&>option]:bg-bg-main [&>option]:text-text-main"
                     >
                       <option value="shell">Shell</option>
                       <option value="claude">Claude</option>
@@ -198,7 +198,7 @@ export function PresetManager(props: PresetManagerProps) {
                     <div class="flex justify-end gap-2">
                       <button
                         type="button"
-                        class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer rounded hover:bg-bg-main/50"
+                        class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
                         onClick={() => resetForm()}
                       >
                         Cancel
@@ -206,7 +206,7 @@ export function PresetManager(props: PresetManagerProps) {
                       <button
                         type="button"
                         disabled={saving() || !form().name.trim()}
-                        class="px-3 py-1.5 text-xs bg-accent-primary text-bg rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+                        class="px-3 py-1.5 text-xs bg-accent-primary text-bg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
                         onClick={() => handleSaveEdit(i())}
                       >
                         {saving() ? 'Saving...' : 'Save'}
@@ -231,7 +231,7 @@ export function PresetManager(props: PresetManagerProps) {
             fallback={
               <button
                 type="button"
-                class="mt-3 w-full px-3 py-1.5 text-xs border border-border-subtle rounded text-text-dim hover:text-text-main hover:border-accent-primary cursor-pointer"
+                class="mt-3 w-full px-3 py-1.5 text-xs border border-border-subtle text-text-dim hover:text-text-main hover:border-accent-primary cursor-pointer"
                 onClick={() => startAdd()}
               >
                 + Add Preset
@@ -245,14 +245,14 @@ export function PresetManager(props: PresetManagerProps) {
                 value={form().name}
                 onInput={(e) => setForm((f) => ({ ...f, name: e.currentTarget.value }))}
                 autofocus
-                class="w-full bg-bg-main border border-border-subtle rounded text-text-main text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary"
+                class="w-full bg-bg-main border border-border-subtle text-text-main text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary"
               />
               <input
                 type="text"
                 placeholder="Command"
                 value={form().command}
                 onInput={(e) => setForm((f) => ({ ...f, command: e.currentTarget.value }))}
-                class="w-full bg-bg-main border border-border-subtle rounded text-text-main text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary"
+                class="w-full bg-bg-main border border-border-subtle text-text-main text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary"
               />
               <select
                 value={form().tabType}
@@ -263,7 +263,7 @@ export function PresetManager(props: PresetManagerProps) {
                   }))
                 }
                 style={{ 'background-color': 'var(--color-bg)', color: 'var(--color-text)' }}
-                class="w-full border border-border-subtle rounded text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary appearance-none [&>option]:bg-bg-main [&>option]:text-text-main"
+                class="w-full border border-border-subtle text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary appearance-none [&>option]:bg-bg-main [&>option]:text-text-main"
               >
                 <option value="shell">Shell</option>
                 <option value="claude">Claude</option>
@@ -271,7 +271,7 @@ export function PresetManager(props: PresetManagerProps) {
               <div class="flex justify-end gap-2">
                 <button
                   type="button"
-                  class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer rounded hover:bg-bg-main/50"
+                  class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
                   onClick={() => resetForm()}
                 >
                   Cancel
@@ -279,7 +279,7 @@ export function PresetManager(props: PresetManagerProps) {
                 <button
                   type="button"
                   disabled={saving() || !form().name.trim()}
-                  class="px-3 py-1.5 text-xs bg-accent-primary text-bg rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+                  class="px-3 py-1.5 text-xs bg-accent-primary text-bg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
                   onClick={() => handleSaveNew()}
                 >
                   {saving() ? 'Saving...' : 'Add Preset'}
@@ -291,7 +291,7 @@ export function PresetManager(props: PresetManagerProps) {
           <div class="mt-4 flex justify-end">
             <button
               type="button"
-              class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer rounded hover:bg-bg-main/50"
+              class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
               onClick={() => props.onClose()}
             >
               Close

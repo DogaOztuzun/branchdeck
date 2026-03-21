@@ -216,7 +216,7 @@ export function FileGrid(props: FileGridProps) {
         <Show when={hoveredFile()}>
           {(hovered) => (
             <div
-              class="fixed z-50 px-2 py-1.5 bg-bg-sidebar border border-border-subtle rounded shadow-lg text-xs max-w-72 pointer-events-none"
+              class="fixed z-50 px-2 py-1.5 bg-bg-sidebar border border-border-subtle shadow-lg text-xs max-w-72 pointer-events-none"
               style={{
                 left: `${hovered().x + 12}px`,
                 top: `${hovered().y - 8}px`,

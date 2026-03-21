@@ -48,14 +48,14 @@ export function DeleteWorktreeDialog(props: DeleteWorktreeDialogProps) {
           <div class="mt-5 flex justify-end gap-2">
             <button
               type="button"
-              class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer rounded hover:bg-bg-main/50"
+              class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
               onClick={() => props.onClose()}
             >
               Cancel
             </button>
             <button
               type="button"
-              class="px-3 py-1.5 text-xs bg-accent-error/90 text-white rounded cursor-pointer hover:bg-accent-error"
+              class="px-3 py-1.5 text-xs bg-accent-error/90 text-white cursor-pointer hover:bg-accent-error"
               onClick={() => props.onConfirm(deleteBranch())}
             >
               Delete

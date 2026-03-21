@@ -34,7 +34,7 @@ export function ContextMenu(props: ContextMenuProps) {
     <Show when={props.items.length > 0}>
       <div
         ref={menuRef}
-        class="fixed z-50 bg-bg-sidebar border border-border-subtle rounded shadow-lg py-1 min-w-40"
+        class="fixed z-50 bg-bg-sidebar border border-border-subtle shadow-lg py-1 min-w-40"
         style={{ left: `${props.x}px`, top: `${props.y}px` }}
       >
         <For each={props.items}>
