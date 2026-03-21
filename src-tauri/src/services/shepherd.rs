@@ -34,30 +34,33 @@ pub async fn shepherd_pr(
 
     let branch = &pr_info.branch;
 
-    // 3. Check if worktree already exists for this branch
+    // 3. Check if worktree already exists for this branch — reuse if so
     let existing_worktrees = git::list_worktrees(repo)?;
-    if existing_worktrees.iter().any(|wt| wt.branch == *branch) {
-        return Err(AppError::Git(git2::Error::from_str(&format!(
-            "Worktree already exists for branch {branch}"
-        ))));
-    }
+    let existing_wt = existing_worktrees.iter().find(|wt| wt.branch == *branch);
 
-    // 4. Fetch the remote branch if not local
-    fetch_branch_if_needed(repo, branch)?;
+    let (worktree_path, created_worktree_name) = if let Some(wt) = existing_wt {
+        let wt_path = wt.path.display().to_string();
+        debug!("Reusing existing worktree for branch {branch} at {wt_path}");
 
-    // 5. Create worktree
-    let worktree = git::create_worktree(repo, branch, Some(branch), None)?;
-    let worktree_path = worktree.path.display().to_string();
-
-    // 6. Check if task already exists — clean up worktree if so
-    if task::get_task(&worktree_path).is_ok() {
-        if let Err(e) = git::remove_worktree(repo, &worktree.name, false) {
-            error!("Failed to clean up worktree after task-exists check: {e}");
+        // If task already exists in this worktree, return it directly
+        if let Ok(existing_task) = task::get_task(&wt_path) {
+            info!("Shepherd PR #{pr_number}: reusing existing task in {wt_path}");
+            return Ok(ShepherdResult {
+                task: existing_task,
+                worktree_path: wt_path,
+                knowledge_recalled: 0,
+            });
         }
-        return Err(AppError::TaskAlreadyExists(format!(
-            "Task already exists in worktree {worktree_path}"
-        )));
-    }
+        (wt_path, None)
+    } else {
+        // 4. Fetch the remote branch if not local
+        fetch_branch_if_needed(repo, branch)?;
+
+        // 5. Create worktree
+        let worktree = git::create_worktree(repo, branch, Some(branch), None)?;
+        let name = worktree.name.clone();
+        (worktree.path.display().to_string(), Some(name))
+    };
 
     // 7. Query knowledge for prior fix patterns
     let mut knowledge_context = String::new();
@@ -117,9 +120,12 @@ pub async fn shepherd_pr(
     ) {
         Ok(info) => info,
         Err(e) => {
-            error!("Task creation failed, cleaning up worktree: {e}");
-            if let Err(cleanup_err) = git::remove_worktree(repo, &worktree.name, false) {
-                error!("Failed to clean up orphaned worktree: {cleanup_err}");
+            error!("Task creation failed: {e}");
+            // Only clean up worktree if we created it (don't delete pre-existing ones)
+            if let Some(wt_name) = &created_worktree_name {
+                if let Err(cleanup_err) = git::remove_worktree(repo, wt_name, false) {
+                    error!("Failed to clean up orphaned worktree: {cleanup_err}");
+                }
             }
             return Err(e);
         }
