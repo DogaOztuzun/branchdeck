@@ -6,6 +6,7 @@ import { getRepoStore } from '../../lib/stores/repo';
 import { getTerminalStore } from '../../lib/stores/terminal';
 import { Button } from '../ui/Button';
 import { AgentActivity } from './AgentActivity';
+import { FileStatusBar } from './FileStatusBar';
 import { PresetManager } from './PresetManager';
 import { TabBar } from './TabBar';
 import { TerminalView } from './TerminalView';
@@ -118,6 +119,7 @@ export function TerminalArea() {
           </button>
         </div>
       </Show>
+      <FileStatusBar />
       <AgentActivity entries={agentLog()} visible={activityVisible() && hasClaudeTab()} />
       <PresetManager
         open={presetManagerOpen()}
