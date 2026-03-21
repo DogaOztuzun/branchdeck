@@ -19,14 +19,12 @@ describe('Right sidebar - Context panel', () => {
     await prsBtn.click();
     await browser.pause(500);
 
-    // Look for PRs/Tasks tabs in dashboard
-    const prsTab = await $('button*=PRs');
-    const tasksTab = await $('button*=Tasks');
+    // PrList shows "Pull Requests" header or filter controls
+    const hasPrContent = await browser.execute(() => {
+      return document.body.textContent?.includes('Pull Requests') ?? false;
+    });
 
-    const hasDashboardTabs =
-      (await prsTab.isExisting()) || (await tasksTab.isExisting());
-
-    expect(hasDashboardTabs).toBe(true);
+    expect(hasPrContent).toBe(true);
   });
 
   it('should show changes panel when changes button is clicked', async () => {
