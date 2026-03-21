@@ -17,9 +17,6 @@ const [rightPanelContext, setRightPanelContext] = createSignal<RightPanelContext
 });
 const [activeView, setActiveView] = createSignal<AppView>('workspace');
 
-// Track whether user explicitly set the panel context (vs auto-context)
-const [userExplicitContext, setUserExplicitContext] = createSignal(false);
-
 // Track last user-resized panel width
 const [lastRightPanelSize, setLastRightPanelSize] = createSignal(18);
 
@@ -60,10 +57,9 @@ export function getLayoutStore() {
       }
     },
 
-    /** Explicit user action — always wins over auto-context */
+    /** Set right panel context. If same context and panel is open, toggles it closed. */
     showRightPanel(ctx: RightPanelContext) {
       const current = rightPanelContext();
-      // If same context, toggle the panel closed
       if (rightSidebarOpen() && current.kind === ctx.kind) {
         const api = panelApi();
         if (api) {
@@ -73,29 +69,22 @@ export function getLayoutStore() {
         return;
       }
       setRightPanelContext(ctx);
-      setUserExplicitContext(true);
       ensureRightPanelOpen();
     },
 
-    /** Auto-context from worktree selection — resets explicit flag and sets context */
+    /** Auto-context from worktree selection. Always sets context (last click wins). */
     autoContext(ctx: RightPanelContext) {
-      setUserExplicitContext(false);
       setRightPanelContext(ctx);
       ensureRightPanelOpen();
     },
 
-    /**
-     * Atomic navigation: set view to workspace + select worktree + show task panel.
-     * Used by Orchestrations drill-down.
-     */
+    /** Atomic navigation: workspace + worktree + task panel. Used by Orchestrations drill-down. */
     navigateToTask(worktreePath: string) {
       setActiveView('workspace');
       setRightPanelContext({ kind: 'task', worktreePath });
-      setUserExplicitContext(true);
       ensureRightPanelOpen();
     },
 
-    // Keep backward-compat for toggleChangesSidebar (keyboard shortcut Ctrl+Shift+L)
     toggleChangesSidebar() {
       const current = rightPanelContext();
       const api = panelApi();
@@ -105,7 +94,6 @@ export function getLayoutStore() {
         setRightSidebarOpen(false);
       } else {
         setRightPanelContext({ kind: 'changes' });
-        setUserExplicitContext(true);
         ensureRightPanelOpen();
       }
     },

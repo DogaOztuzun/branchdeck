@@ -64,8 +64,8 @@ function TaskCard(props: {
 }) {
   const taskStore = getTaskStore();
   const status = () => taskStatusToCardStatus(props.task.frontmatter.status);
-  const hasPending = () =>
-    taskStore.state.pendingPermissions.length > 0 && props.task.frontmatter.status === 'running';
+  const isActiveRun = () => taskStore.state.activeRun?.taskPath === props.task.path;
+  const hasPending = () => taskStore.state.pendingPermissions.length > 0 && isActiveRun();
 
   return (
     <div
