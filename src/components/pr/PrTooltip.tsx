@@ -143,7 +143,7 @@ export function PrTooltip(props: PrTooltipProps) {
     <Portal>
       {/* biome-ignore lint/a11y/noStaticElementInteractions: tooltip hover behavior, not interactive content */}
       <div
-        class="fixed z-50 max-w-[320px] rounded-lg border border-border-subtle bg-bg-sidebar p-3 text-xs shadow-lg space-y-2"
+        class="fixed z-50 max-w-[320px] border border-border-subtle bg-bg-sidebar p-3 text-xs shadow-lg space-y-2"
         style={{
           top: `${position().top}px`,
           left: `${position().left}px`,

@@ -130,7 +130,7 @@ export function PresetManager(props: PresetManagerProps) {
     >
       <Dialog.Portal>
         <Dialog.Overlay class="fixed inset-0 z-40 bg-black/50" />
-        <Dialog.Content class="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 bg-bg-sidebar border border-border-subtle rounded-lg shadow-lg p-4 max-h-[80vh] overflow-y-auto">
+        <Dialog.Content class="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 bg-bg-sidebar border border-border-subtle shadow-lg p-4 max-h-[80vh] overflow-y-auto">
           <Dialog.Title class="text-sm font-semibold text-text-main mb-3">
             Manage Presets
           </Dialog.Title>
