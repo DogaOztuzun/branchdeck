@@ -517,13 +517,13 @@ export function TaskDashboard() {
                       title={`${item.task.frontmatter.type} · ${item.task.frontmatter['run-count']} runs`}
                       onClick={() => handleCardClick(item)}
                     >
-                      {/* Row 1: branch name + badge */}
-                      <div class="flex items-center justify-between">
-                        <span class="text-[11px] text-text-main font-medium truncate">{item.branch}</span>
+                      {/* Row 1: branch name (full width) */}
+                      <div class="text-[11px] text-text-main font-medium truncate">{item.branch}</div>
+                      {/* Row 2: repo + badge */}
+                      <div class="flex items-center justify-between mt-0.5">
+                        <span class="text-[10px] text-text-dim">{item.repoName}</span>
                         <TaskBadge status={item.task.frontmatter.status} />
                       </div>
-                      {/* Row 2: repo name */}
-                      <div class="text-[10px] text-text-dim mt-0.5">{item.repoName}</div>
                       {/* Row 3: metadata */}
                       <div class="flex items-center gap-2 mt-1 text-[10px] text-text-dim">
                         <span class="capitalize">{item.task.frontmatter.type.replace('-', ' ')}</span>
