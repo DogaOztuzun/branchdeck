@@ -5,3 +5,27 @@ target
 _bmad-output/
 docs/_archive/
 
+# gstack skills (symlinked, not committed)
+.claude/skills/gstack
+.claude/skills/browse
+.claude/skills/careful
+.claude/skills/codex
+.claude/skills/design-consultation
+.claude/skills/design-review
+.claude/skills/document-release
+.claude/skills/freeze
+.claude/skills/gstack-upgrade
+.claude/skills/guard
+.claude/skills/investigate
+.claude/skills/office-hours
+.claude/skills/plan-ceo-review
+.claude/skills/plan-design-review
+.claude/skills/plan-eng-review
+.claude/skills/qa
+.claude/skills/qa-only
+.claude/skills/retro
+.claude/skills/review
+.claude/skills/setup-browser-cookies
+.claude/skills/ship
+.claude/skills/unfreeze
+.gstack/
