@@ -77,16 +77,11 @@ export function getLayoutStore() {
       ensureRightPanelOpen();
     },
 
-    /** Auto-context from worktree selection — only fires if user hasn't explicitly set */
+    /** Auto-context from worktree selection — resets explicit flag and sets context */
     autoContext(ctx: RightPanelContext) {
-      if (userExplicitContext()) return;
+      setUserExplicitContext(false);
       setRightPanelContext(ctx);
       ensureRightPanelOpen();
-    },
-
-    /** Reset explicit flag — call when worktree changes via sidebar click */
-    resetExplicitContext() {
-      setUserExplicitContext(false);
     },
 
     /**

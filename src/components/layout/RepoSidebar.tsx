@@ -250,7 +250,6 @@ export function RepoSidebar() {
                           onClick={() => {
                             repoStore.selectRepoAndWorktree(repo.path, wt.path);
                             const layoutStore = getLayoutStore();
-                            layoutStore.resetExplicitContext();
                             const taskStore = getTaskStore();
                             if (taskStore.hasTaskForWorktree(wt.path)) {
                               layoutStore.autoContext({ kind: 'task', worktreePath: wt.path });
