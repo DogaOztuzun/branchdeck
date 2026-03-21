@@ -497,7 +497,7 @@ export function TeamSidebar() {
                   )}
                 </For>
               </div>
-            </div>
+            </Show>
           </div>
         </Show>
       </div>
