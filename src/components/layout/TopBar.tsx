@@ -39,15 +39,17 @@ export function TopBar() {
 
   return (
     <div class="flex items-center h-11 px-3 bg-bg-sidebar border-b border-border-subtle select-none">
-      <button
-        type="button"
-        class="mr-2 p-1.5 text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50 transition-colors duration-150"
-        aria-label="Toggle repositories"
-        title="Toggle repositories (Ctrl+Shift+B)"
-        onClick={() => layout.toggleRepoSidebar()}
-      >
-        <PanelLeft size={16} />
-      </button>
+      <Show when={layout.activeView() === 'workspace'}>
+        <button
+          type="button"
+          class="mr-2 p-1.5 text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50 transition-colors duration-150"
+          aria-label="Toggle repositories"
+          title="Toggle repositories (Ctrl+Shift+B)"
+          onClick={() => layout.toggleRepoSidebar()}
+        >
+          <PanelLeft size={16} />
+        </button>
+      </Show>
       <span class="text-sm font-bold text-accent-primary mr-4 tracking-tight">Branchdeck</span>
       <Show when={repoStore.getActiveRepo()}>
         <span class="text-xs text-text-dim mr-1">{repoStore.getActiveRepo()?.name}</span>

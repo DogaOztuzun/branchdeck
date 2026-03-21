@@ -1,7 +1,12 @@
 import { listen } from '@tauri-apps/api/event';
 import { ArrowLeft, Clock, ExternalLink, GitBranch, Square } from 'lucide-solid';
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
-import { cancelQueue, getQueueStatus, respondToPermission } from '../../lib/commands/run';
+import {
+  cancelQueue,
+  getQueueStatus,
+  getRunStatus,
+  respondToPermission,
+} from '../../lib/commands/run';
 import { getLayoutStore } from '../../lib/stores/layout';
 import { getRepoStore } from '../../lib/stores/repo';
 import { getTaskStore, worktreePathFromTaskPath } from '../../lib/stores/task';
@@ -252,6 +257,15 @@ export function OrchestrationView() {
     if (qs.queued.length > 0 || qs.active) {
       setQueue(qs);
     }
+    // Fetch current run status (may have started before this view mounted)
+    try {
+      const runInfo = await getRunStatus();
+      if (runInfo) {
+        setActiveRun(runInfo);
+      }
+    } catch {
+      // Best-effort
+    }
   });
 
   const unlisteners: (() => void)[] = [];
@@ -367,8 +381,28 @@ export function OrchestrationView() {
         {/* Run grid */}
         <div class="flex-1 overflow-y-auto p-4">
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {/* Active run */}
-            <Show when={activeRun()}>
+            {/* Active run (with full RunInfo) */}
+            <Show
+              when={activeRun()}
+              fallback={
+                <Show when={queue()?.active}>
+                  {(activePath) => {
+                    const wtPath = () => worktreePathFromTaskPath(activePath());
+                    return (
+                      <RunCard
+                        name={worktreeLabel(wtPath())}
+                        status="running"
+                        branch={worktreeLabel(wtPath())}
+                        worktreePath={wtPath()}
+                        expanded={expandedCard() === `active:${wtPath()}`}
+                        onToggle={() => toggleCard(`active:${wtPath()}`)}
+                        onOpenWorkspace={() => handleOpenWorkspace(wtPath())}
+                      />
+                    );
+                  }}
+                </Show>
+              }
+            >
               {(run) => {
                 const wtPath = () => worktreePathFromTaskPath(run().taskPath);
                 return (
