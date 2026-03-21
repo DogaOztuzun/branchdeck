@@ -182,91 +182,75 @@ export function TeamSidebar() {
             </Show>
           }
         >
-          <div class="mt-1 space-y-0.5">
+          <div class="mt-1 divide-y divide-border-subtle/20">
             <For each={tasksWithWorktree()}>
               {(item) => (
-                <div class="px-2 py-1.5text-xs hover:bg-bg-main/50">
-                  <div class="flex items-center gap-2">
-                    <div class="flex-1 min-w-0">
-                      <div class="flex items-center gap-1.5">
-                        <span class="text-text-main truncate">{item.worktree.branch}</span>
-                        <TaskBadge status={item.task.frontmatter.status} />
-                      </div>
-                    </div>
-                    {/* Launch button for newly created tasks only */}
-                    <Show when={canLaunch() && item.task.frontmatter.status === 'created'}>
-                      <button
-                        type="button"
-                        class="shrink-0 px-1.5 py-0.5 text-[10px] text-text-dim hover:text-text-main border border-border-subtlehover:border-accent-primary cursor-pointer"
-                        onClick={() => handleLaunch(item.task, item.worktree.path)}
-                      >
-                        Launch
-                      </button>
-                    </Show>
-                    {/* Cancel button for running tasks */}
-                    <Show
-                      when={taskStore.state.activeRun && item.task.frontmatter.status === 'running'}
-                    >
-                      <button
-                        type="button"
-                        class="shrink-0 px-1.5 py-0.5 text-[10px] text-red-400 hover:text-red-300 border border-border-subtlehover:border-red-400 cursor-pointer"
-                        onClick={() => cancelRun().catch(() => {})}
-                      >
-                        Cancel
-                      </button>
-                    </Show>
-                    {/* Retry/Resume for failed/cancelled — only when no other run is active */}
-                    <Show
-                      when={
-                        canLaunch() &&
-                        (item.task.frontmatter.status === 'failed' ||
-                          item.task.frontmatter.status === 'cancelled')
-                      }
-                    >
-                      <button
-                        type="button"
-                        class="shrink-0 px-1.5 py-0.5 text-[10px] text-text-dim hover:text-text-main border border-border-subtlehover:border-accent-primary cursor-pointer"
-                        onClick={() => retryRun(item.task.path, item.worktree.path).catch(() => {})}
-                      >
-                        Retry
-                      </button>
-                      <button
-                        type="button"
-                        class="shrink-0 px-1.5 py-0.5 text-[10px] text-text-dim hover:text-text-main border border-border-subtlehover:border-info cursor-pointer"
-                        onClick={() =>
-                          resumeRun(item.task.path, item.worktree.path).catch(() => {})
-                        }
-                      >
-                        Resume
-                      </button>
-                    </Show>
+                <div class="px-3 py-2 text-xs hover:bg-bg-main/30 transition-colors duration-150">
+                  {/* Row 1: branch name (full width) */}
+                  <div class="text-[11px] text-text-main font-medium truncate">{item.worktree.branch}</div>
+                  {/* Row 2: type + badge */}
+                  <div class="flex items-center justify-between mt-0.5">
+                    <span class="text-[10px] text-text-dim capitalize">{item.task.frontmatter.type.replace('-', ' ')}</span>
+                    <TaskBadge status={item.task.frontmatter.status} />
                   </div>
-                  {/* Task details row */}
-                  <div class="flex items-center gap-2 mt-0.5 text-[10px] text-text-dim">
-                    <span class="capitalize">{item.task.frontmatter.type.replace('-', ' ')}</span>
+                  {/* Row 3: metadata + actions */}
+                  <div class="flex items-center gap-2 mt-1 text-[10px] text-text-dim">
                     <Show when={item.task.frontmatter.pr}>
                       <span>PR #{item.task.frontmatter.pr}</span>
                     </Show>
                     <Show when={item.task.frontmatter['run-count'] > 0}>
                       <span>{item.task.frontmatter['run-count']} runs</span>
                     </Show>
+                    <Show when={parseArtifactSummary(item.task.body)}>
+                      {(artifacts) => (
+                        <>
+                          <Show when={artifacts().totalCommits > 0}>
+                            <span>{artifacts().totalCommits} commit{artifacts().totalCommits === 1 ? '' : 's'}</span>
+                          </Show>
+                          <Show when={artifacts().pr}>
+                            <span class="text-accent-info">PR #{artifacts().pr}</span>
+                          </Show>
+                        </>
+                      )}
+                    </Show>
+                    {/* Action buttons */}
+                    <div class="ml-auto flex items-center gap-1">
+                      <Show when={canLaunch() && item.task.frontmatter.status === 'created'}>
+                        <button
+                          type="button"
+                          class="px-1.5 py-0.5 text-[10px] text-text-dim hover:text-text-main border border-border-subtle hover:border-accent-primary cursor-pointer"
+                          onClick={() => handleLaunch(item.task, item.worktree.path)}
+                        >
+                          Launch
+                        </button>
+                      </Show>
+                      <Show when={taskStore.state.activeRun && item.task.frontmatter.status === 'running'}>
+                        <button
+                          type="button"
+                          class="px-1.5 py-0.5 text-[10px] text-red-400 hover:text-red-300 border border-border-subtle hover:border-red-400 cursor-pointer"
+                          onClick={() => cancelRun().catch(() => {})}
+                        >
+                          Cancel
+                        </button>
+                      </Show>
+                      <Show when={canLaunch() && (item.task.frontmatter.status === 'failed' || item.task.frontmatter.status === 'cancelled')}>
+                        <button
+                          type="button"
+                          class="px-1.5 py-0.5 text-[10px] text-text-dim hover:text-text-main border border-border-subtle hover:border-accent-primary cursor-pointer"
+                          onClick={() => retryRun(item.task.path, item.worktree.path).catch(() => {})}
+                        >
+                          Retry
+                        </button>
+                        <button
+                          type="button"
+                          class="px-1.5 py-0.5 text-[10px] text-text-dim hover:text-text-main border border-border-subtle hover:border-accent-info cursor-pointer"
+                          onClick={() => resumeRun(item.task.path, item.worktree.path).catch(() => {})}
+                        >
+                          Resume
+                        </button>
+                      </Show>
+                    </div>
                   </div>
-                  {/* Artifact summary */}
-                  <Show when={parseArtifactSummary(item.task.body)}>
-                    {(artifacts) => (
-                      <div class="flex items-center gap-1.5 mt-0.5 text-[10px] text-text-dim">
-                        <Show when={artifacts().totalCommits > 0}>
-                          <span>
-                            {artifacts().totalCommits} commit
-                            {artifacts().totalCommits === 1 ? '' : 's'}
-                          </span>
-                        </Show>
-                        <Show when={artifacts().pr}>
-                          <span class="text-accent-info">PR #{artifacts().pr}</span>
-                        </Show>
-                      </div>
-                    )}
-                  </Show>
                 </div>
               )}
             </For>
