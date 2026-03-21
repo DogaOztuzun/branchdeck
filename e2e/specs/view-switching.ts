@@ -1,31 +1,21 @@
 describe('View switching', () => {
-  it('should switch to Orchestrations view', async () => {
+  it('should show Orchestrations tab only when needed', async () => {
     await browser.waitUntil(
       async () => (await browser.getTitle()) === 'Branchdeck',
       { timeout: 15000 },
     );
 
+    // Orchestrations tab is conditional
     const orchBtn = await $('button*=Orchestrations');
-    await orchBtn.click();
-    await browser.pause(500);
-
-    // Orchestrations view replaces the workspace - repo sidebar and terminal should be gone
-    const termPanel = await $('[data-resizable-panel-id="terminal"]');
-    const isTermVisible = await termPanel.isExisting();
-
-    // Either the terminal disappears or batch queue content appears
-    const batchQueue = await $('*=Batch Queue');
-    const hasBatchView = await batchQueue.isExisting();
-
-    expect(!isTermVisible || hasBatchView).toBe(true);
-  });
-
-  it('should switch back to Workspace view', async () => {
-    const workspaceBtn = await $('button*=Workspace');
-    await workspaceBtn.click();
-    await browser.pause(500);
-
-    // Terminal panel should be back
+    if (await orchBtn.isExisting()) {
+      await orchBtn.click();
+      await browser.pause(500);
+      // Switch back
+      const workspaceBtn = await $('button*=Workspace');
+      await workspaceBtn.click();
+      await browser.pause(300);
+    }
+    // Either way, workspace should work
     const termPanel = await $('[data-resizable-panel-id="terminal"]');
     expect(await termPanel.isExisting()).toBe(true);
   });

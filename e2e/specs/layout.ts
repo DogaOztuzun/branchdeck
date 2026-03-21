@@ -23,11 +23,10 @@ describe('Layout structure', () => {
     expect(await changesBtn.isExisting()).toBe(true);
   });
 
-  it('should show Workspace and Orchestrations view tabs', async () => {
+  it('should show Workspace tab (Orchestrations conditional)', async () => {
     const workspaceBtn = await $('button*=Workspace');
-    const orchBtn = await $('button*=Orchestrations');
     expect(await workspaceBtn.isExisting()).toBe(true);
-    expect(await orchBtn.isExisting()).toBe(true);
+    // Orchestrations tab only shows when queue active or permissions pending
   });
 
   it('should show the repo sidebar with Repositories header', async () => {
