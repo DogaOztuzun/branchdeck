@@ -8,17 +8,17 @@ type TaskBadgeProps = {
 function badgeClasses(status: TaskStatus): string {
   switch (status) {
     case 'created':
-      return 'text-zinc-400 bg-zinc-400/10';
+      return 'text-zinc-400';
     case 'running':
-      return 'text-blue-400 bg-blue-400/10';
+      return 'text-blue-400';
     case 'blocked':
-      return 'text-yellow-400 bg-yellow-400/10';
+      return 'text-yellow-400';
     case 'succeeded':
-      return 'text-emerald-400 bg-emerald-400/10';
+      return 'text-emerald-400';
     case 'failed':
-      return 'text-red-400 bg-red-400/10';
+      return 'text-red-400';
     case 'cancelled':
-      return 'text-zinc-500 bg-zinc-500/10';
+      return 'text-zinc-500';
   }
 }
 
@@ -42,7 +42,7 @@ function dotBg(status: TaskStatus): string {
 export function TaskBadge(props: TaskBadgeProps) {
   return (
     <span
-      class={`inline-flex items-center gap-1 px-1.5 py-px text-[10px] font-medium ${badgeClasses(props.status)}`}
+      class={`inline-flex items-center gap-1 shrink-0 text-[10px] font-medium ${badgeClasses(props.status)}`}
     >
       <span class="relative flex h-1.5 w-1.5">
         <Show when={props.status === 'running'}>
