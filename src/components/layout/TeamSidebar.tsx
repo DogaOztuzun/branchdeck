@@ -18,6 +18,7 @@ import { ApprovalDialog } from '../task/ApprovalDialog';
 import { CreateTaskModal } from '../task/CreateTaskModal';
 import { RunTimeline } from '../task/RunTimeline';
 import { TaskBadge } from '../task/TaskBadge';
+import { Button } from '../ui/Button';
 import { SectionHeader } from '../ui/SectionHeader';
 import { FileGrid } from './FileGrid';
 
@@ -517,13 +518,9 @@ export function TeamSidebar() {
       {/* Footer */}
       <Show when={worktreePath()}>
         <div class="p-2 border-t border-border-subtle">
-          <button
-            type="button"
-            class="w-full px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer text-left hover:bg-bg-main/50"
-            onClick={() => terminalStore.openClaudeTab(worktreePath())}
-          >
+          <Button variant="ghost" size="compact" class="w-full justify-start" onClick={() => terminalStore.openClaudeTab(worktreePath())}>
             + New Claude Session
-          </button>
+          </Button>
         </div>
       </Show>
 

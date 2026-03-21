@@ -1,4 +1,5 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { Button } from '../ui/Button';
 import type { Preset } from '../../lib/commands/workspace';
 import { getPresets } from '../../lib/commands/workspace';
 import { getAgentStore } from '../../lib/stores/agent';
@@ -84,23 +85,15 @@ export function TerminalArea() {
               {worktreePath() ? 'No terminal open' : 'Select a repository to start'}
             </div>
             <Show when={worktreePath()}>
-              <div class="flex gap-4">
-                <button
-                  type="button"
-                  class="px-4 py-2 text-xs border border-border-subtle hover:border-accent-primary hover:text-text-main cursor-pointer"
-                  onClick={() => terminalStore.openShellTab(worktreePath())}
-                >
+              <div class="flex gap-3">
+                <Button variant="ghost" onClick={() => terminalStore.openShellTab(worktreePath())}>
                   Open Terminal
-                  <span class="ml-2 text-text-dim">Ctrl+Shift+T</span>
-                </button>
-                <button
-                  type="button"
-                  class="px-4 py-2 text-xs border border-border-subtle hover:border-accent-primary hover:text-text-main cursor-pointer"
-                  onClick={() => terminalStore.openClaudeTab(worktreePath())}
-                >
+                  <span class="ml-2 text-text-dim text-[10px]">Ctrl+Shift+T</span>
+                </Button>
+                <Button variant="ghost" onClick={() => terminalStore.openClaudeTab(worktreePath())}>
                   Start Claude Code
-                  <span class="ml-2 text-text-dim">Ctrl+Shift+A</span>
-                </button>
+                  <span class="ml-2 text-text-dim text-[10px]">Ctrl+Shift+A</span>
+                </Button>
               </div>
             </Show>
           </div>

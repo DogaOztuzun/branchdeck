@@ -10,6 +10,7 @@ import { parseArtifactSummary } from '../../lib/utils';
 import type { PrSummary } from '../../types/github';
 import type { TaskInfo, TaskStatus } from '../../types/task';
 import { TaskBadge } from '../task/TaskBadge';
+import { Button } from '../ui/Button';
 
 type DashboardTab = 'prs' | 'tasks';
 
@@ -467,14 +468,14 @@ export function TaskDashboard() {
           </Switch>
           <Show when={selectedPrs().size > 0}>
             <div class="px-2 py-1.5 border-t border-border-subtle/50">
-              <button
-                type="button"
-                class={`w-full text-[11px] font-medium px-3 py-1.5 border cursor-pointer transition-colors duration-150 ${batchRunning() ? 'border-accent-primary/30 text-accent-primary/50 bg-accent-primary/5' : 'border-accent-primary/50 text-accent-primary bg-accent-primary/10 hover:bg-accent-primary/20'}`}
+              <Button
+                variant="primary"
+                class="w-full"
                 disabled={batchRunning()}
                 onClick={handleBatchShepherd}
               >
                 {batchRunning() ? 'Starting batch...' : `Shepherd Selected (${selectedPrs().size})`}
-              </button>
+              </Button>
             </div>
           </Show>
         </Show>
