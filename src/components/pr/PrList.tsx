@@ -66,6 +66,7 @@ export function PrList() {
   const [shepherding, setShepherding] = createSignal<number | null>(null);
   const [selectedPrs, setSelectedPrs] = createSignal<Set<string>>(new Set());
   const [batchRunning, setBatchRunning] = createSignal(false);
+  const [error, setError] = createSignal<string | null>(null);
 
   const filteredPrs = createMemo(() => {
     let list = prs();
@@ -109,6 +110,7 @@ export function PrList() {
     const selected = selectedPrs();
     if (selected.size === 0) return;
     setBatchRunning(true);
+    setError(null);
     try {
       const pairs: [string, string][] = [];
       for (const pr of filteredPrs()) {
@@ -124,7 +126,8 @@ export function PrList() {
       }
       setSelectedPrs(new Set());
     } catch (e) {
-      console.error('Batch shepherd failed:', e);
+      setError(`Batch shepherd failed: ${e}`);
+      setTimeout(() => setError(null), 5000);
     } finally {
       setBatchRunning(false);
     }
@@ -133,13 +136,20 @@ export function PrList() {
   async function handleShepherd(pr: PrSummary) {
     if (shepherding() !== null) return;
     const rp = repoPathForName(pr.repoName);
-    if (!rp) return;
+    if (!rp) {
+      setError(`No repo found for "${pr.repoName}"`);
+      setTimeout(() => setError(null), 5000);
+      return;
+    }
     setShepherding(pr.number);
+    setError(null);
     try {
       const result = await shepherdPr(rp, pr.number, true);
+      repoStore.selectRepoAndWorktree(rp, result.worktreePath);
       layout.navigateToTask(result.worktreePath);
     } catch (e) {
-      console.error('Shepherd failed:', e);
+      setError(`Shepherd failed: ${e}`);
+      setTimeout(() => setError(null), 5000);
     } finally {
       setShepherding(null);
     }
@@ -310,6 +320,13 @@ export function PrList() {
           </Match>
         </Switch>
       </div>
+
+      {/* Error display */}
+      <Show when={error()}>
+        <div class="px-3 py-1.5 text-[10px] text-accent-error border-t border-border-subtle/50">
+          {error()}
+        </div>
+      </Show>
 
       {/* Batch action */}
       <Show when={selectedPrs().size > 0}>
