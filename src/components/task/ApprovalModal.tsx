@@ -18,36 +18,34 @@ export function ApprovalBanner() {
   return (
     <Show when={currentPerm()}>
       {(perm) => (
-        <div class="fixed bottom-0 left-0 right-0 z-50 border-t border-accent-warning/40 bg-bg-sidebar shadow-lg">
-          <div class="flex items-center gap-3 px-4 py-2 max-w-screen-xl mx-auto">
-            <span class="w-2 h-2 rounded-full bg-accent-warning animate-pulse shrink-0" />
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2 text-xs">
-                <span class="text-accent-warning font-medium uppercase tracking-wider text-[10px]">
-                  Permission
-                </span>
-                <Show when={totalPending() > 1}>
-                  <span class="text-[10px] text-text-dim">({totalPending()} pending)</span>
-                </Show>
-              </div>
-              <div class="flex items-center gap-2 text-xs text-text-main mt-0.5">
-                <span class="font-mono text-accent-info">{perm().tool ?? 'unknown'}</span>
-                <Show when={perm().command}>
-                  <span class="text-text-dim font-mono truncate max-w-md">{perm().command}</span>
-                </Show>
-              </div>
-            </div>
-            <div class="flex items-center gap-2 shrink-0">
+        <div class="border-t border-accent-warning/30 bg-bg-sidebar/95 px-3 py-1.5">
+          <div class="flex items-center gap-2">
+            <span class="w-1.5 h-1.5 rounded-full bg-accent-warning animate-pulse shrink-0" />
+            <span class="text-[10px] text-accent-warning font-medium uppercase tracking-wider">
+              Permission
+            </span>
+            <Show when={totalPending() > 1}>
+              <span class="text-[10px] text-text-dim">({totalPending()})</span>
+            </Show>
+            <span class="text-[10px] font-mono text-accent-info truncate">
+              {perm().tool ?? 'unknown'}
+            </span>
+            <Show when={perm().command}>
+              <span class="text-[10px] text-text-dim font-mono truncate max-w-xs">
+                {perm().command}
+              </span>
+            </Show>
+            <div class="ml-auto flex items-center gap-1.5 shrink-0">
               <button
                 type="button"
-                class="px-3 py-1.5 text-xs font-medium text-green-400 border border-green-400/40 hover:bg-green-400/10 cursor-pointer transition-colors"
+                class="px-2 py-0.5 text-[10px] font-medium text-green-400 border border-green-400/30 hover:bg-green-400/10 cursor-pointer"
                 onClick={() => handleRespond('approve')}
               >
                 Approve
               </button>
               <button
                 type="button"
-                class="px-3 py-1.5 text-xs font-medium text-red-400 border border-red-400/40 hover:bg-red-400/10 cursor-pointer transition-colors"
+                class="px-2 py-0.5 text-[10px] font-medium text-red-400 border border-red-400/30 hover:bg-red-400/10 cursor-pointer"
                 onClick={() => handleRespond('deny')}
               >
                 Deny
@@ -58,4 +56,10 @@ export function ApprovalBanner() {
       )}
     </Show>
   );
+}
+
+/** Count of pending permissions — use for red dot indicators */
+export function usePendingCount() {
+  const taskStore = getTaskStore();
+  return () => taskStore.state.pendingPermissions.length;
 }

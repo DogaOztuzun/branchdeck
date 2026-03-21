@@ -5,10 +5,12 @@ import { cn } from '../../lib/cn';
 import { cancelQueue } from '../../lib/commands/run';
 import { getLayoutStore } from '../../lib/stores/layout';
 import { getRepoStore } from '../../lib/stores/repo';
+import { getTaskStore } from '../../lib/stores/task';
 import type { QueueStatus } from '../../types/github';
 
 export function TopBar() {
   const repoStore = getRepoStore();
+  const taskStore = getTaskStore();
   const layout = getLayoutStore();
   const [queue, setQueue] = createSignal<QueueStatus | null>(null);
 
@@ -110,6 +112,12 @@ export function TopBar() {
           <Show when={queue()}>
             <span class="bg-accent-warning/20 text-accent-warning px-1 text-[9px]">
               {queue()?.active ? 1 : 0}
+            </span>
+          </Show>
+          <Show when={taskStore.state.pendingPermissions.length > 0}>
+            <span class="relative flex h-2 w-2">
+              <span class="absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75 animate-ping" />
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-red-400" />
             </span>
           </Show>
         </button>

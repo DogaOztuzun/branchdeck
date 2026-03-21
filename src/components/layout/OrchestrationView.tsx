@@ -7,6 +7,7 @@ import { getRepoStore } from '../../lib/stores/repo';
 import { getTaskStore, worktreePathFromTaskPath } from '../../lib/stores/task';
 import type { QueuedRun, QueueStatus } from '../../types/github';
 import type { RunInfo, RunStatusEvent, RunStepEvent } from '../../types/run';
+import { ApprovalBanner } from '../task/ApprovalModal';
 import { TaskBadge } from '../task/TaskBadge';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
@@ -368,6 +369,7 @@ export function OrchestrationView() {
             </For>
           </div>
         </div>
+        <ApprovalBanner />
       </Show>
     </div>
   );
