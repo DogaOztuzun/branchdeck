@@ -1,11 +1,8 @@
-import { Match, Switch } from 'solid-js';
 import { Panel, PanelGroup, ResizeHandle } from 'solid-resizable-panels';
 import { getLayoutStore } from '../../lib/stores/layout';
 import { TerminalArea } from '../terminal/TerminalArea';
-import { ChangesSidebar } from './ChangesSidebar';
 import { RepoSidebar } from './RepoSidebar';
-import { TaskDashboard } from './TaskDashboard';
-import { TeamSidebar } from './TeamSidebar';
+import { RightPanel } from './RightPanel';
 
 export function Shell() {
   const layout = getLayoutStore();
@@ -38,17 +35,7 @@ export function Shell() {
           onCollapse={() => layout.setRightSidebarOpen(false)}
           onExpand={() => layout.setRightSidebarOpen(true)}
         >
-          <Switch>
-            <Match when={layout.rightSidebarView() === 'team'}>
-              <TeamSidebar />
-            </Match>
-            <Match when={layout.rightSidebarView() === 'dashboard'}>
-              <TaskDashboard />
-            </Match>
-            <Match when={layout.rightSidebarView() === 'changes'}>
-              <ChangesSidebar />
-            </Match>
-          </Switch>
+          <RightPanel />
         </Panel>
       </PanelGroup>
     </div>

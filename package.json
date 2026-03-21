@@ -16,7 +16,8 @@
     "test:all": "vitest run && cd src-tauri && cargo test",
     "lint:all": "biome check . && cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings",
     "verify": "biome check . && vitest run && cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test:e2e": "xvfb-run bunx wdio run e2e/wdio.conf.ts"
   },
   "license": "MIT",
   "dependencies": {
@@ -37,13 +38,17 @@
     "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2",
+    "@tailwindcss/vite": "^4",
+    "@tauri-apps/cli": "^2",
+    "@wdio/cli": "^9.26.1",
+    "@wdio/local-runner": "^9.26.1",
+    "@wdio/mocha-framework": "^9.26.1",
+    "@wdio/spec-reporter": "^9.26.1",
+    "tailwindcss": "^4",
     "typescript": "~5.6.2",
     "vite": "^6.0.3",
     "vite-plugin-solid": "^2.11.0",
-    "@tauri-apps/cli": "^2",
-    "tailwindcss": "^4",
-    "@tailwindcss/vite": "^4",
-    "@biomejs/biome": "^2",
     "vitest": "^4.1.0"
   }
 }

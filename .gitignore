@@ -1,7 +1,10 @@
 node_modules
 dist
 target
+.branchdeck/
+.claude/settings.json
 .claude/settings.local.json
+.superset/
 _bmad-output/
 docs/_archive/
 

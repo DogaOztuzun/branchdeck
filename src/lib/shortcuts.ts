@@ -39,6 +39,10 @@ export function registerShortcuts() {
         e.preventDefault();
         layout.toggleChangesSidebar();
         break;
+      case 'P':
+        e.preventDefault();
+        layout.showRightPanel({ kind: 'prs' });
+        break;
     }
   });
 }

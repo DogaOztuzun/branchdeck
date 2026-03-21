@@ -4,7 +4,7 @@ use crate::services::run_manager::{self, QueueStatus, RunManagerState};
 use crate::services::run_state;
 use crate::services::shepherd;
 use std::sync::Arc;
-use tauri::{Emitter, State};
+use tauri::{Emitter, Manager, State};
 
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)]
@@ -72,20 +72,20 @@ pub async fn resume_run_cmd(
 #[allow(clippy::needless_pass_by_value)]
 pub async fn shepherd_pr_cmd(
     run_manager: State<'_, RunManagerState>,
-    #[cfg(feature = "knowledge")] knowledge: State<
-        '_,
-        std::sync::Arc<crate::services::knowledge::KnowledgeService>,
-    >,
     app_handle: tauri::AppHandle,
     repo_path: String,
     pr_number: u64,
     auto_launch: Option<bool>,
 ) -> Result<shepherd::ShepherdResult, AppError> {
+    #[cfg(feature = "knowledge")]
+    let knowledge_ref =
+        app_handle.try_state::<std::sync::Arc<crate::services::knowledge::KnowledgeService>>();
+
     let result = shepherd::shepherd_pr(
         &repo_path,
         pr_number,
         #[cfg(feature = "knowledge")]
-        Some(knowledge.inner()),
+        knowledge_ref.as_deref(),
     )
     .await?;
 

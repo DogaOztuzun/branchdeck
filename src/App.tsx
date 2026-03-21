@@ -2,6 +2,7 @@ import { Match, onMount, Switch } from 'solid-js';
 import { OrchestrationView } from './components/layout/OrchestrationView';
 import { Shell } from './components/layout/Shell';
 import { TopBar } from './components/layout/TopBar';
+import { ToastRegion } from './components/ui/ToastRegion';
 import { registerShortcuts } from './lib/shortcuts';
 import { getLayoutStore } from './lib/stores/layout';
 
@@ -23,6 +24,7 @@ export function App() {
           <OrchestrationView />
         </Match>
       </Switch>
+      <ToastRegion />
     </div>
   );
 }
