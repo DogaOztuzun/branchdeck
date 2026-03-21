@@ -1,18 +1,39 @@
 import { createSignal } from 'solid-js';
 import type { PanelGroupAPI } from 'solid-resizable-panels';
 
-export type RightSidebarView = 'changes' | 'team' | 'dashboard';
+export type RightPanelContext =
+  | { kind: 'task'; worktreePath: string }
+  | { kind: 'prs' }
+  | { kind: 'changes' }
+  | { kind: 'agents' };
+
 export type AppView = 'workspace' | 'orchestrations';
 
 const [panelApi, setPanelApi] = createSignal<PanelGroupAPI | null>(null);
 const [repoSidebarOpen, setRepoSidebarOpen] = createSignal(true);
 const [rightSidebarOpen, setRightSidebarOpen] = createSignal(true);
-const [rightSidebarView, setRightSidebarView] = createSignal<RightSidebarView>('changes');
+const [rightPanelContext, setRightPanelContext] = createSignal<RightPanelContext>({
+  kind: 'agents',
+});
 const [activeView, setActiveView] = createSignal<AppView>('workspace');
+
+// Track whether user explicitly set the panel context (vs auto-context)
+const [userExplicitContext, setUserExplicitContext] = createSignal(false);
+
+// Track last user-resized panel width
+const [lastRightPanelSize, setLastRightPanelSize] = createSignal(18);
 
 const REPO_SIDEBAR_ID = 'repo-sidebar';
 const RIGHT_SIDEBAR_ID = 'right-sidebar';
-const DEFAULT_SIDEBAR_SIZE = 18;
+
+function ensureRightPanelOpen() {
+  const api = panelApi();
+  if (!api) return;
+  if (!rightSidebarOpen()) {
+    api.expand(RIGHT_SIDEBAR_ID, lastRightPanelSize());
+    setRightSidebarOpen(true);
+  }
+}
 
 export function getLayoutStore() {
   return {
@@ -21,7 +42,12 @@ export function getLayoutStore() {
     setRepoSidebarOpen,
     rightSidebarOpen,
     setRightSidebarOpen,
-    rightSidebarView,
+    rightPanelContext,
+    activeView,
+    setActiveView,
+    lastRightPanelSize,
+    setLastRightPanelSize,
+
     toggleRepoSidebar() {
       const api = panelApi();
       if (!api) return;
@@ -29,54 +55,64 @@ export function getLayoutStore() {
         api.collapse(REPO_SIDEBAR_ID);
         setRepoSidebarOpen(false);
       } else {
-        api.expand(REPO_SIDEBAR_ID, DEFAULT_SIDEBAR_SIZE);
+        api.expand(REPO_SIDEBAR_ID, 18);
         setRepoSidebarOpen(true);
       }
     },
+
+    /** Explicit user action — always wins over auto-context */
+    showRightPanel(ctx: RightPanelContext) {
+      const current = rightPanelContext();
+      // If same context, toggle the panel closed
+      if (rightSidebarOpen() && current.kind === ctx.kind) {
+        const api = panelApi();
+        if (api) {
+          api.collapse(RIGHT_SIDEBAR_ID);
+          setRightSidebarOpen(false);
+        }
+        return;
+      }
+      setRightPanelContext(ctx);
+      setUserExplicitContext(true);
+      ensureRightPanelOpen();
+    },
+
+    /** Auto-context from worktree selection — only fires if user hasn't explicitly set */
+    autoContext(ctx: RightPanelContext) {
+      if (userExplicitContext()) return;
+      setRightPanelContext(ctx);
+      ensureRightPanelOpen();
+    },
+
+    /** Reset explicit flag — call when worktree changes via sidebar click */
+    resetExplicitContext() {
+      setUserExplicitContext(false);
+    },
+
+    /**
+     * Atomic navigation: set view to workspace + select worktree + show task panel.
+     * Used by Orchestrations drill-down.
+     */
+    navigateToTask(worktreePath: string) {
+      setActiveView('workspace');
+      setRightPanelContext({ kind: 'task', worktreePath });
+      setUserExplicitContext(true);
+      ensureRightPanelOpen();
+    },
+
+    // Keep backward-compat for toggleChangesSidebar (keyboard shortcut Ctrl+Shift+L)
     toggleChangesSidebar() {
+      const current = rightPanelContext();
       const api = panelApi();
       if (!api) return;
-      if (rightSidebarOpen() && rightSidebarView() === 'changes') {
+      if (rightSidebarOpen() && current.kind === 'changes') {
         api.collapse(RIGHT_SIDEBAR_ID);
         setRightSidebarOpen(false);
       } else {
-        setRightSidebarView('changes');
-        if (!rightSidebarOpen()) {
-          api.expand(RIGHT_SIDEBAR_ID, DEFAULT_SIDEBAR_SIZE);
-          setRightSidebarOpen(true);
-        }
+        setRightPanelContext({ kind: 'changes' });
+        setUserExplicitContext(true);
+        ensureRightPanelOpen();
       }
     },
-    toggleTeamSidebar() {
-      const api = panelApi();
-      if (!api) return;
-      if (rightSidebarOpen() && rightSidebarView() === 'team') {
-        api.collapse(RIGHT_SIDEBAR_ID);
-        setRightSidebarOpen(false);
-      } else {
-        setRightSidebarView('team');
-        if (!rightSidebarOpen()) {
-          api.expand(RIGHT_SIDEBAR_ID, DEFAULT_SIDEBAR_SIZE);
-          setRightSidebarOpen(true);
-        }
-      }
-    },
-    toggleDashboard() {
-      const api = panelApi();
-      if (!api) return;
-      if (rightSidebarOpen() && rightSidebarView() === 'dashboard') {
-        api.collapse(RIGHT_SIDEBAR_ID);
-        setRightSidebarOpen(false);
-      } else {
-        setRightSidebarView('dashboard');
-        if (!rightSidebarOpen()) {
-          api.expand(RIGHT_SIDEBAR_ID, DEFAULT_SIDEBAR_SIZE);
-          setRightSidebarOpen(true);
-        }
-      }
-    },
-    setRightSidebarView,
-    activeView,
-    setActiveView,
   };
 }
