@@ -103,6 +103,7 @@ export function TopBar() {
         <Show
           when={
             queue() ||
+            taskStore.state.activeRun ||
             taskStore.state.pendingPermissions.length > 0 ||
             layout.activeView() === 'orchestrations'
           }
