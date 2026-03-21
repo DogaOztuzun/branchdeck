@@ -154,7 +154,19 @@ export function PrList() {
       repoStore.selectRepoAndWorktree(rp, result.worktreePath);
       layout.navigateToTask(result.worktreePath);
     } catch (e) {
-      setError(`Shepherd failed: ${e}`);
+      const errMsg = String(e);
+      // If worktree already exists, navigate to it instead of erroring
+      if (errMsg.includes('Worktree already exists')) {
+        const branch = pr.branch;
+        const wts = repoStore.state.worktreesByRepo[rp] ?? [];
+        const existing = wts.find((wt) => wt.branch === branch);
+        if (existing) {
+          repoStore.selectRepoAndWorktree(rp, existing.path);
+          layout.navigateToTask(existing.path);
+          return;
+        }
+      }
+      setError(`Shepherd failed: ${errMsg}`);
       setTimeout(() => setError(null), 5000);
     } finally {
       setShepherding(null);
