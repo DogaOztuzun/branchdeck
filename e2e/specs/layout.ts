@@ -5,7 +5,6 @@ describe('Layout structure', () => {
       { timeout: 15000 },
     );
 
-    // Panels use data-resizable-panel-id, not id
     const repoPanel = await $('[data-resizable-panel-id="repo-sidebar"]');
     const termPanel = await $('[data-resizable-panel-id="terminal"]');
 
@@ -13,18 +12,15 @@ describe('Layout structure', () => {
     expect(await termPanel.isExisting()).toBe(true);
   });
 
-  it('should show all four toggle buttons', async () => {
-    const toggles = [
-      'Toggle repositories',
-      'Toggle team',
-      'Toggle dashboard',
-      'Toggle changes',
-    ];
+  it('should show repo toggle and context panel buttons', async () => {
+    const repoToggle = await $('button[aria-label="Toggle repositories"]');
+    expect(await repoToggle.isExisting()).toBe(true);
 
-    for (const label of toggles) {
-      const btn = await $(`button[aria-label="${label}"]`);
-      expect(await btn.isExisting()).toBe(true);
-    }
+    // New context buttons: PRs and Changes
+    const prsBtn = await $('button[aria-label="Toggle PRs"]');
+    const changesBtn = await $('button[aria-label="Toggle changes"]');
+    expect(await prsBtn.isExisting()).toBe(true);
+    expect(await changesBtn.isExisting()).toBe(true);
   });
 
   it('should show Workspace and Orchestrations view tabs', async () => {
@@ -35,7 +31,6 @@ describe('Layout structure', () => {
   });
 
   it('should show the repo sidebar with Repositories header', async () => {
-    // "REPOSITORIES" is uppercase via CSS (text-transform), so check case-insensitive
     const hasReposHeader = await browser.execute(() => {
       const el = document.querySelector('[data-resizable-panel-id="repo-sidebar"]');
       return el?.textContent?.toLowerCase().includes('repositories') ?? false;

@@ -73,16 +73,23 @@ export function TopBar() {
               {qs().completed > 0 ? ` · ${qs().completed} done` : ''}
               {qs().failed > 0 ? ` · ${qs().failed} failed` : ''}
             </span>
-            <button
-              type="button"
+            <span
+              role="button"
+              tabIndex={0}
               class="text-[10px] text-accent-error hover:text-accent-error/80 cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
                 cancelQueue().catch(() => {});
               }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.stopPropagation();
+                  cancelQueue().catch(() => {});
+                }
+              }}
             >
               Cancel
-            </button>
+            </span>
           </button>
         )}
       </Show>

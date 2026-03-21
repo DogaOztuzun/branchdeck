@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn, spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -40,10 +41,9 @@ export const config: WebdriverIO.Config = {
   // Build debug binary with embedded frontend assets (skip if fresh)
   onPrepare: () => {
     const binary = path.resolve(rootDir, 'src-tauri/target/debug/branchdeck');
-    const fs = require('node:fs');
     const stat = fs.statSync(binary, { throwIfNoEntry: false });
     const ageMs = stat ? Date.now() - stat.mtimeMs : Infinity;
-    if (ageMs > 300_000) {
+    if (ageMs > 60_000) {
       console.log('Binary stale, rebuilding...');
       spawnSync('bun', ['run', 'tauri', 'build', '--debug', '--no-bundle'], {
         cwd: rootDir,

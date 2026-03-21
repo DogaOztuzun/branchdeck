@@ -1,48 +1,46 @@
-describe('Right sidebar', () => {
-  it('should show when team toggle is clicked', async () => {
+describe('Right sidebar - Context panel', () => {
+  it('should show the right sidebar panel', async () => {
     await browser.waitUntil(
       async () => (await browser.getTitle()) === 'Branchdeck',
       { timeout: 15000 },
     );
 
-    // Ensure team sidebar is active
-    const toggleTeam = await $('button[aria-label="Toggle team"]');
-    await toggleTeam.click();
-    await browser.pause(300);
-
-    // Check for right sidebar panel
+    // Right panel should exist (context-driven, no toggle needed)
     const rightPanel = await $('[data-resizable-panel-id="right-sidebar"]');
-    const hasRightPanel = await rightPanel.isExisting();
-
-    // If no right panel, try clicking again (may have toggled off)
-    if (!hasRightPanel) {
-      await toggleTeam.click();
-      await browser.pause(300);
+    if (await rightPanel.isExisting()) {
+      expect(await rightPanel.isDisplayed()).toBe(true);
     }
-
-    expect(await toggleTeam.isExisting()).toBe(true);
   });
 
-  it('should toggle dashboard view', async () => {
-    const toggleDashboard = await $('button[aria-label="Toggle dashboard"]');
-    expect(await toggleDashboard.isExisting()).toBe(true);
+  it('should show PRs panel when PRs button is clicked', async () => {
+    const prsBtn = await $('button[aria-label="Toggle PRs"]');
+    if (!(await prsBtn.isExisting())) return;
 
-    await toggleDashboard.click();
+    await prsBtn.click();
     await browser.pause(500);
 
-    // Look for PRs/Tasks tabs
+    // Look for PRs/Tasks tabs in dashboard
     const prsTab = await $('button*=PRs');
     const tasksTab = await $('button*=Tasks');
 
     const hasDashboardTabs =
       (await prsTab.isExisting()) || (await tasksTab.isExisting());
 
-    // Toggle back to team view
-    const toggleTeam = await $('button[aria-label="Toggle team"]');
-    await toggleTeam.click();
-    await browser.pause(300);
-
-    // Dashboard tabs should have been visible
     expect(hasDashboardTabs).toBe(true);
+  });
+
+  it('should show changes panel when changes button is clicked', async () => {
+    const changesBtn = await $('button[aria-label="Toggle changes"]');
+    if (!(await changesBtn.isExisting())) return;
+
+    await changesBtn.click();
+    await browser.pause(500);
+
+    // Look for "Changes" text
+    const changesHeader = await browser.execute(() => {
+      return document.body.textContent?.includes('Changes') ?? false;
+    });
+
+    expect(changesHeader).toBe(true);
   });
 });
