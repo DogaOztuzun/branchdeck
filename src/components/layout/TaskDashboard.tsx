@@ -501,7 +501,7 @@ export function TaskDashboard() {
                   All quiet
                 </div>
               </Show>
-              <div class="p-1">
+              <div class="divide-y divide-border-subtle/20">
                 <For each={sortedItems()}>
                   {(item) => (
                     <button
@@ -517,22 +517,26 @@ export function TaskDashboard() {
                       title={`${item.task.frontmatter.type} · ${item.task.frontmatter['run-count']} runs`}
                       onClick={() => handleCardClick(item)}
                     >
-                      <div class="flex items-center justify-between gap-1">
-                        <span class="truncate">
-                          <span class="text-text-dim">{item.repoName}</span>
-                          <span class="text-text-dim">/</span>
-                          <span class="text-text-main">{item.branch}</span>
-                        </span>
+                      {/* Row 1: branch name + badge */}
+                      <div class="flex items-center justify-between">
+                        <span class="text-[11px] text-text-main font-medium truncate">{item.branch}</span>
                         <TaskBadge status={item.task.frontmatter.status} />
                       </div>
-                      <div class="flex items-center gap-1.5 mt-0.5 text-[10px] text-text-dim">
+                      {/* Row 2: repo name */}
+                      <div class="text-[10px] text-text-dim mt-0.5">{item.repoName}</div>
+                      {/* Row 3: metadata */}
+                      <div class="flex items-center gap-2 mt-1 text-[10px] text-text-dim">
+                        <span class="capitalize">{item.task.frontmatter.type.replace('-', ' ')}</span>
+                        <Show when={item.task.frontmatter['run-count'] > 0}>
+                          <span>{item.task.frontmatter['run-count']} runs</span>
+                        </Show>
                         <Show
                           when={
                             taskStore.state.activeRun?.taskPath === item.task.path &&
                             taskStore.state.activeRun?.costUsd
                           }
                         >
-                          <span>${taskStore.state.activeRun?.costUsd?.toFixed(3)}</span>
+                          <span class="text-accent-primary">${taskStore.state.activeRun?.costUsd?.toFixed(3)}</span>
                         </Show>
                         <Show when={parseArtifactSummary(item.task.body)}>
                           {(artifacts) => (
