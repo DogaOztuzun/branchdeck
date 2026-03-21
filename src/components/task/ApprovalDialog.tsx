@@ -8,7 +8,7 @@ type ApprovalDialogProps = {
 
 export function ApprovalDialog(props: ApprovalDialogProps) {
   return (
-    <div class="mx-2 my-1.5 p-2 border border-warning/40 bg-accent-warning/5">
+    <div class="mx-2 my-1.5 p-2 border border-accent-warning/40 bg-accent-warning/5">
       <div class="text-[10px] uppercase text-accent-warning tracking-wider mb-1">
         Permission Required
       </div>

@@ -102,7 +102,10 @@ export function CreateTaskModal(props: CreateTaskModalProps) {
                 id="task-type-select"
                 value={taskType()}
                 onChange={(e) => handleTypeChange(e.currentTarget.value as TaskType)}
-                style={{ 'background-color': 'var(--color-bg)', color: 'var(--color-text)' }}
+                style={{
+                  'background-color': 'var(--color-bg-main)',
+                  color: 'var(--color-text-main)',
+                }}
                 class="w-full mt-1 px-3 py-1.5 text-xs border border-border-subtle focus:outline-none focus:border-accent-primary appearance-none [&>option]:bg-bg-main [&>option]:text-text-main"
               >
                 <option value="issue-fix">Issue Fix</option>

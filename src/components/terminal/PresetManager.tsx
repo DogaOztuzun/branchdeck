@@ -189,7 +189,10 @@ export function PresetManager(props: PresetManagerProps) {
                           tabType: e.currentTarget.value as 'shell' | 'claude',
                         }))
                       }
-                      style={{ 'background-color': 'var(--color-bg)', color: 'var(--color-text)' }}
+                      style={{
+                        'background-color': 'var(--color-bg-main)',
+                        color: 'var(--color-text-main)',
+                      }}
                       class="w-full border border-border-subtle text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary appearance-none [&>option]:bg-bg-main [&>option]:text-text-main"
                     >
                       <option value="shell">Shell</option>
@@ -262,7 +265,10 @@ export function PresetManager(props: PresetManagerProps) {
                     tabType: e.currentTarget.value as 'shell' | 'claude',
                   }))
                 }
-                style={{ 'background-color': 'var(--color-bg)', color: 'var(--color-text)' }}
+                style={{
+                  'background-color': 'var(--color-bg-main)',
+                  color: 'var(--color-text-main)',
+                }}
                 class="w-full border border-border-subtle text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary appearance-none [&>option]:bg-bg-main [&>option]:text-text-main"
               >
                 <option value="shell">Shell</option>

@@ -393,8 +393,8 @@ export function TaskDashboard() {
           <Switch>
             <Match when={prsLoading()}>
               <div class="space-y-1 p-2">
-                <div class="animate-pulse bg-bg-main/50h-12" />
-                <div class="animate-pulse bg-bg-main/50h-12" />
+                <div class="animate-pulse bg-bg-main/50 h-12" />
+                <div class="animate-pulse bg-bg-main/50 h-12" />
               </div>
             </Match>
             <Match when={filteredPrs().length === 0}>
