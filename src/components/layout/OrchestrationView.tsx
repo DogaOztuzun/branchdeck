@@ -73,9 +73,9 @@ function TaskCard(props: {
         hasPending()
           ? 'border-accent-warning/50'
           : props.expanded
-            ? 'border-accent-primary/50 col-span-full'
+            ? 'border-accent-primary/50'
             : 'border-border-subtle hover:border-accent-primary/30'
-      } ${props.expanded ? 'col-span-full' : ''}`}
+      }`}
     >
       <button
         type="button"
@@ -98,7 +98,7 @@ function TaskCard(props: {
         </div>
         <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-text-dim">
           <span>{props.repoName}</span>
-          <span class="capitalize">{props.task.frontmatter.type.replace('-', ' ')}</span>
+          <span>{props.task.frontmatter.type === 'pr-shepherd' ? 'PR Shepherd' : 'Issue Fix'}</span>
           <Show when={props.task.frontmatter.pr}>
             <span class="text-accent-primary">PR #{props.task.frontmatter.pr}</span>
           </Show>

@@ -136,8 +136,8 @@ export function TaskDetail(props: TaskDetailProps) {
                   {worktree()?.branch ?? 'unknown'}
                 </div>
                 <div class="flex items-center justify-between mt-1">
-                  <span class="text-[10px] text-text-dim capitalize">
-                    {t().frontmatter.type.replace('-', ' ')}
+                  <span class="text-[10px] text-text-dim">
+                    {t().frontmatter.type === 'pr-shepherd' ? 'PR Shepherd' : 'Issue Fix'}
                   </span>
                   <TaskBadge status={t().frontmatter.status} />
                 </div>
