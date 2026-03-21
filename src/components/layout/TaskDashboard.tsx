@@ -322,7 +322,7 @@ export function TaskDashboard() {
 
   function handleCardClick(item: DashboardItem) {
     repoStore.selectRepoAndWorktree(item.repoPath, item.worktreePath);
-    layout.toggleTeamSidebar();
+    layout.showRightPanel({ kind: 'task', worktreePath: item.worktreePath });
   }
 
   return (

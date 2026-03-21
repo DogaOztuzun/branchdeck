@@ -2,7 +2,9 @@ import { ChevronDown, ChevronRight, FolderGit2, GitBranch, Plus } from 'lucide-s
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { cn } from '../../lib/cn';
+import { getLayoutStore } from '../../lib/stores/layout';
 import { getRepoStore } from '../../lib/stores/repo';
+import { getTaskStore } from '../../lib/stores/task';
 import type { RepoInfo, WorktreeInfo } from '../../types/git';
 import type { PrInfo } from '../../types/github';
 import { PrTooltip } from '../pr/PrTooltip';
@@ -245,7 +247,17 @@ export function RepoSidebar() {
                               ? 'text-accent-info'
                               : 'text-text-dim',
                           )}
-                          onClick={() => repoStore.selectRepoAndWorktree(repo.path, wt.path)}
+                          onClick={() => {
+                            repoStore.selectRepoAndWorktree(repo.path, wt.path);
+                            const layoutStore = getLayoutStore();
+                            layoutStore.resetExplicitContext();
+                            const taskStore = getTaskStore();
+                            if (taskStore.hasTaskForWorktree(wt.path)) {
+                              layoutStore.autoContext({ kind: 'task', worktreePath: wt.path });
+                            } else {
+                              layoutStore.autoContext({ kind: 'agents' });
+                            }
+                          }}
                           onContextMenu={(e) => {
                             if (!wt.isMain) {
                               e.preventDefault();

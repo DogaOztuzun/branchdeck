@@ -1,5 +1,5 @@
 import { listen } from '@tauri-apps/api/event';
-import { LayoutGrid, PanelLeft, PanelRight, Users } from 'lucide-solid';
+import { GitPullRequest, PanelLeft, PanelRight } from 'lucide-solid';
 import { createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { cn } from '../../lib/cn';
 import { cancelQueue } from '../../lib/commands/run';
@@ -27,6 +27,14 @@ export function TopBar() {
   });
   onCleanup(() => unlistenQueue?.());
 
+  const queueBadgeColor = () => {
+    const qs = queue();
+    if (!qs) return '';
+    if (qs.failed > 0) return 'text-accent-error';
+    if (qs.active) return 'text-accent-warning';
+    return 'text-accent-success';
+  };
+
   return (
     <div class="flex items-center h-11 px-3 bg-bg-sidebar border-b border-border-subtle select-none">
       <button
@@ -46,11 +54,21 @@ export function TopBar() {
           <span class="text-xs text-accent-info">{repoStore.getActiveWorktree()?.branch}</span>
         </Show>
       </Show>
+
+      {/* Queue badge */}
       <Show when={queue()}>
         {(qs) => (
-          <div class="ml-4 flex items-center gap-2 text-[10px] text-text-dim">
-            <span>
-              Queue: {qs().active ? '1 running' : ''}
+          <button
+            type="button"
+            class={cn(
+              'ml-4 flex items-center gap-2 text-[10px] cursor-pointer hover:bg-bg-main/50 px-2 py-1 transition-colors duration-150',
+              queueBadgeColor(),
+            )}
+            onClick={() => layout.setActiveView('orchestrations')}
+            title="View batch queue"
+          >
+            <span class={cn(qs().active ? 'animate-pulse' : '')}>
+              {qs().active ? '1 running' : ''}
               {qs().queued.length > 0 ? ` · ${qs().queued.length} queued` : ''}
               {qs().completed > 0 ? ` · ${qs().completed} done` : ''}
               {qs().failed > 0 ? ` · ${qs().failed} failed` : ''}
@@ -58,11 +76,14 @@ export function TopBar() {
             <button
               type="button"
               class="text-[10px] text-accent-error hover:text-accent-error/80 cursor-pointer"
-              onClick={() => cancelQueue().catch(() => {})}
+              onClick={(e) => {
+                e.stopPropagation();
+                cancelQueue().catch(() => {});
+              }}
             >
               Cancel
             </button>
-          </div>
+          </button>
         )}
       </Show>
 
@@ -101,28 +122,29 @@ export function TopBar() {
       <div class="flex items-center gap-1 ml-2">
         <button
           type="button"
-          class="p-1.5 text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50 transition-colors duration-150"
-          aria-label="Toggle team"
-          title="Toggle team sidebar"
-          onClick={() => layout.toggleTeamSidebar()}
+          class={cn(
+            'p-1.5 cursor-pointer hover:bg-bg-main/50 transition-colors duration-150',
+            layout.rightPanelContext().kind === 'prs'
+              ? 'text-accent-primary'
+              : 'text-text-dim hover:text-text-main',
+          )}
+          aria-label="Toggle PRs"
+          title="PRs (Ctrl+Shift+P)"
+          onClick={() => layout.showRightPanel({ kind: 'prs' })}
         >
-          <Users size={16} />
+          <GitPullRequest size={16} />
         </button>
         <button
           type="button"
-          class="p-1.5 text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50 transition-colors duration-150"
-          aria-label="Toggle dashboard"
-          title="Toggle task dashboard"
-          onClick={() => layout.toggleDashboard()}
-        >
-          <LayoutGrid size={16} />
-        </button>
-        <button
-          type="button"
-          class="p-1.5 text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50 transition-colors duration-150"
+          class={cn(
+            'p-1.5 cursor-pointer hover:bg-bg-main/50 transition-colors duration-150',
+            layout.rightPanelContext().kind === 'changes'
+              ? 'text-accent-primary'
+              : 'text-text-dim hover:text-text-main',
+          )}
           aria-label="Toggle changes"
-          title="Toggle changes (Ctrl+Shift+L)"
-          onClick={() => layout.toggleChangesSidebar()}
+          title="Changes (Ctrl+Shift+L)"
+          onClick={() => layout.showRightPanel({ kind: 'changes' })}
         >
           <PanelRight size={16} />
         </button>
