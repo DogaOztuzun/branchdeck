@@ -84,6 +84,32 @@ function createTaskStore() {
 
   function handleTaskUpdated(task: TaskInfo) {
     const wtPath = worktreePathFromTaskPath(task.path);
+    const prevTask = state.tasksByWorktree[wtPath];
+
+    // Detect knowledge injection (new task has knowledge, previous didn't)
+    const hasKnowledge =
+      task.body.includes('## Prior Knowledge') && !task.body.includes('(none yet)');
+    const hadKnowledge =
+      prevTask?.body.includes('## Prior Knowledge') && !prevTask?.body.includes('(none yet)');
+
+    if (hasKnowledge && !hadKnowledge) {
+      const count =
+        task.body
+          .split('## Prior Knowledge')[1]
+          ?.split('\n')
+          .filter((l) => l.startsWith('- ')).length ?? 0;
+      if (count > 0) {
+        const prNum = task.frontmatter.pr;
+        const label = prNum ? `PR #${prNum}` : 'task';
+        import('../stores/toast').then(({ showToast }) => {
+          showToast(
+            `${count} knowledge pattern${count === 1 ? '' : 's'} recalled for ${label}`,
+            'info',
+          );
+        });
+      }
+    }
+
     setState('tasksByWorktree', wtPath, task);
   }
 

@@ -1,11 +1,5 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
-import {
-  cancelRun,
-  launchRun,
-  respondToPermission,
-  resumeRun,
-  retryRun,
-} from '../../lib/commands/run';
+import { cancelRun, launchRun, resumeRun, retryRun } from '../../lib/commands/run';
 import { getAgentStore } from '../../lib/stores/agent';
 import { getRepoStore } from '../../lib/stores/repo';
 import { getTaskStore } from '../../lib/stores/task';
@@ -13,7 +7,6 @@ import { getTerminalStore } from '../../lib/stores/terminal';
 import { parseArtifactSummary, statusColor } from '../../lib/utils';
 import type { TaskInfo } from '../../types/task';
 import { SectionHeader } from '../ui/SectionHeader';
-import { ApprovalDialog } from './ApprovalDialog';
 import { CreateTaskModal } from './CreateTaskModal';
 import { RunTimeline } from './RunTimeline';
 import { TaskBadge } from './TaskBadge';
@@ -361,20 +354,7 @@ export function TaskDetail(props: TaskDetailProps) {
                 />
               </Show>
 
-              {/* 6. Approval Dialogs (temporary — will move to modal in PR 3) */}
-              <For each={taskStore.state.pendingPermissions}>
-                {(perm) => (
-                  <div class="border-b border-border-subtle">
-                    <ApprovalDialog
-                      permission={perm}
-                      onRespond={(decision) => {
-                        taskStore.removePermission(perm.toolUseId);
-                        respondToPermission(perm.toolUseId, decision).catch(() => {});
-                      }}
-                    />
-                  </div>
-                )}
-              </For>
+              {/* Approval handled by global ApprovalModal in App.tsx */}
             </>
           )}
         </Show>
