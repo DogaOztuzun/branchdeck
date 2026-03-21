@@ -18,6 +18,7 @@ import { ApprovalDialog } from '../task/ApprovalDialog';
 import { CreateTaskModal } from '../task/CreateTaskModal';
 import { RunTimeline } from '../task/RunTimeline';
 import { TaskBadge } from '../task/TaskBadge';
+import { SectionHeader } from '../ui/SectionHeader';
 import { FileGrid } from './FileGrid';
 
 export function TeamSidebar() {
@@ -28,6 +29,9 @@ export function TeamSidebar() {
   const [definitions, setDefinitions] = createSignal<AgentDefinition[]>([]);
   const [showCreateTask, setShowCreateTask] = createSignal(false);
   const [launchError, setLaunchError] = createSignal<string | null>(null);
+  const [prContextCollapsed, setPrContextCollapsed] = createSignal(false);
+  const [knowledgeCollapsed, setKnowledgeCollapsed] = createSignal(false);
+  const [agentsCollapsed, setAgentsCollapsed] = createSignal(false);
   let launchErrorTimer: ReturnType<typeof setTimeout> | undefined;
 
   const repoPath = () => repoStore.state.activeRepoPath ?? '';
@@ -265,37 +269,76 @@ export function TeamSidebar() {
         {(item) => (
           <Show when={item.task.frontmatter.type === 'pr-shepherd'}>
             <Show when={item.task.frontmatter.pr}>
-              <div class="px-3 py-3 border-b border-border-subtle">
-                <span class="text-[10px] font-bold uppercase text-text-dim tracking-widest">
-                  PR Context
-                </span>
-                <div class="mt-2 text-[10px] text-text-dim space-y-1">
-                  <div class="text-[11px] text-text-main font-medium">PR #{item.task.frontmatter.pr}</div>
-                  <Show when={item.task.body.includes('Failing checks:')}>
-                    <div class="text-red-400">
-                      {item.task.body
-                        .split('\n')
-                        .find((l) => l.includes('Failing checks:'))
-                        ?.replace('- ', '') ?? ''}
+              <div class="border-b border-border-subtle">
+                <SectionHeader
+                  label={`PR #${item.task.frontmatter.pr}`}
+                  collapsed={prContextCollapsed()}
+                  onToggle={() => setPrContextCollapsed((v) => !v)}
+                />
+                <Show when={!prContextCollapsed()}>
+                  <div class="px-3 pb-2 text-[10px] space-y-1.5">
+                    {/* Checks */}
+                    <Show when={item.task.body.includes('Failing checks:')}>
+                      <div class="flex items-center gap-2">
+                        <span class="text-text-dim w-14 shrink-0">Checks</span>
+                        <span class="text-accent-error">
+                          {item.task.body
+                            .split('\n')
+                            .find((l) => l.includes('Failing checks:'))
+                            ?.replace('- Failing checks: ', '')
+                            ?.replace('- ', '') ?? 'failing'}
+                        </span>
+                      </div>
+                    </Show>
+                    <Show when={!item.task.body.includes('Failing checks:')}>
+                      <div class="flex items-center gap-2">
+                        <span class="text-text-dim w-14 shrink-0">Checks</span>
+                        <span class="text-accent-success">passing</span>
+                      </div>
+                    </Show>
+                    {/* Reviews */}
+                    <div class="flex items-center gap-2">
+                      <span class="text-text-dim w-14 shrink-0">Reviews</span>
+                      <span class="text-text-main">
+                        {item.task.body
+                          .split('\n')
+                          .find((l) => l.includes('Reviews:'))
+                          ?.replace('- Reviews: ', '')
+                          ?.replace('- ', '') ?? 'None'}
+                      </span>
                     </div>
-                  </Show>
-                  <Show when={item.task.body.includes('Reviews:')}>
-                    <div>
-                      {item.task.body
-                        .split('\n')
-                        .find((l) => l.includes('Reviews:'))
-                        ?.replace('- ', '') ?? ''}
-                    </div>
-                  </Show>
-                  <Show when={item.task.body.includes('Diff:')}>
-                    <div>
-                      {item.task.body
-                        .split('\n')
-                        .find((l) => l.includes('Diff:'))
-                        ?.replace('- ', '') ?? ''}
-                    </div>
-                  </Show>
-                </div>
+                    {/* Diff */}
+                    <Show when={item.task.body.includes('Diff:')}>
+                      <div class="flex items-center gap-2">
+                        <span class="text-text-dim w-14 shrink-0">Diff</span>
+                        {(() => {
+                          const line = item.task.body
+                            .split('\n')
+                            .find((l) => l.includes('Diff:'))
+                            ?.replace('- Diff: ', '')
+                            ?.replace('- ', '') ?? '';
+                          const addMatch = line.match(/\+(\d+)/);
+                          const delMatch = line.match(/-(\d+)/);
+                          const fileMatch = line.match(/(\d+)\s*(?:file|across)/);
+                          return (
+                            <span>
+                              <Show when={addMatch}>
+                                <span class="text-green-400">+{addMatch?.[1]}</span>
+                              </Show>
+                              {' '}
+                              <Show when={delMatch}>
+                                <span class="text-red-400">-{delMatch?.[1]}</span>
+                              </Show>
+                              <Show when={fileMatch}>
+                                <span class="text-text-dim"> {fileMatch?.[1]} files</span>
+                              </Show>
+                            </span>
+                          );
+                        })()}
+                      </div>
+                    </Show>
+                  </div>
+                </Show>
               </div>
             </Show>
             <Show
@@ -304,23 +347,36 @@ export function TeamSidebar() {
                 !item.task.body.includes('(none yet)')
               }
             >
-              <div class="px-3 py-3 border-b border-border-subtle">
-                <span class="text-[10px] font-bold uppercase text-text-dim tracking-widest">
-                  Prior Knowledge
-                </span>
-                <div class="mt-2 text-[10px] text-text-dim space-y-1 bg-bg-main/30 px-2 py-1.5 border border-border-subtle/30">
-                  <For
-                    each={
-                      item.task.body
-                        .split('## Prior Knowledge')[1]
-                        ?.split('\n')
-                        .filter((l) => l.startsWith('- '))
-                        .slice(0, 5) ?? []
-                    }
-                  >
-                    {(line) => <div class="truncate">{line.replace('- ', '')}</div>}
-                  </For>
-                </div>
+              <div class="border-b border-border-subtle">
+                <SectionHeader
+                  label="Prior Knowledge"
+                  collapsed={knowledgeCollapsed()}
+                  onToggle={() => setKnowledgeCollapsed((v) => !v)}
+                  count={
+                    item.task.body
+                      .split('## Prior Knowledge')[1]
+                      ?.split('\n')
+                      .filter((l) => l.startsWith('- ')).length
+                  }
+                />
+                <Show when={!knowledgeCollapsed()}>
+                  <div class="px-3 pb-2">
+                    <div class="text-[10px] text-text-dim space-y-0.5 bg-bg-main/30 px-2 py-1.5 border border-border-subtle/30 max-h-32 overflow-y-auto">
+                      <For
+                        each={
+                          item.task.body
+                            .split('## Prior Knowledge')[1]
+                            ?.split('\n')
+                            .filter((l) => l.startsWith('- ')) ?? []
+                        }
+                      >
+                        {(line) => (
+                          <div class="text-[10px] leading-relaxed break-words">{line.replace('- ', '')}</div>
+                        )}
+                      </For>
+                    </div>
+                  </div>
+                </Show>
               </div>
             </Show>
           </Show>
@@ -352,12 +408,12 @@ export function TeamSidebar() {
 
       {/* Active Agents */}
       <Show when={activeAgents().length > 0}>
-        <div class="px-2 py-1.5 border-b border-border-subtle">
-          <span class="text-[10px] uppercase text-text-dim tracking-wider px-1">Active</span>
+        <div class="border-b border-border-subtle">
+          <SectionHeader label="Active" count={activeAgents().length} />
           <div class="mt-1 space-y-0.5">
             <For each={activeAgents()}>
               {(item) => (
-                <div class="flex items-center gap-2 px-2 py-1text-xs hover:bg-bg-main/50">
+                <div class="flex items-center gap-2 px-3 py-1 text-xs hover:bg-bg-main/30">
                   <span
                     class={`w-2 h-2 rounded-full shrink-0 ${statusColor(item.agent?.status ?? 'stopped')}`}
                   />
@@ -399,41 +455,48 @@ export function TeamSidebar() {
             </div>
           }
         >
-          <div class="px-2 py-1.5">
-            <span class="text-[10px] uppercase text-text-dim tracking-wider px-1">Definitions</span>
-            <div class="mt-1 space-y-0.5">
-              <For each={definitions()}>
-                {(def) => (
-                  <div class="group flex items-start gap-2 px-2 py-1.5hover:bg-bg-main/50">
-                    <div class="flex-1 min-w-0">
-                      <div class="text-xs text-text-main truncate">{def.name}</div>
-                      <Show when={def.description}>
-                        <div class="text-[10px] text-text-dim truncate">{def.description}</div>
-                      </Show>
-                      <div class="flex gap-1.5 mt-0.5">
-                        <Show when={def.model}>
-                          <span class="text-[9px] px-1bg-bg-main text-accent-info">
-                            {def.model}
-                          </span>
+          <div>
+            <SectionHeader
+              label="Agents"
+              count={definitions().length}
+              collapsed={agentsCollapsed()}
+              onToggle={() => setAgentsCollapsed((v) => !v)}
+            />
+            <Show when={!agentsCollapsed()}>
+              <div class="pb-1 space-y-0.5">
+                <For each={definitions()}>
+                  {(def) => (
+                    <div class="group flex items-start gap-2 px-3 py-1.5 hover:bg-bg-main/30">
+                      <div class="flex-1 min-w-0">
+                        <div class="text-xs text-text-main truncate">{def.name}</div>
+                        <Show when={def.description}>
+                          <div class="text-[10px] text-text-dim truncate">{def.description}</div>
                         </Show>
-                        <Show when={def.permissionMode}>
-                          <span class="text-[9px] px-1bg-bg-main text-accent-warning">
-                            {def.permissionMode}
-                          </span>
-                        </Show>
+                        <div class="flex gap-1.5 mt-0.5">
+                          <Show when={def.model}>
+                            <span class="text-[9px] px-1 bg-bg-main text-accent-info">
+                              {def.model}
+                            </span>
+                          </Show>
+                          <Show when={def.permissionMode}>
+                            <span class="text-[9px] px-1 bg-bg-main text-accent-warning">
+                              {def.permissionMode}
+                            </span>
+                          </Show>
+                        </div>
                       </div>
+                      <button
+                        type="button"
+                        class="opacity-0 group-hover:opacity-100 shrink-0 mt-0.5 px-1.5 py-0.5 text-[10px] text-text-dim hover:text-text-main border border-border-subtle hover:border-accent-primary cursor-pointer transition-opacity"
+                        onClick={() => launchAgent(def)}
+                        disabled={!worktreePath()}
+                      >
+                        Launch
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      class="opacity-0 group-hover:opacity-100 shrink-0 mt-0.5 px-1.5 py-0.5 text-[10px] text-text-dim hover:text-text-main border border-border-subtlehover:border-accent-primary cursor-pointer transition-opacity"
-                      onClick={() => launchAgent(def)}
-                      disabled={!worktreePath()}
-                    >
-                      Launch
-                    </button>
-                  </div>
-                )}
-              </For>
+                  )}
+                </For>
+              </div>
             </div>
           </div>
         </Show>
