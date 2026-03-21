@@ -1,13 +1,12 @@
 import { listen } from '@tauri-apps/api/event';
 import { ArrowLeft, Clock, ExternalLink, GitBranch, Square } from 'lucide-solid';
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
-import { cancelQueue, getQueueStatus } from '../../lib/commands/run';
+import { cancelQueue, getQueueStatus, respondToPermission } from '../../lib/commands/run';
 import { getLayoutStore } from '../../lib/stores/layout';
 import { getRepoStore } from '../../lib/stores/repo';
 import { getTaskStore, worktreePathFromTaskPath } from '../../lib/stores/task';
 import type { QueuedRun, QueueStatus } from '../../types/github';
 import type { RunInfo, RunStatusEvent, RunStepEvent } from '../../types/run';
-import { ApprovalBanner } from '../task/ApprovalModal';
 import { TaskBadge } from '../task/TaskBadge';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
@@ -48,13 +47,18 @@ function RunCard(props: {
     return taskStore.state.tasksByWorktree[key] ?? null;
   };
 
+  const pendingPerms = () => taskStore.state.pendingPermissions;
+  const hasPending = () => pendingPerms().length > 0 && props.status === 'running';
+
   return (
     <div
       class={`bg-bg-main border transition-colors duration-150 ${
-        props.expanded
-          ? 'border-accent-primary/50 col-span-full'
-          : 'border-border-subtle hover:border-accent-primary/30'
-      }`}
+        hasPending()
+          ? 'border-accent-warning/50'
+          : props.expanded
+            ? 'border-accent-primary/50 col-span-full'
+            : 'border-border-subtle hover:border-accent-primary/30'
+      } ${props.expanded ? 'col-span-full' : ''}`}
     >
       <button
         type="button"
@@ -62,9 +66,17 @@ function RunCard(props: {
         onClick={props.onToggle}
       >
         <div class="flex items-start justify-between mb-2">
-          <span class="text-xs font-medium group-hover:text-accent-primary transition-colors duration-150">
-            {props.name}
-          </span>
+          <div class="flex items-center gap-1.5">
+            <Show when={hasPending()}>
+              <span class="relative flex h-2 w-2 shrink-0">
+                <span class="absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75 animate-ping" />
+                <span class="relative inline-flex rounded-full h-2 w-2 bg-red-400" />
+              </span>
+            </Show>
+            <span class="text-xs font-medium group-hover:text-accent-primary transition-colors duration-150">
+              {props.name}
+            </span>
+          </div>
           <Badge variant={statusVariant(props.status)}>{props.status.toUpperCase()}</Badge>
         </div>
         <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-text-dim font-mono">
@@ -149,6 +161,49 @@ function RunCard(props: {
               </>
             )}
           </Show>
+
+          {/* Inline permission approval */}
+          <For each={pendingPerms()}>
+            {(perm) => (
+              <div class="border border-accent-warning/30 bg-accent-warning/5 p-2 mt-1">
+                <div class="flex items-center gap-2 text-[10px] mb-1.5">
+                  <span class="text-accent-warning font-medium uppercase tracking-wider">
+                    Permission
+                  </span>
+                  <span class="font-mono text-accent-info">{perm.tool ?? 'unknown'}</span>
+                </div>
+                <Show when={perm.command}>
+                  <div class="text-[10px] text-text-dim font-mono bg-bg-main/50 px-1.5 py-1 mb-1.5 break-all max-h-16 overflow-y-auto">
+                    {perm.command}
+                  </div>
+                </Show>
+                <div class="flex gap-1.5">
+                  <button
+                    type="button"
+                    class="flex-1 px-2 py-1 text-[10px] font-medium text-green-400 border border-green-400/30 hover:bg-green-400/10 cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      taskStore.removePermission(perm.toolUseId);
+                      respondToPermission(perm.toolUseId, 'approve').catch(() => {});
+                    }}
+                  >
+                    Approve
+                  </button>
+                  <button
+                    type="button"
+                    class="flex-1 px-2 py-1 text-[10px] font-medium text-red-400 border border-red-400/30 hover:bg-red-400/10 cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      taskStore.removePermission(perm.toolUseId);
+                      respondToPermission(perm.toolUseId, 'deny').catch(() => {});
+                    }}
+                  >
+                    Deny
+                  </button>
+                </div>
+              </div>
+            )}
+          </For>
 
           {/* Open in workspace button */}
           <Show when={props.onOpenWorkspace}>
@@ -369,7 +424,6 @@ export function OrchestrationView() {
             </For>
           </div>
         </div>
-        <ApprovalBanner />
       </Show>
     </div>
   );
