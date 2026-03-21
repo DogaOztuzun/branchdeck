@@ -1,5 +1,5 @@
 import { createMemo, createSignal, For, Match, onMount, Show, Switch } from 'solid-js';
-import { enrichPrSummary, listAllOpenPrs } from '../../lib/commands/github';
+import { enrichPrSummary, listOpenPrs } from '../../lib/commands/github';
 import { batchLaunch, shepherdPr } from '../../lib/commands/run';
 import { getLayoutStore } from '../../lib/stores/layout';
 import { getRepoStore } from '../../lib/stores/repo';
@@ -67,6 +67,8 @@ export function PrList() {
   const [selectedPrs, setSelectedPrs] = createSignal<Set<string>>(new Set());
   const [batchRunning, setBatchRunning] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
+  // Map GitHub repo name → local repo path (built during loadPrs)
+  const [repoNameToPath, setRepoNameToPath] = createSignal<Map<string, string>>(new Map());
 
   const filteredPrs = createMemo(() => {
     let list = prs();
@@ -87,6 +89,10 @@ export function PrList() {
   });
 
   function repoPathForName(repoName: string): string | undefined {
+    // Prefer the mapping built during loadPrs (GitHub name → local path)
+    const mapped = repoNameToPath().get(repoName);
+    if (mapped) return mapped;
+    // Fallback: match by local folder name
     return repoStore.state.repos.find((r) => r.name === repoName || r.path.endsWith(`/${repoName}`))
       ?.path;
   }
@@ -159,16 +165,33 @@ export function PrList() {
     setPrsLoading(true);
     try {
       const repos = repoStore.state.repos;
-      const repoPaths = repos.map((r) => r.path);
-      if (repoPaths.length === 0) {
+      if (repos.length === 0) {
         setPrs([]);
         return;
       }
-      const result = await listAllOpenPrs(repoPaths);
-      setPrs(result);
 
-      for (const pr of result) {
-        const rp = repoPathForName(pr.repoName);
+      // Load PRs per-repo to build GitHub name → local path mapping
+      const allPrs: PrSummary[] = [];
+      const nameMap = new Map<string, string>();
+
+      for (const repo of repos) {
+        try {
+          const repoPrs = await listOpenPrs(repo.path);
+          for (const pr of repoPrs) {
+            nameMap.set(pr.repoName, repo.path);
+            allPrs.push(pr);
+          }
+        } catch {
+          // Skip unreachable repos
+        }
+      }
+
+      setRepoNameToPath(nameMap);
+      setPrs(allPrs);
+
+      // Enrich PRs with CI status
+      for (const pr of allPrs) {
+        const rp = nameMap.get(pr.repoName);
         if (!rp) continue;
         try {
           const enriched = await enrichPrSummary(rp, pr);
