@@ -1,7 +1,9 @@
 import { listen } from '@tauri-apps/api/event';
-import { Clock, GitBranch, Square } from 'lucide-solid';
+import { ArrowLeft, Clock, GitBranch, Square } from 'lucide-solid';
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { cancelQueue, getQueueStatus } from '../../lib/commands/run';
+import { getLayoutStore } from '../../lib/stores/layout';
+import { getRepoStore } from '../../lib/stores/repo';
 import type { QueuedRun, QueueStatus } from '../../types/github';
 import type { RunInfo, RunStatusEvent, RunStepEvent } from '../../types/run';
 import { Badge } from '../ui/Badge';
@@ -30,9 +32,14 @@ function RunCard(props: {
   branch?: string;
   elapsed?: string;
   lastStep?: string;
+  onClick?: () => void;
 }) {
   return (
-    <div class="p-3 bg-bg-main border border-border-subtle hover:border-text-dim transition-colors duration-150 cursor-pointer group">
+    <button
+      type="button"
+      class="w-full text-left p-3 bg-bg-main border border-border-subtle hover:border-accent-primary/50 transition-colors duration-150 cursor-pointer group"
+      onClick={props.onClick}
+    >
       <div class="flex items-start justify-between mb-2">
         <span class="text-xs font-medium group-hover:text-accent-primary transition-colors duration-150">
           {props.name}
@@ -58,7 +65,7 @@ function RunCard(props: {
           {props.lastStep}
         </div>
       </Show>
-    </div>
+    </button>
   );
 }
 
@@ -74,11 +81,13 @@ function worktreeLabel(path: string): string {
 }
 
 export function OrchestrationView() {
+  const layout = getLayoutStore();
+  const repoStore = getRepoStore();
   const [queue, setQueue] = createSignal<QueueStatus | null>(null);
   const [activeRun, setActiveRun] = createSignal<RunInfo | null>(null);
   const [lastSteps, setLastSteps] = createSignal<Record<string, string>>({});
   const [completedRuns, setCompletedRuns] = createSignal<
-    { name: string; status: RunCardStatus; elapsed: string }[]
+    { name: string; status: RunCardStatus; elapsed: string; worktreePath: string }[]
   >([]);
 
   onMount(async () => {
@@ -117,6 +126,7 @@ export function OrchestrationView() {
           name: sid,
           status: e.payload.type === 'run_complete' ? 'succeeded' : 'failed',
           elapsed: '',
+          worktreePath: '',
         },
       ]);
     }).then((fn) => unlisteners.push(fn));
@@ -132,6 +142,15 @@ export function OrchestrationView() {
   const hasActive = () => !!queue()?.active;
   const isIdle = () => !queue();
 
+  function handleCardClick(worktreePath: string) {
+    if (!worktreePath) return;
+    const activeRepo = repoStore.state.activeRepoPath;
+    if (activeRepo) {
+      repoStore.selectRepoAndWorktree(activeRepo, worktreePath);
+    }
+    layout.navigateToTask(worktreePath);
+  }
+
   return (
     <div class="flex-1 flex flex-col overflow-hidden bg-bg-main">
       <Show
@@ -141,22 +160,42 @@ export function OrchestrationView() {
             <div class="text-center">
               <div class="text-sm text-text-dim mb-2">No active orchestrations</div>
               <div class="text-[10px] text-text-dim">
-                Use the queue or batch launch to start orchestrated runs across repos.
+                Use the PRs panel to batch shepherd and start orchestrated runs.
               </div>
+              <button
+                type="button"
+                class="mt-3 text-[10px] text-accent-primary hover:text-accent-primary/80 cursor-pointer"
+                onClick={() => {
+                  layout.setActiveView('workspace');
+                  layout.showRightPanel({ kind: 'prs' });
+                }}
+              >
+                Open PRs panel
+              </button>
             </div>
           </div>
         }
       >
         {/* Header */}
         <div class="p-4 border-b border-border-subtle flex items-center justify-between bg-bg-sidebar/30">
-          <div>
-            <h2 class="text-sm font-bold">Batch Queue</h2>
-            <p class="text-[10px] text-text-dim mt-1">
-              {hasActive() ? '1 running' : ''}
-              {totalQueued() > 0 ? ` · ${totalQueued()} queued` : ''}
-              {totalCompleted() > 0 ? ` · ${totalCompleted()} done` : ''}
-              {totalFailed() > 0 ? ` · ${totalFailed()} failed` : ''}
-            </p>
+          <div class="flex items-center gap-3">
+            <button
+              type="button"
+              class="text-text-dim hover:text-text-main cursor-pointer p-1"
+              title="Back to Workspace"
+              onClick={() => layout.setActiveView('workspace')}
+            >
+              <ArrowLeft size={16} />
+            </button>
+            <div>
+              <h2 class="text-sm font-bold">Batch Queue</h2>
+              <p class="text-[10px] text-text-dim mt-1">
+                {hasActive() ? '1 running' : ''}
+                {totalQueued() > 0 ? ` · ${totalQueued()} queued` : ''}
+                {totalCompleted() > 0 ? ` · ${totalCompleted()} done` : ''}
+                {totalFailed() > 0 ? ` · ${totalFailed()} failed` : ''}
+              </p>
+            </div>
           </div>
           <Button variant="danger" size="compact" onClick={() => cancelQueue().catch(() => {})}>
             <Square size={10} class="mr-1.5" />
@@ -175,18 +214,33 @@ export function OrchestrationView() {
                   status="running"
                   elapsed={formatElapsed(run().elapsedSecs)}
                   lastStep={lastSteps()[run().sessionId ?? ''] ?? undefined}
+                  onClick={() => handleCardClick(run().taskPath)}
                 />
               )}
             </Show>
 
             {/* Queued runs */}
             <For each={queue()?.queued ?? []}>
-              {(qr: QueuedRun) => <RunCard name={worktreeLabel(qr.worktreePath)} status="queued" />}
+              {(qr: QueuedRun) => (
+                <RunCard
+                  name={worktreeLabel(qr.worktreePath)}
+                  status="queued"
+                  branch={worktreeLabel(qr.worktreePath)}
+                  onClick={() => handleCardClick(qr.worktreePath)}
+                />
+              )}
             </For>
 
-            {/* Completed runs (accumulated this session) */}
+            {/* Completed runs */}
             <For each={completedRuns()}>
-              {(r) => <RunCard name={r.name} status={r.status} elapsed={r.elapsed} />}
+              {(r) => (
+                <RunCard
+                  name={r.name}
+                  status={r.status}
+                  elapsed={r.elapsed}
+                  onClick={() => handleCardClick(r.worktreePath)}
+                />
+              )}
             </For>
           </div>
         </div>
