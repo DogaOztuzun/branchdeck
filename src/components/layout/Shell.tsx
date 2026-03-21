@@ -24,11 +24,11 @@ export function Shell() {
         >
           <RepoSidebar />
         </Panel>
-        <ResizeHandle class="w-1 bg-border hover:bg-primary transition-colors cursor-col-resize" />
+        <ResizeHandle class="w-1 bg-border-subtle hover:bg-accent-primary transition-colors cursor-col-resize" />
         <Panel id="terminal" initialSize={64} minSize={30} class="h-full">
           <TerminalArea />
         </Panel>
-        <ResizeHandle class="w-1 bg-border hover:bg-primary transition-colors cursor-col-resize" />
+        <ResizeHandle class="w-1 bg-border-subtle hover:bg-accent-primary transition-colors cursor-col-resize" />
         <Panel
           id="right-sidebar"
           initialSize={18}

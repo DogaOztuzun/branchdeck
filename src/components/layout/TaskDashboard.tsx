@@ -10,6 +10,7 @@ import { parseArtifactSummary } from '../../lib/utils';
 import type { PrSummary } from '../../types/github';
 import type { TaskInfo, TaskStatus } from '../../types/task';
 import { TaskBadge } from '../task/TaskBadge';
+import { Button } from '../ui/Button';
 
 type DashboardTab = 'prs' | 'tasks';
 
@@ -60,7 +61,7 @@ function CiBadge(props: { status: string | null }) {
         <span class="text-[10px] font-medium text-green-400">passing</span>
       </Match>
       <Match when={!props.status}>
-        <span class="text-[10px] text-text-muted">no CI</span>
+        <span class="text-[10px] text-text-dim">no CI</span>
       </Match>
     </Switch>
   );
@@ -71,7 +72,7 @@ function ReviewBadge(props: { decision: string | null }) {
     <Show when={props.decision}>
       {(d) => (
         <span
-          class={`text-[10px] font-medium ${d() === 'changes_requested' ? 'text-orange-400' : d() === 'approved' ? 'text-green-400' : 'text-text-muted'}`}
+          class={`text-[10px] font-medium ${d() === 'changes_requested' ? 'text-orange-400' : d() === 'approved' ? 'text-green-400' : 'text-text-dim'}`}
         >
           {d() === 'changes_requested' ? 'changes req.' : d()}
         </span>
@@ -325,19 +326,19 @@ export function TaskDashboard() {
   }
 
   return (
-    <div class="h-full flex flex-col bg-surface overflow-hidden">
-      <div class="px-3 py-2 border-b border-border flex items-center justify-between">
+    <div class="h-full flex flex-col bg-bg-sidebar overflow-hidden">
+      <div class="px-3 py-2 border-b border-border-subtle flex items-center justify-between">
         <div class="flex items-center gap-0">
           <button
             type="button"
-            class={`text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-l cursor-pointer ${activeTab() === 'prs' ? 'bg-bg text-text' : 'text-text-muted hover:text-text'}`}
+            class={`text-xs font-bold uppercase tracking-wider px-2 py-0.5 sharp cursor-pointer ${activeTab() === 'prs' ? 'bg-bg-main text-text-main' : 'text-text-dim hover:text-text-main'}`}
             onClick={() => setActiveTab('prs')}
           >
             PRs ({prs().length})
           </button>
           <button
             type="button"
-            class={`text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-r cursor-pointer ${activeTab() === 'tasks' ? 'bg-bg text-text' : 'text-text-muted hover:text-text'}`}
+            class={`text-xs font-bold uppercase tracking-wider px-2 py-0.5 sharp cursor-pointer ${activeTab() === 'tasks' ? 'bg-bg-main text-text-main' : 'text-text-dim hover:text-text-main'}`}
             onClick={() => setActiveTab('tasks')}
           >
             Tasks ({items().length})
@@ -345,7 +346,7 @@ export function TaskDashboard() {
         </div>
         <button
           type="button"
-          class="text-text-muted hover:text-text cursor-pointer"
+          class="text-text-dim hover:text-text-main cursor-pointer"
           title="Refresh"
           onClick={refreshAll}
         >
@@ -368,9 +369,9 @@ export function TaskDashboard() {
 
       <div class="flex-1 overflow-y-auto">
         <Show when={activeTab() === 'prs'}>
-          <div class="px-2 py-1.5 flex items-center gap-1.5 border-b border-border/50">
+          <div class="px-2 py-1.5 flex items-center gap-1.5 border-b border-border-subtle/50">
             <select
-              class="text-[10px] bg-bg text-text rounded px-1 py-0.5 border border-border/50"
+              class="text-[10px] bg-bg-main text-text-main px-1.5 py-0.5 border border-border-subtle/50 cursor-pointer [&>option]:bg-bg-main [&>option]:text-text-main"
               value={authorFilter()}
               onChange={(e) => setAuthorFilter(e.currentTarget.value)}
             >
@@ -378,7 +379,7 @@ export function TaskDashboard() {
               <For each={authors()}>{(a) => <option value={a}>{a}</option>}</For>
             </select>
             <select
-              class="text-[10px] bg-bg text-text rounded px-1 py-0.5 border border-border/50"
+              class="text-[10px] bg-bg-main text-text-main px-1.5 py-0.5 border border-border-subtle/50 cursor-pointer [&>option]:bg-bg-main [&>option]:text-text-main"
               value={ciFilter()}
               onChange={(e) => setCiFilter(e.currentTarget.value)}
             >
@@ -392,25 +393,26 @@ export function TaskDashboard() {
           <Switch>
             <Match when={prsLoading()}>
               <div class="space-y-1 p-2">
-                <div class="animate-pulse bg-bg/50 rounded h-12" />
-                <div class="animate-pulse bg-bg/50 rounded h-12" />
+                <div class="animate-pulse bg-bg-main/50 h-12" />
+                <div class="animate-pulse bg-bg-main/50 h-12" />
               </div>
             </Match>
             <Match when={filteredPrs().length === 0}>
-              <div class="text-xs text-text-muted text-center px-3 py-4">
+              <div class="text-xs text-text-dim text-center px-3 py-4">
                 <p>No open PRs found</p>
                 <p class="mt-1 opacity-70">Add repos to your workspace to see their PRs</p>
               </div>
             </Match>
             <Match when={filteredPrs().length > 0}>
-              <div class="p-1">
+              <div class="divide-y divide-border-subtle/30">
                 <For each={filteredPrs()}>
                   {(pr) => (
-                    <div class="w-full text-left px-2 py-1.5 rounded text-xs hover:bg-bg/50">
-                      <div class="flex items-center justify-between gap-1">
+                    <div class="px-3 py-2 text-xs hover:bg-bg-main/30 transition-colors duration-150">
+                      {/* Row 1: PR number + title (full width) */}
+                      <div class="flex items-start gap-1.5">
                         <input
                           type="checkbox"
-                          class="shrink-0 accent-accent cursor-pointer"
+                          class="shrink-0 mt-0.5 accent-accent-primary cursor-pointer"
                           checked={selectedPrs().has(prKey(pr))}
                           onChange={() => togglePrSelection(pr)}
                         />
@@ -418,26 +420,18 @@ export function TaskDashboard() {
                           href={pr.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          class="truncate hover:underline"
-                          title={`PR #${pr.number} by ${pr.author}`}
+                          class="min-w-0 hover:underline"
+                          title={pr.title}
                         >
-                          <span class="text-text-muted">{pr.repoName}</span>
-                          <span class="text-text-muted"> · </span>
-                          <span class="text-text">#{pr.number}</span>
-                          <span class="text-text-muted"> </span>
-                          <span class="text-text">{pr.title}</span>
+                          <span class="text-[11px] font-medium text-accent-primary">
+                            #{pr.number}
+                          </span>{' '}
+                          <span class="text-[11px] text-text-main">{pr.title}</span>
                         </a>
-                        <button
-                          type="button"
-                          class={`shrink-0 text-[10px] px-1.5 py-0.5 rounded cursor-pointer ${shepherding() === pr.number ? 'bg-accent/10 text-accent/50' : 'bg-accent/20 text-accent hover:bg-accent/30'}`}
-                          title="Create worktree + task and launch shepherd"
-                          disabled={shepherding() !== null}
-                          onClick={() => handleShepherd(pr)}
-                        >
-                          {shepherding() === pr.number ? 'Starting...' : 'Shepherd'}
-                        </button>
                       </div>
-                      <div class="flex items-center gap-2 mt-0.5 text-[10px] text-text-muted">
+                      {/* Row 2: repo + metadata */}
+                      <div class="flex items-center gap-2 mt-1 text-[10px] text-text-dim pl-5">
+                        <span class="truncate">{pr.repoName}</span>
                         <CiBadge status={pr.ciStatus} />
                         <ReviewBadge decision={pr.reviewDecision} />
                         <Show when={pr.additions != null || pr.deletions != null}>
@@ -446,13 +440,26 @@ export function TaskDashboard() {
                             <span class="text-red-400"> -{pr.deletions ?? 0}</span>
                           </span>
                         </Show>
-                        <Show when={pr.changedFiles != null}>
-                          <span>{pr.changedFiles} files</span>
-                        </Show>
                         <Show when={pr.createdAt}>
                           <span>{formatAge(pr.createdAt)}</span>
                         </Show>
-                        <span class="ml-auto">{pr.author}</span>
+                      </div>
+                      {/* Row 3: author + shepherd action */}
+                      <div class="flex items-center justify-between mt-1 pl-5">
+                        <span class="text-[10px] text-text-dim">{pr.author}</span>
+                        <button
+                          type="button"
+                          class={`text-[10px] font-medium px-2 py-0.5 border cursor-pointer transition-colors duration-150 ${
+                            shepherding() === pr.number
+                              ? 'border-accent-primary/30 text-accent-primary/50 bg-accent-primary/5'
+                              : 'border-border-subtle text-text-dim hover:text-accent-primary hover:border-accent-primary/50 hover:bg-accent-primary/5'
+                          }`}
+                          title="Create worktree + task and launch shepherd"
+                          disabled={shepherding() !== null}
+                          onClick={() => handleShepherd(pr)}
+                        >
+                          {shepherding() === pr.number ? '...' : 'Shepherd'}
+                        </button>
                       </div>
                     </div>
                   )}
@@ -461,15 +468,15 @@ export function TaskDashboard() {
             </Match>
           </Switch>
           <Show when={selectedPrs().size > 0}>
-            <div class="px-2 py-1.5 border-t border-border/50">
-              <button
-                type="button"
-                class={`w-full text-xs px-2 py-1 rounded cursor-pointer ${batchRunning() ? 'bg-accent/10 text-accent/50' : 'bg-accent/20 text-accent hover:bg-accent/30'}`}
+            <div class="px-2 py-1.5 border-t border-border-subtle/50">
+              <Button
+                variant="primary"
+                class="w-full"
                 disabled={batchRunning()}
                 onClick={handleBatchShepherd}
               >
                 {batchRunning() ? 'Starting batch...' : `Shepherd Selected (${selectedPrs().size})`}
-              </button>
+              </Button>
             </div>
           </Show>
         </Show>
@@ -478,46 +485,71 @@ export function TaskDashboard() {
           <Switch>
             <Match when={loading()}>
               <div class="space-y-1 p-2">
-                <div class="animate-pulse bg-bg/50 rounded h-10" />
-                <div class="animate-pulse bg-bg/50 rounded h-10" />
-                <div class="animate-pulse bg-bg/50 rounded h-10" />
+                <div class="animate-pulse bg-bg-main/50h-10" />
+                <div class="animate-pulse bg-bg-main/50h-10" />
+                <div class="animate-pulse bg-bg-main/50h-10" />
               </div>
             </Match>
             <Match when={items().length === 0}>
-              <div class="text-xs text-text-muted text-center px-3 py-4">
+              <div class="text-xs text-text-dim text-center px-3 py-4">
                 <p>No tasks yet</p>
                 <p class="mt-1 opacity-70">Create a task from the Team sidebar</p>
               </div>
             </Match>
             <Match when={items().length > 0}>
               <Show when={!hasActiveItems()}>
-                <div class="text-xs text-text-muted text-center px-3 py-3">All quiet</div>
+                <div class="px-3 py-2 border-b border-border-subtle/30 text-[10px] text-text-dim flex items-center gap-1.5">
+                  <span class="inline-block w-1.5 h-1.5 rounded-full bg-accent-success/50" />
+                  All quiet
+                </div>
               </Show>
-              <div class="p-1">
+              <div class="divide-y divide-border-subtle/20">
                 <For each={sortedItems()}>
                   {(item) => (
                     <button
                       type="button"
-                      class={`w-full text-left px-2 py-1.5 rounded text-xs hover:bg-bg/50 cursor-pointer ${item.task.frontmatter.status === 'blocked' ? 'border-l-2 border-yellow-400' : ''}`}
+                      class={`w-full text-left px-3 py-2.5 text-xs hover:bg-bg-main/30 cursor-pointer border-l-2 transition-colors duration-150 ${
+                        item.task.frontmatter.status === 'running'
+                          ? 'border-l-blue-400'
+                          : item.task.frontmatter.status === 'blocked'
+                            ? 'border-l-yellow-400'
+                            : item.task.frontmatter.status === 'failed'
+                              ? 'border-l-red-400'
+                              : item.task.frontmatter.status === 'succeeded'
+                                ? 'border-l-emerald-400'
+                                : item.task.frontmatter.status === 'cancelled'
+                                  ? 'border-l-zinc-500'
+                                  : 'border-l-zinc-600'
+                      }`}
                       title={`${item.task.frontmatter.type} · ${item.task.frontmatter['run-count']} runs`}
                       onClick={() => handleCardClick(item)}
                     >
-                      <div class="flex items-center justify-between gap-1">
-                        <span class="truncate">
-                          <span class="text-text-muted">{item.repoName}</span>
-                          <span class="text-text-muted">/</span>
-                          <span class="text-text">{item.branch}</span>
-                        </span>
+                      {/* Row 1: branch name (full width) */}
+                      <div class="text-[11px] text-text-main font-medium truncate">
+                        {item.branch}
+                      </div>
+                      {/* Row 2: repo + badge */}
+                      <div class="flex items-center justify-between mt-0.5">
+                        <span class="text-[10px] text-text-dim">{item.repoName}</span>
                         <TaskBadge status={item.task.frontmatter.status} />
                       </div>
-                      <div class="flex items-center gap-1.5 mt-0.5 text-[10px] text-text-muted">
+                      {/* Row 3: metadata */}
+                      <div class="flex items-center gap-2 mt-1 text-[10px] text-text-dim">
+                        <span class="capitalize">
+                          {item.task.frontmatter.type.replace('-', ' ')}
+                        </span>
+                        <Show when={item.task.frontmatter['run-count'] > 0}>
+                          <span>{item.task.frontmatter['run-count']} runs</span>
+                        </Show>
                         <Show
                           when={
                             taskStore.state.activeRun?.taskPath === item.task.path &&
                             taskStore.state.activeRun?.costUsd
                           }
                         >
-                          <span>${taskStore.state.activeRun?.costUsd?.toFixed(3)}</span>
+                          <span class="text-accent-primary">
+                            ${taskStore.state.activeRun?.costUsd?.toFixed(3)}
+                          </span>
                         </Show>
                         <Show when={parseArtifactSummary(item.task.body)}>
                           {(artifacts) => (
@@ -529,7 +561,7 @@ export function TaskDashboard() {
                                 </span>
                               </Show>
                               <Show when={artifacts().pr}>
-                                <span class="text-info">PR #{artifacts().pr}</span>
+                                <span class="text-accent-info">PR #{artifacts().pr}</span>
                               </Show>
                             </>
                           )}

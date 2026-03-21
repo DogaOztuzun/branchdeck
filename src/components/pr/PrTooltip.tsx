@@ -143,7 +143,7 @@ export function PrTooltip(props: PrTooltipProps) {
     <Portal>
       {/* biome-ignore lint/a11y/noStaticElementInteractions: tooltip hover behavior, not interactive content */}
       <div
-        class="fixed z-50 max-w-[320px] rounded-lg border border-border bg-surface p-3 text-xs shadow-lg space-y-2"
+        class="fixed z-50 max-w-[320px] border border-border-subtle bg-bg-sidebar p-3 text-xs shadow-lg space-y-2"
         style={{
           top: `${position().top}px`,
           left: `${position().left}px`,
@@ -181,10 +181,10 @@ export function PrTooltip(props: PrTooltipProps) {
 
         {/* Reviews section */}
         <div>
-          <h4 class="mb-1 font-semibold text-muted">Reviews</h4>
+          <h4 class="mb-1 font-semibold text-text-dim">Reviews</h4>
           {props.pr.reviewDecision && (
             <span
-              class="mb-1 inline-block rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none"
+              class="mb-1 inline-block px-1.5 py-0.5 text-[10px] font-medium leading-none"
               style={{
                 'background-color': reviewColor(props.pr.reviewDecision),
                 color: '#1a1b26',
@@ -194,19 +194,34 @@ export function PrTooltip(props: PrTooltipProps) {
             </span>
           )}
           {props.pr.reviews.length === 0 ? (
-            <p class="text-muted">No reviews</p>
+            <p class="text-text-dim">No reviews</p>
           ) : (
             <ul class="space-y-0.5">
-              {props.pr.reviews.map((review) => (
-                <li class="flex items-center gap-1.5">
-                  <span
-                    class="inline-block h-2 w-2 rounded-full"
-                    style={{ 'background-color': reviewColor(review.state) }}
-                  />
-                  <span class="text-foreground">{review.user}</span>
-                  <span class="text-muted">{reviewLabel(review.state)}</span>
-                </li>
-              ))}
+              {(() => {
+                const grouped = new Map<string, { user: string; state: string; count: number }>();
+                for (const review of props.pr.reviews) {
+                  const key = `${review.user}:${review.state}`;
+                  const existing = grouped.get(key);
+                  if (existing) {
+                    existing.count++;
+                  } else {
+                    grouped.set(key, { user: review.user, state: review.state, count: 1 });
+                  }
+                }
+                return [...grouped.values()].map((entry) => (
+                  <li class="flex items-center gap-1.5">
+                    <span
+                      class="inline-block h-2 w-2 rounded-full shrink-0"
+                      style={{ 'background-color': reviewColor(entry.state) }}
+                    />
+                    <span class="text-text-main">{entry.user}</span>
+                    <span class="text-text-dim">
+                      {reviewLabel(entry.state)}
+                      {entry.count > 1 ? ` \u00d7${entry.count}` : ''}
+                    </span>
+                  </li>
+                ));
+              })()}
             </ul>
           )}
         </div>
@@ -255,7 +270,7 @@ export function PrTooltip(props: PrTooltipProps) {
 
         {/* Footer */}
         {props.pr.url && (
-          <div class="border-t border-border pt-2">
+          <div class="border-t border-border-subtle pt-2">
             <button
               type="button"
               class="cursor-pointer text-blue-400 hover:underline"

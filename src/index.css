@@ -1,31 +1,43 @@
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap");
 @import "tailwindcss";
 @import "@xterm/xterm/css/xterm.css";
 @import "solid-resizable-panels/styles.css";
 
 @theme {
-  --color-bg: #1a1b26;
-  --color-surface: #24283b;
-  --color-border: #414868;
-  --color-primary: #7aa2f7;
-  --color-text: #c0caf5;
-  --color-text-muted: #565f89;
-  --color-success: #9ece6a;
-  --color-warning: #e0af68;
-  --color-error: #f7768e;
-  --color-info: #7dcfff;
-  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+  --font-sans:
+    "JetBrains Mono", "Fira Code", "Cascadia Code", ui-monospace, SFMono-Regular, monospace;
+  --font-mono:
+    "JetBrains Mono", "Fira Code", "Cascadia Code", ui-monospace, SFMono-Regular, monospace;
+
+  --color-bg-main: #1a1b26;
+  --color-bg-sidebar: #24283b;
+  --color-bg-panel: #24283b;
+  --color-surface-raised: #292e42;
+  --color-border-subtle: #414868;
+  --color-accent-primary: #7aa2f7;
+  --color-accent-success: #9ece6a;
+  --color-accent-warning: #e0af68;
+  --color-accent-error: #f7768e;
+  --color-accent-info: #7dcfff;
+  --color-text-main: #c0caf5;
+  --color-text-dim: #565f89;
 }
 
 html,
 body,
 #root {
+  color-scheme: dark;
   margin: 0;
   padding: 0;
   height: 100%;
   overflow: hidden;
-  background-color: var(--color-bg);
-  color: var(--color-text);
-  font-family: var(--font-mono);
+  background-color: var(--color-bg-main);
+  color: var(--color-text-main);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Override solid-resizable-panels handle defaults (higher specificity) */
@@ -42,25 +54,77 @@ body,
   left: 50%;
   width: 1px;
   transform: translateX(-50%);
-  background-color: var(--color-border);
+  background-color: var(--color-border-subtle);
   transition:
     width 150ms,
     background-color 150ms;
 }
 .ResizeablePanelGroup-ResizeHandle:hover::after {
   width: 3px;
-  background-color: var(--color-primary);
+  background-color: var(--color-accent-primary);
 }
 
-/* Dark scrollbars */
+/* Dark scrollbars — 4px, sharp */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 4px;
+  height: 4px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--color-bg);
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: 4px;
+  background: var(--color-border-subtle);
+  border-radius: 0;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-dim);
+}
+
+/* Sharp corners utility */
+.sharp {
+  border-radius: 0 !important;
+}
+
+/* Terminal cursor blink */
+.terminal-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 1.2em;
+  background: var(--color-accent-primary);
+  vertical-align: middle;
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  from,
+  to {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Panel header */
+.panel-header {
+  height: 44px;
+  background: var(--color-bg-sidebar);
+  border-bottom: 1px solid var(--color-border-subtle);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+}
+
+/* Tab bar */
+.tab-bar {
+  height: 36px;
+  background: var(--color-bg-sidebar);
+  border-bottom: 1px solid var(--color-border-subtle);
+  display: flex;
+  align-items: center;
+}
+
+/* Selection color */
+::selection {
+  background: rgba(122, 162, 247, 0.3);
 }

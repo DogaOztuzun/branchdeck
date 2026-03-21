@@ -18,6 +18,8 @@ import { ApprovalDialog } from '../task/ApprovalDialog';
 import { CreateTaskModal } from '../task/CreateTaskModal';
 import { RunTimeline } from '../task/RunTimeline';
 import { TaskBadge } from '../task/TaskBadge';
+import { Button } from '../ui/Button';
+import { SectionHeader } from '../ui/SectionHeader';
 import { FileGrid } from './FileGrid';
 
 export function TeamSidebar() {
@@ -28,6 +30,21 @@ export function TeamSidebar() {
   const [definitions, setDefinitions] = createSignal<AgentDefinition[]>([]);
   const [showCreateTask, setShowCreateTask] = createSignal(false);
   const [launchError, setLaunchError] = createSignal<string | null>(null);
+  const [collapsedSections, setCollapsedSections] = createSignal<Set<string>>(new Set());
+  const [agentsCollapsed, setAgentsCollapsed] = createSignal(false);
+
+  function isSectionCollapsed(key: string): boolean {
+    return collapsedSections().has(key);
+  }
+
+  function toggleSection(key: string) {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
   let launchErrorTimer: ReturnType<typeof setTimeout> | undefined;
 
   const repoPath = () => repoStore.state.activeRepoPath ?? '';
@@ -147,27 +164,27 @@ export function TeamSidebar() {
   });
 
   return (
-    <div class="flex flex-col h-full bg-surface">
+    <div class="flex flex-col h-full bg-bg-sidebar">
       {/* Header */}
-      <div class="px-3 py-2 border-b border-border">
-        <span class="text-xs font-bold uppercase text-text-muted tracking-wider">Team</span>
+      <div class="px-3 py-2 border-b border-border-subtle">
+        <span class="text-xs font-bold uppercase text-text-dim tracking-wider">Team</span>
       </div>
 
       {/* File Grid */}
       <Show when={worktreePath()}>
-        <div class="border-b border-border">
+        <div class="border-b border-border-subtle">
           <FileGrid worktreePath={worktreePath()} />
         </div>
       </Show>
 
       {/* Tasks */}
-      <div class="px-2 py-1.5 border-b border-border">
+      <div class="px-2 py-1.5 border-b border-border-subtle">
         <div class="flex items-center justify-between px-1">
-          <span class="text-[10px] uppercase text-text-muted tracking-wider">Tasks</span>
+          <span class="text-[10px] uppercase text-text-dim tracking-wider">Tasks</span>
           <Show when={worktreePath() && !activeWorktreeHasTask()}>
             <button
               type="button"
-              class="text-[10px] text-text-muted hover:text-text cursor-pointer"
+              class="text-[10px] text-text-dim hover:text-text-main cursor-pointer"
               onClick={() => setShowCreateTask(true)}
             >
               + New Task
@@ -178,102 +195,107 @@ export function TeamSidebar() {
           when={tasksWithWorktree().length > 0}
           fallback={
             <Show when={worktreePath()}>
-              <div class="px-2 py-2 text-[10px] text-text-muted text-center">No tasks yet</div>
+              <div class="px-2 py-2 text-[10px] text-text-dim text-center">No tasks yet</div>
             </Show>
           }
         >
-          <div class="mt-1 space-y-0.5">
+          <div class="mt-1 divide-y divide-border-subtle/20">
             <For each={tasksWithWorktree()}>
               {(item) => (
-                <div class="px-2 py-1.5 rounded text-xs hover:bg-bg/50">
-                  <div class="flex items-center gap-2">
-                    <div class="flex-1 min-w-0">
-                      <div class="flex items-center gap-1.5">
-                        <span class="text-text truncate">{item.worktree.branch}</span>
-                        <TaskBadge status={item.task.frontmatter.status} />
-                      </div>
-                    </div>
-                    {/* Launch button for newly created tasks only */}
-                    <Show when={canLaunch() && item.task.frontmatter.status === 'created'}>
-                      <button
-                        type="button"
-                        class="shrink-0 px-1.5 py-0.5 text-[10px] text-text-muted hover:text-text border border-border rounded hover:border-primary cursor-pointer"
-                        onClick={() => handleLaunch(item.task, item.worktree.path)}
-                      >
-                        Launch
-                      </button>
-                    </Show>
-                    {/* Cancel button for running tasks */}
-                    <Show
-                      when={taskStore.state.activeRun && item.task.frontmatter.status === 'running'}
-                    >
-                      <button
-                        type="button"
-                        class="shrink-0 px-1.5 py-0.5 text-[10px] text-red-400 hover:text-red-300 border border-border rounded hover:border-red-400 cursor-pointer"
-                        onClick={() => cancelRun().catch(() => {})}
-                      >
-                        Cancel
-                      </button>
-                    </Show>
-                    {/* Retry/Resume for failed/cancelled — only when no other run is active */}
-                    <Show
-                      when={
-                        canLaunch() &&
-                        (item.task.frontmatter.status === 'failed' ||
-                          item.task.frontmatter.status === 'cancelled')
-                      }
-                    >
-                      <button
-                        type="button"
-                        class="shrink-0 px-1.5 py-0.5 text-[10px] text-text-muted hover:text-text border border-border rounded hover:border-primary cursor-pointer"
-                        onClick={() => retryRun(item.task.path, item.worktree.path).catch(() => {})}
-                      >
-                        Retry
-                      </button>
-                      <button
-                        type="button"
-                        class="shrink-0 px-1.5 py-0.5 text-[10px] text-text-muted hover:text-text border border-border rounded hover:border-info cursor-pointer"
-                        onClick={() =>
-                          resumeRun(item.task.path, item.worktree.path).catch(() => {})
-                        }
-                      >
-                        Resume
-                      </button>
-                    </Show>
+                <div class="px-3 py-2 text-xs hover:bg-bg-main/30 transition-colors duration-150">
+                  {/* Row 1: branch name (full width) */}
+                  <div class="text-[11px] text-text-main font-medium truncate">
+                    {item.worktree.branch}
                   </div>
-                  {/* Task details row */}
-                  <div class="flex items-center gap-2 mt-0.5 text-[10px] text-text-muted">
-                    <span class="capitalize">{item.task.frontmatter.type.replace('-', ' ')}</span>
+                  {/* Row 2: type + badge */}
+                  <div class="flex items-center justify-between mt-0.5">
+                    <span class="text-[10px] text-text-dim capitalize">
+                      {item.task.frontmatter.type.replace('-', ' ')}
+                    </span>
+                    <TaskBadge status={item.task.frontmatter.status} />
+                  </div>
+                  {/* Row 3: metadata + actions */}
+                  <div class="flex items-center gap-2 mt-1 text-[10px] text-text-dim">
                     <Show when={item.task.frontmatter.pr}>
                       <span>PR #{item.task.frontmatter.pr}</span>
                     </Show>
                     <Show when={item.task.frontmatter['run-count'] > 0}>
                       <span>{item.task.frontmatter['run-count']} runs</span>
                     </Show>
+                    <Show when={parseArtifactSummary(item.task.body)}>
+                      {(artifacts) => (
+                        <>
+                          <Show when={artifacts().totalCommits > 0}>
+                            <span>
+                              {artifacts().totalCommits} commit
+                              {artifacts().totalCommits === 1 ? '' : 's'}
+                            </span>
+                          </Show>
+                          <Show when={artifacts().pr}>
+                            <span class="text-accent-info">PR #{artifacts().pr}</span>
+                          </Show>
+                        </>
+                      )}
+                    </Show>
+                    {/* Action buttons */}
+                    <div class="ml-auto flex items-center gap-1">
+                      <Show when={canLaunch() && item.task.frontmatter.status === 'created'}>
+                        <button
+                          type="button"
+                          class="px-1.5 py-0.5 text-[10px] text-text-dim hover:text-text-main border border-border-subtle hover:border-accent-primary cursor-pointer"
+                          onClick={() => handleLaunch(item.task, item.worktree.path)}
+                        >
+                          Launch
+                        </button>
+                      </Show>
+                      <Show
+                        when={
+                          taskStore.state.activeRun && item.task.frontmatter.status === 'running'
+                        }
+                      >
+                        <button
+                          type="button"
+                          class="px-1.5 py-0.5 text-[10px] text-red-400 hover:text-red-300 border border-border-subtle hover:border-red-400 cursor-pointer"
+                          onClick={() => cancelRun().catch(() => {})}
+                        >
+                          Cancel
+                        </button>
+                      </Show>
+                      <Show
+                        when={
+                          canLaunch() &&
+                          (item.task.frontmatter.status === 'failed' ||
+                            item.task.frontmatter.status === 'cancelled')
+                        }
+                      >
+                        <button
+                          type="button"
+                          class="px-1.5 py-0.5 text-[10px] text-text-dim hover:text-text-main border border-border-subtle hover:border-accent-primary cursor-pointer"
+                          onClick={() =>
+                            retryRun(item.task.path, item.worktree.path).catch(() => {})
+                          }
+                        >
+                          Retry
+                        </button>
+                        <button
+                          type="button"
+                          class="px-1.5 py-0.5 text-[10px] text-text-dim hover:text-text-main border border-border-subtle hover:border-accent-info cursor-pointer"
+                          onClick={() =>
+                            resumeRun(item.task.path, item.worktree.path).catch(() => {})
+                          }
+                        >
+                          Resume
+                        </button>
+                      </Show>
+                    </div>
                   </div>
-                  {/* Artifact summary */}
-                  <Show when={parseArtifactSummary(item.task.body)}>
-                    {(artifacts) => (
-                      <div class="flex items-center gap-1.5 mt-0.5 text-[10px] text-text-muted">
-                        <Show when={artifacts().totalCommits > 0}>
-                          <span>
-                            {artifacts().totalCommits} commit
-                            {artifacts().totalCommits === 1 ? '' : 's'}
-                          </span>
-                        </Show>
-                        <Show when={artifacts().pr}>
-                          <span class="text-info">PR #{artifacts().pr}</span>
-                        </Show>
-                      </div>
-                    )}
-                  </Show>
                 </div>
               )}
             </For>
           </div>
         </Show>
         <Show when={launchError()}>
-          <p class="px-2 mt-1 text-[10px] text-error truncate">{launchError()}</p>
+          <p class="px-2 mt-1 text-[10px] text-accent-error truncate">{launchError()}</p>
         </Show>
       </div>
       {/* PR Context + Prior Knowledge for pr-shepherd tasks */}
@@ -281,37 +303,76 @@ export function TeamSidebar() {
         {(item) => (
           <Show when={item.task.frontmatter.type === 'pr-shepherd'}>
             <Show when={item.task.frontmatter.pr}>
-              <div class="px-2 py-1.5 border-b border-border">
-                <span class="text-[10px] uppercase text-text-muted tracking-wider px-1">
-                  PR Context
-                </span>
-                <div class="px-2 mt-1 text-[10px] text-text-muted space-y-0.5">
-                  <div>PR #{item.task.frontmatter.pr}</div>
-                  <Show when={item.task.body.includes('Failing checks:')}>
-                    <div class="text-red-400">
-                      {item.task.body
-                        .split('\n')
-                        .find((l) => l.includes('Failing checks:'))
-                        ?.replace('- ', '') ?? ''}
+              <div class="border-b border-border-subtle">
+                <SectionHeader
+                  label={`PR #${item.task.frontmatter.pr}`}
+                  collapsed={isSectionCollapsed(`pr:${item.task.path}`)}
+                  onToggle={() => toggleSection(`pr:${item.task.path}`)}
+                />
+                <Show when={!isSectionCollapsed(`pr:${item.task.path}`)}>
+                  <div class="px-3 pb-2 text-[10px] space-y-1.5">
+                    {/* Checks */}
+                    <Show when={item.task.body.includes('Failing checks:')}>
+                      <div class="flex items-center gap-2">
+                        <span class="text-text-dim w-14 shrink-0">Checks</span>
+                        <span class="text-accent-error">
+                          {item.task.body
+                            .split('\n')
+                            .find((l) => l.includes('Failing checks:'))
+                            ?.replace('- Failing checks: ', '')
+                            ?.replace('- ', '') ?? 'failing'}
+                        </span>
+                      </div>
+                    </Show>
+                    <Show when={!item.task.body.includes('Failing checks:')}>
+                      <div class="flex items-center gap-2">
+                        <span class="text-text-dim w-14 shrink-0">Checks</span>
+                        <span class="text-accent-success">passing</span>
+                      </div>
+                    </Show>
+                    {/* Reviews */}
+                    <div class="flex items-center gap-2">
+                      <span class="text-text-dim w-14 shrink-0">Reviews</span>
+                      <span class="text-text-main">
+                        {item.task.body
+                          .split('\n')
+                          .find((l) => l.includes('Reviews:'))
+                          ?.replace('- Reviews: ', '')
+                          ?.replace('- ', '') ?? 'None'}
+                      </span>
                     </div>
-                  </Show>
-                  <Show when={item.task.body.includes('Reviews:')}>
-                    <div>
-                      {item.task.body
-                        .split('\n')
-                        .find((l) => l.includes('Reviews:'))
-                        ?.replace('- ', '') ?? ''}
-                    </div>
-                  </Show>
-                  <Show when={item.task.body.includes('Diff:')}>
-                    <div>
-                      {item.task.body
-                        .split('\n')
-                        .find((l) => l.includes('Diff:'))
-                        ?.replace('- ', '') ?? ''}
-                    </div>
-                  </Show>
-                </div>
+                    {/* Diff */}
+                    <Show when={item.task.body.includes('Diff:')}>
+                      <div class="flex items-center gap-2">
+                        <span class="text-text-dim w-14 shrink-0">Diff</span>
+                        {(() => {
+                          const line =
+                            item.task.body
+                              .split('\n')
+                              .find((l) => l.includes('Diff:'))
+                              ?.replace('- Diff: ', '')
+                              ?.replace('- ', '') ?? '';
+                          const addMatch = line.match(/\+(\d+)/);
+                          const delMatch = line.match(/-(\d+)/);
+                          const fileMatch = line.match(/(\d+)\s*(?:file|across)/);
+                          return (
+                            <span>
+                              <Show when={addMatch}>
+                                <span class="text-green-400">+{addMatch?.[1]}</span>
+                              </Show>{' '}
+                              <Show when={delMatch}>
+                                <span class="text-red-400">-{delMatch?.[1]}</span>
+                              </Show>
+                              <Show when={fileMatch}>
+                                <span class="text-text-dim"> {fileMatch?.[1]} files</span>
+                              </Show>
+                            </span>
+                          );
+                        })()}
+                      </div>
+                    </Show>
+                  </div>
+                </Show>
               </div>
             </Show>
             <Show
@@ -320,23 +381,38 @@ export function TeamSidebar() {
                 !item.task.body.includes('(none yet)')
               }
             >
-              <div class="px-2 py-1.5 border-b border-border">
-                <span class="text-[10px] uppercase text-text-muted tracking-wider px-1">
-                  Prior Knowledge
-                </span>
-                <div class="px-2 mt-1 text-[10px] text-text-muted space-y-0.5">
-                  <For
-                    each={
-                      item.task.body
-                        .split('## Prior Knowledge')[1]
-                        ?.split('\n')
-                        .filter((l) => l.startsWith('- '))
-                        .slice(0, 5) ?? []
-                    }
-                  >
-                    {(line) => <div class="truncate">{line.replace('- ', '')}</div>}
-                  </For>
-                </div>
+              <div class="border-b border-border-subtle">
+                <SectionHeader
+                  label="Prior Knowledge"
+                  collapsed={isSectionCollapsed(`knowledge:${item.task.path}`)}
+                  onToggle={() => toggleSection(`knowledge:${item.task.path}`)}
+                  count={
+                    item.task.body
+                      .split('## Prior Knowledge')[1]
+                      ?.split('\n')
+                      .filter((l) => l.startsWith('- ')).length
+                  }
+                />
+                <Show when={!isSectionCollapsed(`knowledge:${item.task.path}`)}>
+                  <div class="px-3 pb-2">
+                    <div class="text-[10px] text-text-dim space-y-0.5 bg-bg-main/30 px-2 py-1.5 border border-border-subtle/30 max-h-32 overflow-y-auto">
+                      <For
+                        each={
+                          item.task.body
+                            .split('## Prior Knowledge')[1]
+                            ?.split('\n')
+                            .filter((l) => l.startsWith('- ')) ?? []
+                        }
+                      >
+                        {(line) => (
+                          <div class="text-[10px] leading-relaxed break-words">
+                            {line.replace('- ', '')}
+                          </div>
+                        )}
+                      </For>
+                    </div>
+                  </div>
+                </Show>
               </div>
             </Show>
           </Show>
@@ -354,7 +430,7 @@ export function TeamSidebar() {
       {/* Permission Approval Dialogs */}
       <For each={taskStore.state.pendingPermissions}>
         {(perm) => (
-          <div class="border-b border-border">
+          <div class="border-b border-border-subtle">
             <ApprovalDialog
               permission={perm}
               onRespond={(decision) => {
@@ -368,19 +444,19 @@ export function TeamSidebar() {
 
       {/* Active Agents */}
       <Show when={activeAgents().length > 0}>
-        <div class="px-2 py-1.5 border-b border-border">
-          <span class="text-[10px] uppercase text-text-muted tracking-wider px-1">Active</span>
+        <div class="border-b border-border-subtle">
+          <SectionHeader label="Active" count={activeAgents().length} />
           <div class="mt-1 space-y-0.5">
             <For each={activeAgents()}>
               {(item) => (
-                <div class="flex items-center gap-2 px-2 py-1 rounded text-xs hover:bg-bg/50">
+                <div class="flex items-center gap-2 px-3 py-1 text-xs hover:bg-bg-main/30">
                   <span
                     class={`w-2 h-2 rounded-full shrink-0 ${statusColor(item.agent?.status ?? 'stopped')}`}
                   />
                   <div class="flex-1 min-w-0">
-                    <div class="text-text truncate">{item.tab.title}</div>
+                    <div class="text-text-main truncate">{item.tab.title}</div>
                     <Show when={item.agent?.currentTool}>
-                      <div class="text-[10px] text-text-muted truncate">
+                      <div class="text-[10px] text-text-dim truncate">
                         {item.agent?.currentTool}
                         <Show when={item.agent?.currentFile}>
                           {' '}
@@ -389,7 +465,7 @@ export function TeamSidebar() {
                       </div>
                     </Show>
                     <Show when={item.agent && item.agent.subagentCount > 0}>
-                      <div class="text-[10px] text-info">
+                      <div class="text-[10px] text-accent-info">
                         +{item.agent?.subagentCount} subagent
                         {item.agent?.subagentCount === 1 ? '' : 's'}
                       </div>
@@ -407,7 +483,7 @@ export function TeamSidebar() {
         <Show
           when={definitions().length > 0}
           fallback={
-            <div class="px-3 py-4 text-xs text-text-muted text-center">
+            <div class="px-3 py-4 text-xs text-text-dim text-center">
               <Show when={repoPath()} fallback={<span>Select a repo to see agents</span>}>
                 <div>No agents defined</div>
                 <div class="mt-1 text-[10px]">.claude/agents/*.md</div>
@@ -415,56 +491,64 @@ export function TeamSidebar() {
             </div>
           }
         >
-          <div class="px-2 py-1.5">
-            <span class="text-[10px] uppercase text-text-muted tracking-wider px-1">
-              Definitions
-            </span>
-            <div class="mt-1 space-y-0.5">
-              <For each={definitions()}>
-                {(def) => (
-                  <div class="group flex items-start gap-2 px-2 py-1.5 rounded hover:bg-bg/50">
-                    <div class="flex-1 min-w-0">
-                      <div class="text-xs text-text truncate">{def.name}</div>
-                      <Show when={def.description}>
-                        <div class="text-[10px] text-text-muted truncate">{def.description}</div>
-                      </Show>
-                      <div class="flex gap-1.5 mt-0.5">
-                        <Show when={def.model}>
-                          <span class="text-[9px] px-1 rounded bg-bg text-info">{def.model}</span>
+          <div>
+            <SectionHeader
+              label="Agents"
+              count={definitions().length}
+              collapsed={agentsCollapsed()}
+              onToggle={() => setAgentsCollapsed((v) => !v)}
+            />
+            <Show when={!agentsCollapsed()}>
+              <div class="pb-1 space-y-0.5">
+                <For each={definitions()}>
+                  {(def) => (
+                    <div class="group flex items-start gap-2 px-3 py-1.5 hover:bg-bg-main/30">
+                      <div class="flex-1 min-w-0">
+                        <div class="text-xs text-text-main truncate">{def.name}</div>
+                        <Show when={def.description}>
+                          <div class="text-[10px] text-text-dim truncate">{def.description}</div>
                         </Show>
-                        <Show when={def.permissionMode}>
-                          <span class="text-[9px] px-1 rounded bg-bg text-warning">
-                            {def.permissionMode}
-                          </span>
-                        </Show>
+                        <div class="flex gap-1.5 mt-0.5">
+                          <Show when={def.model}>
+                            <span class="text-[9px] px-1 bg-bg-main text-accent-info">
+                              {def.model}
+                            </span>
+                          </Show>
+                          <Show when={def.permissionMode}>
+                            <span class="text-[9px] px-1 bg-bg-main text-accent-warning">
+                              {def.permissionMode}
+                            </span>
+                          </Show>
+                        </div>
                       </div>
+                      <button
+                        type="button"
+                        class="opacity-0 group-hover:opacity-100 shrink-0 mt-0.5 px-1.5 py-0.5 text-[10px] text-text-dim hover:text-text-main border border-border-subtle hover:border-accent-primary cursor-pointer transition-opacity"
+                        onClick={() => launchAgent(def)}
+                        disabled={!worktreePath()}
+                      >
+                        Launch
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      class="opacity-0 group-hover:opacity-100 shrink-0 mt-0.5 px-1.5 py-0.5 text-[10px] text-text-muted hover:text-text border border-border rounded hover:border-primary cursor-pointer transition-opacity"
-                      onClick={() => launchAgent(def)}
-                      disabled={!worktreePath()}
-                    >
-                      Launch
-                    </button>
-                  </div>
-                )}
-              </For>
-            </div>
+                  )}
+                </For>
+              </div>
+            </Show>
           </div>
         </Show>
       </div>
 
       {/* Footer */}
       <Show when={worktreePath()}>
-        <div class="p-2 border-t border-border">
-          <button
-            type="button"
-            class="w-full px-3 py-1.5 text-xs text-text-muted hover:text-text cursor-pointer text-left hover:bg-bg/50 rounded"
+        <div class="p-2 border-t border-border-subtle">
+          <Button
+            variant="ghost"
+            size="compact"
+            class="w-full justify-start"
             onClick={() => terminalStore.openClaudeTab(worktreePath())}
           >
             + New Claude Session
-          </button>
+          </Button>
         </div>
       </Show>
 

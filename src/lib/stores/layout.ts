@@ -2,11 +2,13 @@ import { createSignal } from 'solid-js';
 import type { PanelGroupAPI } from 'solid-resizable-panels';
 
 export type RightSidebarView = 'changes' | 'team' | 'dashboard';
+export type AppView = 'workspace' | 'orchestrations';
 
 const [panelApi, setPanelApi] = createSignal<PanelGroupAPI | null>(null);
 const [repoSidebarOpen, setRepoSidebarOpen] = createSignal(true);
 const [rightSidebarOpen, setRightSidebarOpen] = createSignal(true);
 const [rightSidebarView, setRightSidebarView] = createSignal<RightSidebarView>('changes');
+const [activeView, setActiveView] = createSignal<AppView>('workspace');
 
 const REPO_SIDEBAR_ID = 'repo-sidebar';
 const RIGHT_SIDEBAR_ID = 'right-sidebar';
@@ -74,5 +76,7 @@ export function getLayoutStore() {
       }
     },
     setRightSidebarView,
+    activeView,
+    setActiveView,
   };
 }

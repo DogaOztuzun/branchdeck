@@ -1,10 +1,14 @@
+import { ChevronDown, ChevronRight, FolderGit2, GitBranch, Plus } from 'lucide-solid';
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { Portal } from 'solid-js/web';
+import { cn } from '../../lib/cn';
 import { getRepoStore } from '../../lib/stores/repo';
 import type { RepoInfo, WorktreeInfo } from '../../types/git';
 import type { PrInfo } from '../../types/github';
 import { PrTooltip } from '../pr/PrTooltip';
+import { Button } from '../ui/Button';
 import { ContextMenu } from '../ui/ContextMenu';
+import { SectionHeader } from '../ui/SectionHeader';
 import { AddWorktreeModal } from '../worktree/AddWorktreeModal';
 import { BranchWorktreeModal } from '../worktree/BranchWorktreeModal';
 import { DeleteWorktreeDialog } from '../worktree/DeleteWorktreeDialog';
@@ -24,7 +28,6 @@ function PrBadge(props: {
 }) {
   const repoStore = getRepoStore();
 
-  // Reactive derivations — re-compute when store changes without recreating DOM
   const pr = () => repoStore.getPrForBranch(props.repoPath, props.branch);
 
   const prColor = () => {
@@ -113,7 +116,6 @@ export function RepoSidebar() {
       setExpandedRepos(new Set([repoStore.state.activeRepoPath]));
     }
 
-    // Close tooltip on sidebar scroll (also cancel leave timer to prevent re-fire)
     const scrollEl = sidebarScrollRef;
     if (scrollEl) {
       const handleScroll = () => {
@@ -128,20 +130,17 @@ export function RepoSidebar() {
     }
   });
 
-  // Refresh branch tracking every 60s
   const trackingInterval = setInterval(() => {
     repoStore.refreshTracking();
   }, 60_000);
   onCleanup(() => clearInterval(trackingInterval));
 
-  // Refresh PR status: 15s for active repo, 60s for expanded inactive repos
   const activePrInterval = setInterval(() => {
     repoStore.refreshPrStatus();
   }, 15_000);
   onCleanup(() => clearInterval(activePrInterval));
 
   const inactivePrInterval = setInterval(() => {
-    // Only refresh expanded repos (excluding active), skip collapsed
     const expanded = expandedRepos();
     for (const repoPath of Object.keys(repoStore.state.worktreesByRepo)) {
       if (repoPath === repoStore.state.activeRepoPath) continue;
@@ -151,7 +150,6 @@ export function RepoSidebar() {
   }, 60_000);
   onCleanup(() => clearInterval(inactivePrInterval));
 
-  // Clean up leave timer on unmount
   onCleanup(() => {
     if (prLeaveTimer !== undefined) {
       clearTimeout(prLeaveTimer);
@@ -193,48 +191,60 @@ export function RepoSidebar() {
   }
 
   return (
-    <div class="flex flex-col h-full bg-surface">
-      <div class="px-3 py-2 text-xs font-bold text-text-muted uppercase tracking-wider border-b border-border">
-        Repositories
-      </div>
-      <div class="flex-1 overflow-y-auto" ref={sidebarScrollRef}>
+    <div class="flex flex-col h-full bg-bg-sidebar">
+      <SectionHeader
+        label="Repositories"
+        class="px-3 py-2 mt-0 mb-0 border-b border-border-subtle"
+      />
+      <div class="flex-1 overflow-y-auto py-1" ref={sidebarScrollRef}>
         <For each={repoStore.state.repos}>
           {(repo) => {
             const worktrees = () => repoStore.state.worktreesByRepo[repo.path] ?? [];
+            const isActive = () => repoStore.state.activeRepoPath === repo.path;
+            const isExpanded = () => expandedRepos().has(repo.path);
 
             return (
               <div>
                 <button
                   type="button"
-                  class={`flex items-center w-full px-3 py-1.5 text-xs cursor-pointer hover:bg-bg/50 ${
-                    repoStore.state.activeRepoPath === repo.path ? 'text-primary' : 'text-text'
-                  }`}
+                  class={cn(
+                    'flex items-center w-full px-3 py-1 text-xs cursor-pointer hover:bg-bg-main/50 gap-1.5 transition-colors duration-150',
+                    isActive() ? 'text-accent-primary' : 'text-text-main',
+                  )}
                   onClick={async () => {
-                    const isExpanded = expandedRepos().has(repo.path);
-                    if (!isExpanded) {
+                    if (!isExpanded()) {
                       await repoStore.ensureWorktreesLoaded(repo.path);
                     }
                     toggleExpanded(repo.path);
                   }}
                   onContextMenu={(e) => handleContextMenu(e, repo)}
                 >
-                  <span class="mr-1.5 text-text-muted">
-                    {expandedRepos().has(repo.path) ? '\u25BE' : '\u25B8'}
+                  {isExpanded() ? (
+                    <ChevronDown size={12} class="text-text-dim shrink-0" />
+                  ) : (
+                    <ChevronRight size={12} class="text-text-dim shrink-0" />
+                  )}
+                  <FolderGit2
+                    size={14}
+                    class={cn(isActive() ? 'text-accent-primary' : 'text-text-dim', 'shrink-0')}
+                  />
+                  <span class="truncate font-medium">{repo.name}</span>
+                  <span class="ml-auto text-[10px] text-accent-info shrink-0">
+                    {repo.currentBranch}
                   </span>
-                  <span class="truncate">{repo.name}</span>
-                  <span class="ml-auto text-text-muted">{repo.currentBranch}</span>
                 </button>
-                <Show when={expandedRepos().has(repo.path)}>
+                <Show when={isExpanded()}>
                   <div class="ml-4">
                     <For each={worktrees()}>
                       {(wt) => (
                         <button
                           type="button"
-                          class={`flex items-center w-full px-3 py-1 text-xs cursor-pointer hover:bg-bg/50 group ${
+                          class={cn(
+                            'flex items-center w-full px-3 py-1 text-xs cursor-pointer hover:bg-bg-main/50 group gap-1.5 transition-colors duration-150',
                             repoStore.state.activeWorktreePath === wt.path
-                              ? 'text-info'
-                              : 'text-text-muted'
-                          }`}
+                              ? 'text-accent-info'
+                              : 'text-text-dim',
+                          )}
                           onClick={() => repoStore.selectRepoAndWorktree(repo.path, wt.path)}
                           onContextMenu={(e) => {
                             if (!wt.isMain) {
@@ -249,11 +259,13 @@ export function RepoSidebar() {
                             }
                           }}
                         >
-                          <span
-                            class={`mr-1.5 text-[10px] ${wt.isMain ? 'text-success' : 'text-text-muted/50'}`}
-                          >
-                            {wt.isMain ? '\u25CF' : '\u25CB'}
-                          </span>
+                          <GitBranch
+                            size={12}
+                            class={cn(
+                              wt.isMain ? 'text-accent-success' : 'text-text-dim/50',
+                              'shrink-0',
+                            )}
+                          />
                           <span class="truncate">{wt.branch || wt.name}</span>
                           {(() => {
                             const tracking = repoStore.state.trackingByBranch[wt.branch];
@@ -262,13 +274,13 @@ export function RepoSidebar() {
                             return (
                               <span class="ml-auto flex gap-1 text-[10px] shrink-0">
                                 {tracking.ahead > 0 && (
-                                  <span class="text-success">
+                                  <span class="text-accent-success">
                                     {'\u2191'}
                                     {tracking.ahead}
                                   </span>
                                 )}
                                 {tracking.behind > 0 && (
-                                  <span class="text-error">
+                                  <span class="text-accent-error">
                                     {'\u2193'}
                                     {tracking.behind}
                                   </span>
@@ -295,10 +307,11 @@ export function RepoSidebar() {
                     </For>
                     <button
                       type="button"
-                      class="w-full px-3 py-1 text-xs text-text-muted hover:text-text cursor-pointer text-left hover:bg-bg/50"
+                      class="w-full flex items-center gap-1.5 px-3 py-1 text-xs text-text-dim hover:text-text-main cursor-pointer text-left hover:bg-bg-main/50 transition-colors duration-150"
                       onClick={() => setAddWorktreeRepo(repo.path)}
                     >
-                      + New Worktree
+                      <Plus size={12} />
+                      New Worktree
                     </button>
                   </div>
                 </Show>
@@ -308,25 +321,27 @@ export function RepoSidebar() {
         </For>
       </div>
       <Show when={deleteError()}>
-        <div class="px-3 py-2 text-xs text-error border-t border-border">
+        <div class="px-3 py-2 text-xs text-accent-error border-t border-border-subtle">
           {deleteError()}
           <button
             type="button"
-            class="ml-2 text-text-muted hover:text-text cursor-pointer"
+            class="ml-2 text-text-dim hover:text-text-main cursor-pointer"
             onClick={() => setDeleteError(null)}
           >
             dismiss
           </button>
         </div>
       </Show>
-      <div class="p-2 border-t border-border">
-        <button
-          type="button"
-          class="w-full px-3 py-1.5 text-xs text-text-muted hover:text-text cursor-pointer text-left hover:bg-bg/50 rounded"
+      <div class="p-2 border-t border-border-subtle">
+        <Button
+          variant="ghost"
+          size="compact"
+          class="w-full justify-start gap-1.5"
           onClick={() => repoStore.addRepo()}
         >
-          + Add Repository
-        </button>
+          <Plus size={12} />
+          Add Repository
+        </Button>
       </div>
       <DeleteWorktreeDialog
         open={deleteTarget() !== null}

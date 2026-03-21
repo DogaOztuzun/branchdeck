@@ -4,6 +4,7 @@ import { getPresets } from '../../lib/commands/workspace';
 import { getAgentStore } from '../../lib/stores/agent';
 import { getRepoStore } from '../../lib/stores/repo';
 import { getTerminalStore } from '../../lib/stores/terminal';
+import { Button } from '../ui/Button';
 import { AgentActivity } from './AgentActivity';
 import { PresetManager } from './PresetManager';
 import { TabBar } from './TabBar';
@@ -79,28 +80,20 @@ export function TerminalArea() {
       />
       <div class="flex-1 relative">
         <Show when={visibleTabs().length === 0}>
-          <div class="absolute inset-0 flex flex-col items-center justify-center text-text-muted z-10">
+          <div class="absolute inset-0 flex flex-col items-center justify-center text-text-dim z-10">
             <div class="text-sm mb-4">
               {worktreePath() ? 'No terminal open' : 'Select a repository to start'}
             </div>
             <Show when={worktreePath()}>
-              <div class="flex gap-4">
-                <button
-                  type="button"
-                  class="px-4 py-2 text-xs border border-border rounded hover:border-primary hover:text-text cursor-pointer"
-                  onClick={() => terminalStore.openShellTab(worktreePath())}
-                >
+              <div class="flex gap-3">
+                <Button variant="ghost" onClick={() => terminalStore.openShellTab(worktreePath())}>
                   Open Terminal
-                  <span class="ml-2 text-text-muted">Ctrl+Shift+T</span>
-                </button>
-                <button
-                  type="button"
-                  class="px-4 py-2 text-xs border border-border rounded hover:border-primary hover:text-text cursor-pointer"
-                  onClick={() => terminalStore.openClaudeTab(worktreePath())}
-                >
+                  <span class="ml-2 text-text-dim text-[10px]">Ctrl+Shift+T</span>
+                </Button>
+                <Button variant="ghost" onClick={() => terminalStore.openClaudeTab(worktreePath())}>
                   Start Claude Code
-                  <span class="ml-2 text-text-muted">Ctrl+Shift+A</span>
-                </button>
+                  <span class="ml-2 text-text-dim text-[10px]">Ctrl+Shift+A</span>
+                </Button>
               </div>
             </Show>
           </div>
@@ -115,10 +108,10 @@ export function TerminalArea() {
         </For>
       </div>
       <Show when={hasClaudeTab()}>
-        <div class="flex items-center border-t border-border bg-surface px-2">
+        <div class="flex items-center border-t border-border-subtle bg-bg-sidebar px-2">
           <button
             type="button"
-            class="px-2 py-0.5 text-[10px] text-text-muted hover:text-text cursor-pointer"
+            class="px-2 py-0.5 text-[10px] text-text-dim hover:text-text-main cursor-pointer"
             onClick={() => setActivityVisible((v) => !v)}
           >
             {activityVisible() ? '\u25BC' : '\u25B6'} Activity
