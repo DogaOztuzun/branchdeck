@@ -4,7 +4,7 @@ import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { cancelQueue, getQueueStatus } from '../../lib/commands/run';
 import { getLayoutStore } from '../../lib/stores/layout';
 import { getRepoStore } from '../../lib/stores/repo';
-import { getTaskStore } from '../../lib/stores/task';
+import { getTaskStore, worktreePathFromTaskPath } from '../../lib/stores/task';
 import type { QueuedRun, QueueStatus } from '../../types/github';
 import type { RunInfo, RunStatusEvent, RunStepEvent } from '../../types/run';
 import { TaskBadge } from '../task/TaskBadge';
@@ -313,19 +313,26 @@ export function OrchestrationView() {
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {/* Active run */}
             <Show when={activeRun()}>
-              {(run) => (
-                <RunCard
-                  name={worktreeLabel(run().taskPath)}
-                  status="running"
-                  branch={worktreeLabel(run().taskPath)}
-                  elapsed={formatElapsed(run().elapsedSecs)}
-                  lastStep={lastSteps()[run().sessionId ?? ''] ?? undefined}
-                  worktreePath={run().taskPath}
-                  expanded={expandedCard() === `active:${run().taskPath}`}
-                  onToggle={() => toggleCard(`active:${run().taskPath}`)}
-                  onOpenWorkspace={() => handleOpenWorkspace(run().taskPath)}
-                />
-              )}
+              {(run) => {
+                const wtPath = () => worktreePathFromTaskPath(run().taskPath);
+                return (
+                  <RunCard
+                    name={worktreeLabel(wtPath())}
+                    status={
+                      run().status === 'blocked'
+                        ? 'running'
+                        : ((run().status as RunCardStatus) ?? 'running')
+                    }
+                    branch={worktreeLabel(wtPath())}
+                    elapsed={formatElapsed(run().elapsedSecs)}
+                    lastStep={lastSteps()[run().sessionId ?? ''] ?? undefined}
+                    worktreePath={wtPath()}
+                    expanded={expandedCard() === `active:${wtPath()}`}
+                    onToggle={() => toggleCard(`active:${wtPath()}`)}
+                    onOpenWorkspace={() => handleOpenWorkspace(wtPath())}
+                  />
+                );
+              }}
             </Show>
 
             {/* Queued runs */}
