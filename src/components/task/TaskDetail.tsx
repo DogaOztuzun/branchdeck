@@ -1,6 +1,7 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
 import { cancelRun, launchRun, resumeRun, retryRun } from '../../lib/commands/run';
 import { getAgentStore } from '../../lib/stores/agent';
+import { getLayoutStore } from '../../lib/stores/layout';
 import { getRepoStore } from '../../lib/stores/repo';
 import { getTaskStore } from '../../lib/stores/task';
 import { getTerminalStore } from '../../lib/stores/terminal';
@@ -17,6 +18,7 @@ type TaskDetailProps = {
 
 export function TaskDetail(props: TaskDetailProps) {
   const repoStore = getRepoStore();
+  const layoutStore = getLayoutStore();
   const taskStore = getTaskStore();
   const agentStore = getAgentStore();
   const terminalStore = getTerminalStore();
@@ -359,6 +361,19 @@ export function TaskDetail(props: TaskDetailProps) {
           )}
         </Show>
       </div>
+
+      {/* Agents link */}
+      <Show when={worktree()}>
+        <div class="p-2 border-t border-border-subtle">
+          <button
+            type="button"
+            class="text-[10px] text-text-dim hover:text-text-main cursor-pointer"
+            onClick={() => layoutStore.showRightPanel({ kind: 'agents' })}
+          >
+            View Agents
+          </button>
+        </div>
+      </Show>
 
       {/* Create Task Modal */}
       <Show when={worktree()}>

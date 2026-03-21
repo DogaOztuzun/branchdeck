@@ -98,29 +98,37 @@ export function TopBar() {
         >
           Workspace
         </button>
-        <button
-          type="button"
-          onClick={() => layout.setActiveView('orchestrations')}
-          class={cn(
-            'px-4 h-full text-[11px] font-bold uppercase tracking-wider border-r border-border-subtle transition-colors duration-150 cursor-pointer flex items-center gap-2',
+        <Show
+          when={
+            queue() ||
+            taskStore.state.pendingPermissions.length > 0 ||
             layout.activeView() === 'orchestrations'
-              ? 'bg-bg-main text-accent-primary'
-              : 'text-text-dim hover:text-text-main',
-          )}
+          }
         >
-          Orchestrations
-          <Show when={queue()}>
-            <span class="bg-accent-warning/20 text-accent-warning px-1 text-[9px]">
-              {queue()?.active ? 1 : 0}
-            </span>
-          </Show>
-          <Show when={taskStore.state.pendingPermissions.length > 0}>
-            <span class="relative flex h-2 w-2">
-              <span class="absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75 animate-ping" />
-              <span class="relative inline-flex rounded-full h-2 w-2 bg-red-400" />
-            </span>
-          </Show>
-        </button>
+          <button
+            type="button"
+            onClick={() => layout.setActiveView('orchestrations')}
+            class={cn(
+              'px-4 h-full text-[11px] font-bold uppercase tracking-wider border-r border-border-subtle transition-colors duration-150 cursor-pointer flex items-center gap-2',
+              layout.activeView() === 'orchestrations'
+                ? 'bg-bg-main text-accent-primary'
+                : 'text-text-dim hover:text-text-main',
+            )}
+          >
+            Orchestrations
+            <Show when={queue()}>
+              <span class="bg-accent-warning/20 text-accent-warning px-1 text-[9px]">
+                {queue()?.active ? 1 : 0}
+              </span>
+            </Show>
+            <Show when={taskStore.state.pendingPermissions.length > 0}>
+              <span class="relative flex h-2 w-2">
+                <span class="absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75 animate-ping" />
+                <span class="relative inline-flex rounded-full h-2 w-2 bg-red-400" />
+              </span>
+            </Show>
+          </button>
+        </Show>
       </div>
 
       <div class="flex items-center gap-1 ml-2">

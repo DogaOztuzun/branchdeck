@@ -110,10 +110,13 @@ export function AgentsPanel() {
         <Show
           when={definitions().length > 0}
           fallback={
-            <div class="px-3 py-4 text-xs text-text-dim text-center">
-              <Show when={repoPath()} fallback={<span>Select a repo to see agents</span>}>
-                <div>No agents defined</div>
-                <div class="mt-1 text-[10px]">.claude/agents/*.md</div>
+            <div class="px-3 py-6 text-xs text-text-dim text-center">
+              <Show when={repoPath()} fallback={<span>Select a repository to see agents</span>}>
+                <div>No Claude agents defined</div>
+                <div class="mt-2 text-[10px]">Open a Claude Code terminal to get started</div>
+                <div class="mt-1 text-[10px] text-text-dim/50">
+                  or add agents in .claude/agents/*.md
+                </div>
               </Show>
             </div>
           }

@@ -288,9 +288,11 @@ export function PrList() {
             </div>
           </Match>
           <Match when={filteredPrs().length === 0}>
-            <div class="text-xs text-text-dim text-center px-3 py-4">
+            <div class="text-xs text-text-dim text-center px-3 py-6">
               <p>No open PRs found</p>
-              <p class="mt-1 opacity-70">Add repos to your workspace to see their PRs</p>
+              <p class="mt-2 text-[10px] opacity-70">
+                Add a repository with open pull requests to get started
+              </p>
             </div>
           </Match>
           <Match when={filteredPrs().length > 0}>
