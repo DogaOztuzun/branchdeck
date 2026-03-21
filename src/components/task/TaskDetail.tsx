@@ -12,11 +12,11 @@ import { getTaskStore } from '../../lib/stores/task';
 import { getTerminalStore } from '../../lib/stores/terminal';
 import { parseArtifactSummary, statusColor } from '../../lib/utils';
 import type { TaskInfo } from '../../types/task';
+import { SectionHeader } from '../ui/SectionHeader';
 import { ApprovalDialog } from './ApprovalDialog';
 import { CreateTaskModal } from './CreateTaskModal';
 import { RunTimeline } from './RunTimeline';
 import { TaskBadge } from './TaskBadge';
-import { SectionHeader } from '../ui/SectionHeader';
 
 type TaskDetailProps = {
   worktreePath: string;
@@ -183,9 +183,7 @@ export function TaskDetail(props: TaskDetailProps) {
                       Launch
                     </button>
                   </Show>
-                  <Show
-                    when={taskStore.state.activeRun && t().frontmatter.status === 'running'}
-                  >
+                  <Show when={taskStore.state.activeRun && t().frontmatter.status === 'running'}>
                     <button
                       type="button"
                       class="px-2 py-1 text-[10px] text-red-400 hover:text-red-300 border border-border-subtle hover:border-red-400 cursor-pointer"
