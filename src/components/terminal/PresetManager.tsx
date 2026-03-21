@@ -130,8 +130,10 @@ export function PresetManager(props: PresetManagerProps) {
     >
       <Dialog.Portal>
         <Dialog.Overlay class="fixed inset-0 z-40 bg-black/50" />
-        <Dialog.Content class="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 bg-surface border border-border rounded-lg shadow-lg p-4 max-h-[80vh] overflow-y-auto">
-          <Dialog.Title class="text-sm font-semibold text-text mb-3">Manage Presets</Dialog.Title>
+        <Dialog.Content class="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 bg-bg-sidebar border border-border-subtle rounded-lg shadow-lg p-4 max-h-[80vh] overflow-y-auto">
+          <Dialog.Title class="text-sm font-semibold text-text-main mb-3">
+            Manage Presets
+          </Dialog.Title>
 
           <div class="space-y-0">
             <For each={presets()}>
@@ -139,22 +141,22 @@ export function PresetManager(props: PresetManagerProps) {
                 <Show
                   when={editingIndex() === i()}
                   fallback={
-                    <div class="flex items-center justify-between px-3 py-2 text-xs border-b border-border">
+                    <div class="flex items-center justify-between px-3 py-2 text-xs border-b border-border-subtle">
                       <div>
-                        <span class="text-text">{preset.name}</span>
-                        <span class="ml-2 text-text-muted text-[10px]">{preset.tabType}</span>
+                        <span class="text-text-main">{preset.name}</span>
+                        <span class="ml-2 text-text-dim text-[10px]">{preset.tabType}</span>
                       </div>
                       <div class="flex gap-2">
                         <button
                           type="button"
-                          class="text-text-muted hover:text-text cursor-pointer"
+                          class="text-text-dim hover:text-text-main cursor-pointer"
                           onClick={() => startEdit(i())}
                         >
                           Edit
                         </button>
                         <button
                           type="button"
-                          class="text-text-muted hover:text-error cursor-pointer"
+                          class="text-text-dim hover:text-accent-error cursor-pointer"
                           disabled={saving()}
                           onClick={() => handleDelete(i())}
                         >
@@ -164,20 +166,20 @@ export function PresetManager(props: PresetManagerProps) {
                     </div>
                   }
                 >
-                  <div class="px-3 py-2 border-b border-border space-y-2">
+                  <div class="px-3 py-2 border-b border-border-subtle space-y-2">
                     <input
                       type="text"
                       placeholder="Preset name"
                       value={form().name}
                       onInput={(e) => setForm((f) => ({ ...f, name: e.currentTarget.value }))}
-                      class="w-full bg-bg border border-border rounded text-text text-xs px-3 py-1.5 focus:outline-none focus:border-primary"
+                      class="w-full bg-bg-main border border-border-subtle rounded text-text-main text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary"
                     />
                     <input
                       type="text"
                       placeholder="Command"
                       value={form().command}
                       onInput={(e) => setForm((f) => ({ ...f, command: e.currentTarget.value }))}
-                      class="w-full bg-bg border border-border rounded text-text text-xs px-3 py-1.5 focus:outline-none focus:border-primary"
+                      class="w-full bg-bg-main border border-border-subtle rounded text-text-main text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary"
                     />
                     <select
                       value={form().tabType}
@@ -188,7 +190,7 @@ export function PresetManager(props: PresetManagerProps) {
                         }))
                       }
                       style={{ 'background-color': 'var(--color-bg)', color: 'var(--color-text)' }}
-                      class="w-full border border-border rounded text-xs px-3 py-1.5 focus:outline-none focus:border-primary appearance-none [&>option]:bg-bg [&>option]:text-text"
+                      class="w-full border border-border-subtle rounded text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary appearance-none [&>option]:bg-bg-main [&>option]:text-text-main"
                     >
                       <option value="shell">Shell</option>
                       <option value="claude">Claude</option>
@@ -196,7 +198,7 @@ export function PresetManager(props: PresetManagerProps) {
                     <div class="flex justify-end gap-2">
                       <button
                         type="button"
-                        class="px-3 py-1.5 text-xs text-text-muted hover:text-text cursor-pointer rounded hover:bg-bg/50"
+                        class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer rounded hover:bg-bg-main/50"
                         onClick={() => resetForm()}
                       >
                         Cancel
@@ -204,7 +206,7 @@ export function PresetManager(props: PresetManagerProps) {
                       <button
                         type="button"
                         disabled={saving() || !form().name.trim()}
-                        class="px-3 py-1.5 text-xs bg-primary text-bg rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+                        class="px-3 py-1.5 text-xs bg-accent-primary text-bg rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
                         onClick={() => handleSaveEdit(i())}
                       >
                         {saving() ? 'Saving...' : 'Save'}
@@ -217,11 +219,11 @@ export function PresetManager(props: PresetManagerProps) {
           </div>
 
           <Show when={presets().length === 0 && !adding()}>
-            <p class="text-xs text-text-muted py-4 text-center">No presets yet</p>
+            <p class="text-xs text-text-dim py-4 text-center">No presets yet</p>
           </Show>
 
           <Show when={error()}>
-            <p class="mt-2 text-xs text-error">{error()}</p>
+            <p class="mt-2 text-xs text-accent-error">{error()}</p>
           </Show>
 
           <Show
@@ -229,7 +231,7 @@ export function PresetManager(props: PresetManagerProps) {
             fallback={
               <button
                 type="button"
-                class="mt-3 w-full px-3 py-1.5 text-xs border border-border rounded text-text-muted hover:text-text hover:border-primary cursor-pointer"
+                class="mt-3 w-full px-3 py-1.5 text-xs border border-border-subtle rounded text-text-dim hover:text-text-main hover:border-accent-primary cursor-pointer"
                 onClick={() => startAdd()}
               >
                 + Add Preset
@@ -243,14 +245,14 @@ export function PresetManager(props: PresetManagerProps) {
                 value={form().name}
                 onInput={(e) => setForm((f) => ({ ...f, name: e.currentTarget.value }))}
                 autofocus
-                class="w-full bg-bg border border-border rounded text-text text-xs px-3 py-1.5 focus:outline-none focus:border-primary"
+                class="w-full bg-bg-main border border-border-subtle rounded text-text-main text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary"
               />
               <input
                 type="text"
                 placeholder="Command"
                 value={form().command}
                 onInput={(e) => setForm((f) => ({ ...f, command: e.currentTarget.value }))}
-                class="w-full bg-bg border border-border rounded text-text text-xs px-3 py-1.5 focus:outline-none focus:border-primary"
+                class="w-full bg-bg-main border border-border-subtle rounded text-text-main text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary"
               />
               <select
                 value={form().tabType}
@@ -261,7 +263,7 @@ export function PresetManager(props: PresetManagerProps) {
                   }))
                 }
                 style={{ 'background-color': 'var(--color-bg)', color: 'var(--color-text)' }}
-                class="w-full border border-border rounded text-xs px-3 py-1.5 focus:outline-none focus:border-primary appearance-none [&>option]:bg-bg [&>option]:text-text"
+                class="w-full border border-border-subtle rounded text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary appearance-none [&>option]:bg-bg-main [&>option]:text-text-main"
               >
                 <option value="shell">Shell</option>
                 <option value="claude">Claude</option>
@@ -269,7 +271,7 @@ export function PresetManager(props: PresetManagerProps) {
               <div class="flex justify-end gap-2">
                 <button
                   type="button"
-                  class="px-3 py-1.5 text-xs text-text-muted hover:text-text cursor-pointer rounded hover:bg-bg/50"
+                  class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer rounded hover:bg-bg-main/50"
                   onClick={() => resetForm()}
                 >
                   Cancel
@@ -277,7 +279,7 @@ export function PresetManager(props: PresetManagerProps) {
                 <button
                   type="button"
                   disabled={saving() || !form().name.trim()}
-                  class="px-3 py-1.5 text-xs bg-primary text-bg rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+                  class="px-3 py-1.5 text-xs bg-accent-primary text-bg rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
                   onClick={() => handleSaveNew()}
                 >
                   {saving() ? 'Saving...' : 'Add Preset'}
@@ -289,7 +291,7 @@ export function PresetManager(props: PresetManagerProps) {
           <div class="mt-4 flex justify-end">
             <button
               type="button"
-              class="px-3 py-1.5 text-xs text-text-muted hover:text-text cursor-pointer rounded hover:bg-bg/50"
+              class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer rounded hover:bg-bg-main/50"
               onClick={() => props.onClose()}
             >
               Close

@@ -120,8 +120,10 @@ export function AddWorktreeModal(props: AddWorktreeModalProps) {
     >
       <Dialog.Portal>
         <Dialog.Overlay class="fixed inset-0 z-40 bg-black/50" />
-        <Dialog.Content class="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 bg-surface border border-border rounded-lg shadow-lg p-4">
-          <Dialog.Title class="text-sm font-semibold text-text mb-3">New Worktree</Dialog.Title>
+        <Dialog.Content class="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 bg-bg-sidebar border border-border-subtle rounded-lg shadow-lg p-4">
+          <Dialog.Title class="text-sm font-semibold text-text-main mb-3">
+            New Worktree
+          </Dialog.Title>
 
           <form onSubmit={handleCreate}>
             <input
@@ -130,12 +132,12 @@ export function AddWorktreeModal(props: AddWorktreeModalProps) {
               value={name()}
               onInput={(e) => handleNameInput(e.currentTarget.value)}
               autofocus
-              class="w-full px-3 py-1.5 text-xs bg-bg border border-border rounded text-text placeholder:text-text-muted focus:outline-none focus:border-primary"
+              class="w-full px-3 py-1.5 text-xs bg-bg-main border border-border-subtle rounded text-text-main placeholder:text-text-dim focus:outline-none focus:border-accent-primary"
             />
 
             <Show when={localBranches().length > 0}>
               <div class="mt-2">
-                <label class="text-xs text-text-muted" for="base-branch-select">
+                <label class="text-xs text-text-dim" for="base-branch-select">
                   Base branch
                 </label>
                 <select
@@ -143,7 +145,7 @@ export function AddWorktreeModal(props: AddWorktreeModalProps) {
                   value={baseBranch()}
                   onChange={(e) => setBaseBranch(e.currentTarget.value)}
                   style={{ 'background-color': 'var(--color-bg)', color: 'var(--color-text)' }}
-                  class="w-full mt-1 px-3 py-1.5 text-xs border border-border rounded focus:outline-none focus:border-primary appearance-none [&>option]:bg-bg [&>option]:text-text"
+                  class="w-full mt-1 px-3 py-1.5 text-xs border border-border-subtle rounded focus:outline-none focus:border-accent-primary appearance-none [&>option]:bg-bg-main [&>option]:text-text-main"
                 >
                   <For each={localBranches()}>
                     {(branch) => <option value={branch.name}>{branch.name}</option>}
@@ -154,39 +156,39 @@ export function AddWorktreeModal(props: AddWorktreeModalProps) {
 
             <div class="mt-3 space-y-1.5 text-xs">
               <div class="flex gap-2">
-                <span class="text-text-muted">Base:</span>
-                <span class="text-text">{baseBranch() || preview()?.baseBranch || '—'}</span>
+                <span class="text-text-dim">Base:</span>
+                <span class="text-text-main">{baseBranch() || preview()?.baseBranch || '—'}</span>
               </div>
               <div class="flex gap-2">
-                <span class="text-text-muted">Branch:</span>
-                <span class="text-text">{preview()?.branchName ?? '—'}</span>
+                <span class="text-text-dim">Branch:</span>
+                <span class="text-text-main">{preview()?.branchName ?? '—'}</span>
               </div>
               <div class="flex gap-2">
-                <span class="text-text-muted">Path:</span>
-                <span class="text-text truncate">{preview()?.worktreePath ?? '—'}</span>
+                <span class="text-text-dim">Path:</span>
+                <span class="text-text-main truncate">{preview()?.worktreePath ?? '—'}</span>
               </div>
               <Show when={preview()?.sanitizedName === ''}>
-                <p class="text-error">Name must contain at least one letter or number</p>
+                <p class="text-accent-error">Name must contain at least one letter or number</p>
               </Show>
               <Show when={preview()?.branchExists}>
-                <p class="text-info">Will use existing branch</p>
+                <p class="text-accent-info">Will use existing branch</p>
               </Show>
               <Show when={preview()?.pathExists}>
-                <p class="text-error">Directory already exists</p>
+                <p class="text-accent-error">Directory already exists</p>
               </Show>
               <Show when={preview()?.worktreeExists}>
-                <p class="text-error">Worktree with this name already exists</p>
+                <p class="text-accent-error">Worktree with this name already exists</p>
               </Show>
             </div>
 
             <Show when={error()}>
-              <p class="mt-2 text-xs text-error">{error()}</p>
+              <p class="mt-2 text-xs text-accent-error">{error()}</p>
             </Show>
 
             <div class="mt-4 flex justify-end gap-2">
               <button
                 type="button"
-                class="px-3 py-1.5 text-xs text-text-muted hover:text-text cursor-pointer rounded hover:bg-bg/50"
+                class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer rounded hover:bg-bg-main/50"
                 onClick={() => props.onClose()}
               >
                 Cancel
@@ -194,7 +196,7 @@ export function AddWorktreeModal(props: AddWorktreeModalProps) {
               <button
                 type="submit"
                 disabled={isCreateDisabled()}
-                class="px-3 py-1.5 text-xs bg-primary text-bg rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+                class="px-3 py-1.5 text-xs bg-accent-primary text-bg rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
               >
                 {creating() ? 'Creating...' : 'Create Worktree'}
               </button>

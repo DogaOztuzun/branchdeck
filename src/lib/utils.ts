@@ -1,13 +1,13 @@
 export function statusColor(status: string): string {
   switch (status) {
     case 'active':
-      return 'bg-success';
+      return 'bg-accent-success';
     case 'idle':
-      return 'bg-warning';
+      return 'bg-accent-warning';
     case 'stopped':
-      return 'bg-text-muted';
+      return 'bg-text-dim';
     default:
-      return 'bg-text-muted';
+      return 'bg-text-dim';
   }
 }
 

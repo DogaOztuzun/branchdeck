@@ -3,11 +3,11 @@ import { parseArtifactSummary, shortPath, statusColor } from '../utils';
 
 describe('statusColor', () => {
   it('returns bg-success for active', () => {
-    expect(statusColor('active')).toBe('bg-success');
+    expect(statusColor('active')).toBe('bg-accent-success');
   });
 
   it('returns bg-text-muted for unknown status', () => {
-    expect(statusColor('unknown')).toBe('bg-text-muted');
+    expect(statusColor('unknown')).toBe('bg-text-dim');
   });
 });
 

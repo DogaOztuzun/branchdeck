@@ -26,16 +26,16 @@ export function DeleteWorktreeDialog(props: DeleteWorktreeDialogProps) {
     >
       <Dialog.Portal>
         <Dialog.Overlay class="fixed inset-0 z-40 bg-black/50" />
-        <Dialog.Content class="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 bg-surface border border-border rounded-lg shadow-lg p-5">
-          <Dialog.Title class="text-sm font-semibold text-text">
+        <Dialog.Content class="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 bg-bg-sidebar border border-border-subtle rounded-lg shadow-lg p-5">
+          <Dialog.Title class="text-sm font-semibold text-text-main">
             <Show when={props.open}>Remove worktree "{props.worktreeName}"?</Show>
           </Dialog.Title>
 
-          <p class="mt-2 text-xs text-text-muted">
+          <p class="mt-2 text-xs text-text-dim">
             Deleting will permanently remove the worktree directory from disk.
           </p>
 
-          <label class="flex items-center gap-2 mt-4 text-xs text-text cursor-pointer">
+          <label class="flex items-center gap-2 mt-4 text-xs text-text-main cursor-pointer">
             <input
               type="checkbox"
               checked={deleteBranch()}
@@ -48,14 +48,14 @@ export function DeleteWorktreeDialog(props: DeleteWorktreeDialogProps) {
           <div class="mt-5 flex justify-end gap-2">
             <button
               type="button"
-              class="px-3 py-1.5 text-xs text-text-muted hover:text-text cursor-pointer rounded hover:bg-bg/50"
+              class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer rounded hover:bg-bg-main/50"
               onClick={() => props.onClose()}
             >
               Cancel
             </button>
             <button
               type="button"
-              class="px-3 py-1.5 text-xs bg-error/90 text-white rounded cursor-pointer hover:bg-error"
+              class="px-3 py-1.5 text-xs bg-accent-error/90 text-white rounded cursor-pointer hover:bg-accent-error"
               onClick={() => props.onConfirm(deleteBranch())}
             >
               Delete

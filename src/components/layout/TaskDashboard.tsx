@@ -60,7 +60,7 @@ function CiBadge(props: { status: string | null }) {
         <span class="text-[10px] font-medium text-green-400">passing</span>
       </Match>
       <Match when={!props.status}>
-        <span class="text-[10px] text-text-muted">no CI</span>
+        <span class="text-[10px] text-text-dim">no CI</span>
       </Match>
     </Switch>
   );
@@ -71,7 +71,7 @@ function ReviewBadge(props: { decision: string | null }) {
     <Show when={props.decision}>
       {(d) => (
         <span
-          class={`text-[10px] font-medium ${d() === 'changes_requested' ? 'text-orange-400' : d() === 'approved' ? 'text-green-400' : 'text-text-muted'}`}
+          class={`text-[10px] font-medium ${d() === 'changes_requested' ? 'text-orange-400' : d() === 'approved' ? 'text-green-400' : 'text-text-dim'}`}
         >
           {d() === 'changes_requested' ? 'changes req.' : d()}
         </span>
@@ -325,19 +325,19 @@ export function TaskDashboard() {
   }
 
   return (
-    <div class="h-full flex flex-col bg-surface overflow-hidden">
-      <div class="px-3 py-2 border-b border-border flex items-center justify-between">
+    <div class="h-full flex flex-col bg-bg-sidebar overflow-hidden">
+      <div class="px-3 py-2 border-b border-border-subtle flex items-center justify-between">
         <div class="flex items-center gap-0">
           <button
             type="button"
-            class={`text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-l cursor-pointer ${activeTab() === 'prs' ? 'bg-bg text-text' : 'text-text-muted hover:text-text'}`}
+            class={`text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-l cursor-pointer ${activeTab() === 'prs' ? 'bg-bg-main text-text-main' : 'text-text-dim hover:text-text-main'}`}
             onClick={() => setActiveTab('prs')}
           >
             PRs ({prs().length})
           </button>
           <button
             type="button"
-            class={`text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-r cursor-pointer ${activeTab() === 'tasks' ? 'bg-bg text-text' : 'text-text-muted hover:text-text'}`}
+            class={`text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-r cursor-pointer ${activeTab() === 'tasks' ? 'bg-bg-main text-text-main' : 'text-text-dim hover:text-text-main'}`}
             onClick={() => setActiveTab('tasks')}
           >
             Tasks ({items().length})
@@ -345,7 +345,7 @@ export function TaskDashboard() {
         </div>
         <button
           type="button"
-          class="text-text-muted hover:text-text cursor-pointer"
+          class="text-text-dim hover:text-text-main cursor-pointer"
           title="Refresh"
           onClick={refreshAll}
         >
@@ -368,9 +368,9 @@ export function TaskDashboard() {
 
       <div class="flex-1 overflow-y-auto">
         <Show when={activeTab() === 'prs'}>
-          <div class="px-2 py-1.5 flex items-center gap-1.5 border-b border-border/50">
+          <div class="px-2 py-1.5 flex items-center gap-1.5 border-b border-border-subtle/50">
             <select
-              class="text-[10px] bg-bg text-text rounded px-1 py-0.5 border border-border/50"
+              class="text-[10px] bg-bg-main text-text-main rounded px-1 py-0.5 border border-border-subtle/50"
               value={authorFilter()}
               onChange={(e) => setAuthorFilter(e.currentTarget.value)}
             >
@@ -378,7 +378,7 @@ export function TaskDashboard() {
               <For each={authors()}>{(a) => <option value={a}>{a}</option>}</For>
             </select>
             <select
-              class="text-[10px] bg-bg text-text rounded px-1 py-0.5 border border-border/50"
+              class="text-[10px] bg-bg-main text-text-main rounded px-1 py-0.5 border border-border-subtle/50"
               value={ciFilter()}
               onChange={(e) => setCiFilter(e.currentTarget.value)}
             >
@@ -392,12 +392,12 @@ export function TaskDashboard() {
           <Switch>
             <Match when={prsLoading()}>
               <div class="space-y-1 p-2">
-                <div class="animate-pulse bg-bg/50 rounded h-12" />
-                <div class="animate-pulse bg-bg/50 rounded h-12" />
+                <div class="animate-pulse bg-bg-main/50 rounded h-12" />
+                <div class="animate-pulse bg-bg-main/50 rounded h-12" />
               </div>
             </Match>
             <Match when={filteredPrs().length === 0}>
-              <div class="text-xs text-text-muted text-center px-3 py-4">
+              <div class="text-xs text-text-dim text-center px-3 py-4">
                 <p>No open PRs found</p>
                 <p class="mt-1 opacity-70">Add repos to your workspace to see their PRs</p>
               </div>
@@ -406,11 +406,11 @@ export function TaskDashboard() {
               <div class="p-1">
                 <For each={filteredPrs()}>
                   {(pr) => (
-                    <div class="w-full text-left px-2 py-1.5 rounded text-xs hover:bg-bg/50">
+                    <div class="w-full text-left px-2 py-1.5 rounded text-xs hover:bg-bg-main/50">
                       <div class="flex items-center justify-between gap-1">
                         <input
                           type="checkbox"
-                          class="shrink-0 accent-accent cursor-pointer"
+                          class="shrink-0 accent-accent-primary cursor-pointer"
                           checked={selectedPrs().has(prKey(pr))}
                           onChange={() => togglePrSelection(pr)}
                         />
@@ -421,11 +421,11 @@ export function TaskDashboard() {
                           class="truncate hover:underline"
                           title={`PR #${pr.number} by ${pr.author}`}
                         >
-                          <span class="text-text-muted">{pr.repoName}</span>
-                          <span class="text-text-muted"> · </span>
-                          <span class="text-text">#{pr.number}</span>
-                          <span class="text-text-muted"> </span>
-                          <span class="text-text">{pr.title}</span>
+                          <span class="text-text-dim">{pr.repoName}</span>
+                          <span class="text-text-dim"> · </span>
+                          <span class="text-text-main">#{pr.number}</span>
+                          <span class="text-text-dim"> </span>
+                          <span class="text-text-main">{pr.title}</span>
                         </a>
                         <button
                           type="button"
@@ -437,7 +437,7 @@ export function TaskDashboard() {
                           {shepherding() === pr.number ? 'Starting...' : 'Shepherd'}
                         </button>
                       </div>
-                      <div class="flex items-center gap-2 mt-0.5 text-[10px] text-text-muted">
+                      <div class="flex items-center gap-2 mt-0.5 text-[10px] text-text-dim">
                         <CiBadge status={pr.ciStatus} />
                         <ReviewBadge decision={pr.reviewDecision} />
                         <Show when={pr.additions != null || pr.deletions != null}>
@@ -461,7 +461,7 @@ export function TaskDashboard() {
             </Match>
           </Switch>
           <Show when={selectedPrs().size > 0}>
-            <div class="px-2 py-1.5 border-t border-border/50">
+            <div class="px-2 py-1.5 border-t border-border-subtle/50">
               <button
                 type="button"
                 class={`w-full text-xs px-2 py-1 rounded cursor-pointer ${batchRunning() ? 'bg-accent/10 text-accent/50' : 'bg-accent/20 text-accent hover:bg-accent/30'}`}
@@ -478,39 +478,39 @@ export function TaskDashboard() {
           <Switch>
             <Match when={loading()}>
               <div class="space-y-1 p-2">
-                <div class="animate-pulse bg-bg/50 rounded h-10" />
-                <div class="animate-pulse bg-bg/50 rounded h-10" />
-                <div class="animate-pulse bg-bg/50 rounded h-10" />
+                <div class="animate-pulse bg-bg-main/50 rounded h-10" />
+                <div class="animate-pulse bg-bg-main/50 rounded h-10" />
+                <div class="animate-pulse bg-bg-main/50 rounded h-10" />
               </div>
             </Match>
             <Match when={items().length === 0}>
-              <div class="text-xs text-text-muted text-center px-3 py-4">
+              <div class="text-xs text-text-dim text-center px-3 py-4">
                 <p>No tasks yet</p>
                 <p class="mt-1 opacity-70">Create a task from the Team sidebar</p>
               </div>
             </Match>
             <Match when={items().length > 0}>
               <Show when={!hasActiveItems()}>
-                <div class="text-xs text-text-muted text-center px-3 py-3">All quiet</div>
+                <div class="text-xs text-text-dim text-center px-3 py-3">All quiet</div>
               </Show>
               <div class="p-1">
                 <For each={sortedItems()}>
                   {(item) => (
                     <button
                       type="button"
-                      class={`w-full text-left px-2 py-1.5 rounded text-xs hover:bg-bg/50 cursor-pointer ${item.task.frontmatter.status === 'blocked' ? 'border-l-2 border-yellow-400' : ''}`}
+                      class={`w-full text-left px-2 py-1.5 rounded text-xs hover:bg-bg-main/50 cursor-pointer ${item.task.frontmatter.status === 'blocked' ? 'border-l-2 border-yellow-400' : ''}`}
                       title={`${item.task.frontmatter.type} · ${item.task.frontmatter['run-count']} runs`}
                       onClick={() => handleCardClick(item)}
                     >
                       <div class="flex items-center justify-between gap-1">
                         <span class="truncate">
-                          <span class="text-text-muted">{item.repoName}</span>
-                          <span class="text-text-muted">/</span>
-                          <span class="text-text">{item.branch}</span>
+                          <span class="text-text-dim">{item.repoName}</span>
+                          <span class="text-text-dim">/</span>
+                          <span class="text-text-main">{item.branch}</span>
                         </span>
                         <TaskBadge status={item.task.frontmatter.status} />
                       </div>
-                      <div class="flex items-center gap-1.5 mt-0.5 text-[10px] text-text-muted">
+                      <div class="flex items-center gap-1.5 mt-0.5 text-[10px] text-text-dim">
                         <Show
                           when={
                             taskStore.state.activeRun?.taskPath === item.task.path &&
@@ -529,7 +529,7 @@ export function TaskDashboard() {
                                 </span>
                               </Show>
                               <Show when={artifacts().pr}>
-                                <span class="text-info">PR #{artifacts().pr}</span>
+                                <span class="text-accent-info">PR #{artifacts().pr}</span>
                               </Show>
                             </>
                           )}

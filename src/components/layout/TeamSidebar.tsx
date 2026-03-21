@@ -147,27 +147,27 @@ export function TeamSidebar() {
   });
 
   return (
-    <div class="flex flex-col h-full bg-surface">
+    <div class="flex flex-col h-full bg-bg-sidebar">
       {/* Header */}
-      <div class="px-3 py-2 border-b border-border">
-        <span class="text-xs font-bold uppercase text-text-muted tracking-wider">Team</span>
+      <div class="px-3 py-2 border-b border-border-subtle">
+        <span class="text-xs font-bold uppercase text-text-dim tracking-wider">Team</span>
       </div>
 
       {/* File Grid */}
       <Show when={worktreePath()}>
-        <div class="border-b border-border">
+        <div class="border-b border-border-subtle">
           <FileGrid worktreePath={worktreePath()} />
         </div>
       </Show>
 
       {/* Tasks */}
-      <div class="px-2 py-1.5 border-b border-border">
+      <div class="px-2 py-1.5 border-b border-border-subtle">
         <div class="flex items-center justify-between px-1">
-          <span class="text-[10px] uppercase text-text-muted tracking-wider">Tasks</span>
+          <span class="text-[10px] uppercase text-text-dim tracking-wider">Tasks</span>
           <Show when={worktreePath() && !activeWorktreeHasTask()}>
             <button
               type="button"
-              class="text-[10px] text-text-muted hover:text-text cursor-pointer"
+              class="text-[10px] text-text-dim hover:text-text-main cursor-pointer"
               onClick={() => setShowCreateTask(true)}
             >
               + New Task
@@ -178,18 +178,18 @@ export function TeamSidebar() {
           when={tasksWithWorktree().length > 0}
           fallback={
             <Show when={worktreePath()}>
-              <div class="px-2 py-2 text-[10px] text-text-muted text-center">No tasks yet</div>
+              <div class="px-2 py-2 text-[10px] text-text-dim text-center">No tasks yet</div>
             </Show>
           }
         >
           <div class="mt-1 space-y-0.5">
             <For each={tasksWithWorktree()}>
               {(item) => (
-                <div class="px-2 py-1.5 rounded text-xs hover:bg-bg/50">
+                <div class="px-2 py-1.5 rounded text-xs hover:bg-bg-main/50">
                   <div class="flex items-center gap-2">
                     <div class="flex-1 min-w-0">
                       <div class="flex items-center gap-1.5">
-                        <span class="text-text truncate">{item.worktree.branch}</span>
+                        <span class="text-text-main truncate">{item.worktree.branch}</span>
                         <TaskBadge status={item.task.frontmatter.status} />
                       </div>
                     </div>
@@ -197,7 +197,7 @@ export function TeamSidebar() {
                     <Show when={canLaunch() && item.task.frontmatter.status === 'created'}>
                       <button
                         type="button"
-                        class="shrink-0 px-1.5 py-0.5 text-[10px] text-text-muted hover:text-text border border-border rounded hover:border-primary cursor-pointer"
+                        class="shrink-0 px-1.5 py-0.5 text-[10px] text-text-dim hover:text-text-main border border-border-subtle rounded hover:border-accent-primary cursor-pointer"
                         onClick={() => handleLaunch(item.task, item.worktree.path)}
                       >
                         Launch
@@ -209,7 +209,7 @@ export function TeamSidebar() {
                     >
                       <button
                         type="button"
-                        class="shrink-0 px-1.5 py-0.5 text-[10px] text-red-400 hover:text-red-300 border border-border rounded hover:border-red-400 cursor-pointer"
+                        class="shrink-0 px-1.5 py-0.5 text-[10px] text-red-400 hover:text-red-300 border border-border-subtle rounded hover:border-red-400 cursor-pointer"
                         onClick={() => cancelRun().catch(() => {})}
                       >
                         Cancel
@@ -225,14 +225,14 @@ export function TeamSidebar() {
                     >
                       <button
                         type="button"
-                        class="shrink-0 px-1.5 py-0.5 text-[10px] text-text-muted hover:text-text border border-border rounded hover:border-primary cursor-pointer"
+                        class="shrink-0 px-1.5 py-0.5 text-[10px] text-text-dim hover:text-text-main border border-border-subtle rounded hover:border-accent-primary cursor-pointer"
                         onClick={() => retryRun(item.task.path, item.worktree.path).catch(() => {})}
                       >
                         Retry
                       </button>
                       <button
                         type="button"
-                        class="shrink-0 px-1.5 py-0.5 text-[10px] text-text-muted hover:text-text border border-border rounded hover:border-info cursor-pointer"
+                        class="shrink-0 px-1.5 py-0.5 text-[10px] text-text-dim hover:text-text-main border border-border-subtle rounded hover:border-info cursor-pointer"
                         onClick={() =>
                           resumeRun(item.task.path, item.worktree.path).catch(() => {})
                         }
@@ -242,7 +242,7 @@ export function TeamSidebar() {
                     </Show>
                   </div>
                   {/* Task details row */}
-                  <div class="flex items-center gap-2 mt-0.5 text-[10px] text-text-muted">
+                  <div class="flex items-center gap-2 mt-0.5 text-[10px] text-text-dim">
                     <span class="capitalize">{item.task.frontmatter.type.replace('-', ' ')}</span>
                     <Show when={item.task.frontmatter.pr}>
                       <span>PR #{item.task.frontmatter.pr}</span>
@@ -254,7 +254,7 @@ export function TeamSidebar() {
                   {/* Artifact summary */}
                   <Show when={parseArtifactSummary(item.task.body)}>
                     {(artifacts) => (
-                      <div class="flex items-center gap-1.5 mt-0.5 text-[10px] text-text-muted">
+                      <div class="flex items-center gap-1.5 mt-0.5 text-[10px] text-text-dim">
                         <Show when={artifacts().totalCommits > 0}>
                           <span>
                             {artifacts().totalCommits} commit
@@ -262,7 +262,7 @@ export function TeamSidebar() {
                           </span>
                         </Show>
                         <Show when={artifacts().pr}>
-                          <span class="text-info">PR #{artifacts().pr}</span>
+                          <span class="text-accent-info">PR #{artifacts().pr}</span>
                         </Show>
                       </div>
                     )}
@@ -273,7 +273,7 @@ export function TeamSidebar() {
           </div>
         </Show>
         <Show when={launchError()}>
-          <p class="px-2 mt-1 text-[10px] text-error truncate">{launchError()}</p>
+          <p class="px-2 mt-1 text-[10px] text-accent-error truncate">{launchError()}</p>
         </Show>
       </div>
       {/* PR Context + Prior Knowledge for pr-shepherd tasks */}
@@ -281,11 +281,11 @@ export function TeamSidebar() {
         {(item) => (
           <Show when={item.task.frontmatter.type === 'pr-shepherd'}>
             <Show when={item.task.frontmatter.pr}>
-              <div class="px-2 py-1.5 border-b border-border">
-                <span class="text-[10px] uppercase text-text-muted tracking-wider px-1">
+              <div class="px-2 py-1.5 border-b border-border-subtle">
+                <span class="text-[10px] uppercase text-text-dim tracking-wider px-1">
                   PR Context
                 </span>
-                <div class="px-2 mt-1 text-[10px] text-text-muted space-y-0.5">
+                <div class="px-2 mt-1 text-[10px] text-text-dim space-y-0.5">
                   <div>PR #{item.task.frontmatter.pr}</div>
                   <Show when={item.task.body.includes('Failing checks:')}>
                     <div class="text-red-400">
@@ -320,11 +320,11 @@ export function TeamSidebar() {
                 !item.task.body.includes('(none yet)')
               }
             >
-              <div class="px-2 py-1.5 border-b border-border">
-                <span class="text-[10px] uppercase text-text-muted tracking-wider px-1">
+              <div class="px-2 py-1.5 border-b border-border-subtle">
+                <span class="text-[10px] uppercase text-text-dim tracking-wider px-1">
                   Prior Knowledge
                 </span>
-                <div class="px-2 mt-1 text-[10px] text-text-muted space-y-0.5">
+                <div class="px-2 mt-1 text-[10px] text-text-dim space-y-0.5">
                   <For
                     each={
                       item.task.body
@@ -354,7 +354,7 @@ export function TeamSidebar() {
       {/* Permission Approval Dialogs */}
       <For each={taskStore.state.pendingPermissions}>
         {(perm) => (
-          <div class="border-b border-border">
+          <div class="border-b border-border-subtle">
             <ApprovalDialog
               permission={perm}
               onRespond={(decision) => {
@@ -368,19 +368,19 @@ export function TeamSidebar() {
 
       {/* Active Agents */}
       <Show when={activeAgents().length > 0}>
-        <div class="px-2 py-1.5 border-b border-border">
-          <span class="text-[10px] uppercase text-text-muted tracking-wider px-1">Active</span>
+        <div class="px-2 py-1.5 border-b border-border-subtle">
+          <span class="text-[10px] uppercase text-text-dim tracking-wider px-1">Active</span>
           <div class="mt-1 space-y-0.5">
             <For each={activeAgents()}>
               {(item) => (
-                <div class="flex items-center gap-2 px-2 py-1 rounded text-xs hover:bg-bg/50">
+                <div class="flex items-center gap-2 px-2 py-1 rounded text-xs hover:bg-bg-main/50">
                   <span
                     class={`w-2 h-2 rounded-full shrink-0 ${statusColor(item.agent?.status ?? 'stopped')}`}
                   />
                   <div class="flex-1 min-w-0">
-                    <div class="text-text truncate">{item.tab.title}</div>
+                    <div class="text-text-main truncate">{item.tab.title}</div>
                     <Show when={item.agent?.currentTool}>
-                      <div class="text-[10px] text-text-muted truncate">
+                      <div class="text-[10px] text-text-dim truncate">
                         {item.agent?.currentTool}
                         <Show when={item.agent?.currentFile}>
                           {' '}
@@ -389,7 +389,7 @@ export function TeamSidebar() {
                       </div>
                     </Show>
                     <Show when={item.agent && item.agent.subagentCount > 0}>
-                      <div class="text-[10px] text-info">
+                      <div class="text-[10px] text-accent-info">
                         +{item.agent?.subagentCount} subagent
                         {item.agent?.subagentCount === 1 ? '' : 's'}
                       </div>
@@ -407,7 +407,7 @@ export function TeamSidebar() {
         <Show
           when={definitions().length > 0}
           fallback={
-            <div class="px-3 py-4 text-xs text-text-muted text-center">
+            <div class="px-3 py-4 text-xs text-text-dim text-center">
               <Show when={repoPath()} fallback={<span>Select a repo to see agents</span>}>
                 <div>No agents defined</div>
                 <div class="mt-1 text-[10px]">.claude/agents/*.md</div>
@@ -416,24 +416,24 @@ export function TeamSidebar() {
           }
         >
           <div class="px-2 py-1.5">
-            <span class="text-[10px] uppercase text-text-muted tracking-wider px-1">
-              Definitions
-            </span>
+            <span class="text-[10px] uppercase text-text-dim tracking-wider px-1">Definitions</span>
             <div class="mt-1 space-y-0.5">
               <For each={definitions()}>
                 {(def) => (
-                  <div class="group flex items-start gap-2 px-2 py-1.5 rounded hover:bg-bg/50">
+                  <div class="group flex items-start gap-2 px-2 py-1.5 rounded hover:bg-bg-main/50">
                     <div class="flex-1 min-w-0">
-                      <div class="text-xs text-text truncate">{def.name}</div>
+                      <div class="text-xs text-text-main truncate">{def.name}</div>
                       <Show when={def.description}>
-                        <div class="text-[10px] text-text-muted truncate">{def.description}</div>
+                        <div class="text-[10px] text-text-dim truncate">{def.description}</div>
                       </Show>
                       <div class="flex gap-1.5 mt-0.5">
                         <Show when={def.model}>
-                          <span class="text-[9px] px-1 rounded bg-bg text-info">{def.model}</span>
+                          <span class="text-[9px] px-1 rounded bg-bg-main text-accent-info">
+                            {def.model}
+                          </span>
                         </Show>
                         <Show when={def.permissionMode}>
-                          <span class="text-[9px] px-1 rounded bg-bg text-warning">
+                          <span class="text-[9px] px-1 rounded bg-bg-main text-accent-warning">
                             {def.permissionMode}
                           </span>
                         </Show>
@@ -441,7 +441,7 @@ export function TeamSidebar() {
                     </div>
                     <button
                       type="button"
-                      class="opacity-0 group-hover:opacity-100 shrink-0 mt-0.5 px-1.5 py-0.5 text-[10px] text-text-muted hover:text-text border border-border rounded hover:border-primary cursor-pointer transition-opacity"
+                      class="opacity-0 group-hover:opacity-100 shrink-0 mt-0.5 px-1.5 py-0.5 text-[10px] text-text-dim hover:text-text-main border border-border-subtle rounded hover:border-accent-primary cursor-pointer transition-opacity"
                       onClick={() => launchAgent(def)}
                       disabled={!worktreePath()}
                     >
@@ -457,10 +457,10 @@ export function TeamSidebar() {
 
       {/* Footer */}
       <Show when={worktreePath()}>
-        <div class="p-2 border-t border-border">
+        <div class="p-2 border-t border-border-subtle">
           <button
             type="button"
-            class="w-full px-3 py-1.5 text-xs text-text-muted hover:text-text cursor-pointer text-left hover:bg-bg/50 rounded"
+            class="w-full px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer text-left hover:bg-bg-main/50 rounded"
             onClick={() => terminalStore.openClaudeTab(worktreePath())}
           >
             + New Claude Session

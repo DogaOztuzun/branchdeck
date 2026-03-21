@@ -90,12 +90,12 @@ export function CreateTaskModal(props: CreateTaskModalProps) {
     >
       <Dialog.Portal>
         <Dialog.Overlay class="fixed inset-0 z-40 bg-black/50" />
-        <Dialog.Content class="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 bg-surface border border-border rounded-lg shadow-lg p-4">
-          <Dialog.Title class="text-sm font-semibold text-text mb-3">New Task</Dialog.Title>
+        <Dialog.Content class="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 bg-bg-sidebar border border-border-subtle rounded-lg shadow-lg p-4">
+          <Dialog.Title class="text-sm font-semibold text-text-main mb-3">New Task</Dialog.Title>
 
           <form onSubmit={handleCreate}>
             <div>
-              <label class="text-xs text-text-muted" for="task-type-select">
+              <label class="text-xs text-text-dim" for="task-type-select">
                 Task type
               </label>
               <select
@@ -103,7 +103,7 @@ export function CreateTaskModal(props: CreateTaskModalProps) {
                 value={taskType()}
                 onChange={(e) => handleTypeChange(e.currentTarget.value as TaskType)}
                 style={{ 'background-color': 'var(--color-bg)', color: 'var(--color-text)' }}
-                class="w-full mt-1 px-3 py-1.5 text-xs border border-border rounded focus:outline-none focus:border-primary appearance-none [&>option]:bg-bg [&>option]:text-text"
+                class="w-full mt-1 px-3 py-1.5 text-xs border border-border-subtle rounded focus:outline-none focus:border-accent-primary appearance-none [&>option]:bg-bg-main [&>option]:text-text-main"
               >
                 <option value="issue-fix">Issue Fix</option>
                 <option value="pr-shepherd">PR Shepherd</option>
@@ -112,7 +112,7 @@ export function CreateTaskModal(props: CreateTaskModalProps) {
 
             <Show when={isPrShepherd()}>
               <div class="mt-2">
-                <label class="text-xs text-text-muted" for="pr-number-input">
+                <label class="text-xs text-text-dim" for="pr-number-input">
                   PR number
                 </label>
                 <input
@@ -122,13 +122,13 @@ export function CreateTaskModal(props: CreateTaskModalProps) {
                   placeholder="#123"
                   value={prNumber()}
                   onInput={(e) => setPrNumber(e.currentTarget.value)}
-                  class="w-full mt-1 px-3 py-1.5 text-xs bg-bg border border-border rounded text-text placeholder:text-text-muted focus:outline-none focus:border-primary"
+                  class="w-full mt-1 px-3 py-1.5 text-xs bg-bg-main border border-border-subtle rounded text-text-main placeholder:text-text-dim focus:outline-none focus:border-accent-primary"
                 />
               </div>
             </Show>
 
             <div class="mt-2">
-              <label class="text-xs text-text-muted" for="task-description">
+              <label class="text-xs text-text-dim" for="task-description">
                 Description
               </label>
               <textarea
@@ -137,29 +137,29 @@ export function CreateTaskModal(props: CreateTaskModalProps) {
                 value={description()}
                 onInput={(e) => setDescription(e.currentTarget.value)}
                 rows={3}
-                class="w-full mt-1 px-3 py-1.5 text-xs bg-bg border border-border rounded text-text placeholder:text-text-muted focus:outline-none focus:border-primary resize-y"
+                class="w-full mt-1 px-3 py-1.5 text-xs bg-bg-main border border-border-subtle rounded text-text-main placeholder:text-text-dim focus:outline-none focus:border-accent-primary resize-y"
               />
             </div>
 
             <div class="mt-3 space-y-1.5 text-xs">
               <div class="flex gap-2">
-                <span class="text-text-muted">Repo:</span>
-                <span class="text-text truncate">{props.repo}</span>
+                <span class="text-text-dim">Repo:</span>
+                <span class="text-text-main truncate">{props.repo}</span>
               </div>
               <div class="flex gap-2">
-                <span class="text-text-muted">Branch:</span>
-                <span class="text-text truncate">{props.branch}</span>
+                <span class="text-text-dim">Branch:</span>
+                <span class="text-text-main truncate">{props.branch}</span>
               </div>
             </div>
 
             <Show when={error()}>
-              <p class="mt-2 text-xs text-error">{error()}</p>
+              <p class="mt-2 text-xs text-accent-error">{error()}</p>
             </Show>
 
             <div class="mt-4 flex justify-end gap-2">
               <button
                 type="button"
-                class="px-3 py-1.5 text-xs text-text-muted hover:text-text cursor-pointer rounded hover:bg-bg/50"
+                class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer rounded hover:bg-bg-main/50"
                 onClick={() => props.onClose()}
               >
                 Cancel
@@ -167,7 +167,7 @@ export function CreateTaskModal(props: CreateTaskModalProps) {
               <button
                 type="submit"
                 disabled={isCreateDisabled()}
-                class="px-3 py-1.5 text-xs bg-primary text-bg rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+                class="px-3 py-1.5 text-xs bg-accent-primary text-bg rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
               >
                 {creating() ? 'Creating...' : 'Create Task'}
               </button>

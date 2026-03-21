@@ -34,7 +34,7 @@ export function ContextMenu(props: ContextMenuProps) {
     <Show when={props.items.length > 0}>
       <div
         ref={menuRef}
-        class="fixed z-50 bg-surface border border-border rounded shadow-lg py-1 min-w-40"
+        class="fixed z-50 bg-bg-sidebar border border-border-subtle rounded shadow-lg py-1 min-w-40"
         style={{ left: `${props.x}px`, top: `${props.y}px` }}
       >
         <For each={props.items}>
@@ -43,8 +43,8 @@ export function ContextMenu(props: ContextMenuProps) {
               type="button"
               class={`block w-full text-left px-3 py-1.5 text-xs cursor-pointer ${
                 item.variant === 'danger'
-                  ? 'text-error hover:bg-error/10'
-                  : 'text-text hover:bg-bg/50'
+                  ? 'text-accent-error hover:bg-accent-error/10'
+                  : 'text-text-main hover:bg-bg-main/50'
               }`}
               onClick={() => {
                 item.onClick();

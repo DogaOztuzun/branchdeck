@@ -107,8 +107,10 @@ export function BranchWorktreeModal(props: BranchWorktreeModalProps) {
     >
       <Dialog.Portal>
         <Dialog.Overlay class="fixed inset-0 z-40 bg-black/50" />
-        <Dialog.Content class="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 bg-surface border border-border rounded-lg shadow-lg p-4">
-          <Dialog.Title class="text-sm font-semibold text-text mb-3">Checkout Branch</Dialog.Title>
+        <Dialog.Content class="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 bg-bg-sidebar border border-border-subtle rounded-lg shadow-lg p-4">
+          <Dialog.Title class="text-sm font-semibold text-text-main mb-3">
+            Checkout Branch
+          </Dialog.Title>
 
           <input
             type="text"
@@ -116,11 +118,11 @@ export function BranchWorktreeModal(props: BranchWorktreeModalProps) {
             value={search()}
             onInput={(e) => setSearch(e.currentTarget.value)}
             autofocus
-            class="w-full px-3 py-1.5 text-xs bg-bg border border-border rounded text-text placeholder:text-text-muted focus:outline-none focus:border-primary"
+            class="w-full px-3 py-1.5 text-xs bg-bg-main border border-border-subtle rounded text-text-main placeholder:text-text-dim focus:outline-none focus:border-accent-primary"
           />
 
           <Show when={loading()}>
-            <div class="mt-3 text-xs text-text-muted">Loading branches...</div>
+            <div class="mt-3 text-xs text-text-dim">Loading branches...</div>
           </Show>
 
           <Show
@@ -128,15 +130,15 @@ export function BranchWorktreeModal(props: BranchWorktreeModalProps) {
               !loading() && !error() && filteredBranches().length === 0 && branches().length > 0
             }
           >
-            <div class="mt-3 text-xs text-text-muted">No branches match your search.</div>
+            <div class="mt-3 text-xs text-text-dim">No branches match your search.</div>
           </Show>
 
           <Show when={!loading() && !error() && branches().length === 0}>
-            <div class="mt-3 text-xs text-text-muted">No branches found.</div>
+            <div class="mt-3 text-xs text-text-dim">No branches found.</div>
           </Show>
 
           <Show when={!loading() && filteredBranches().length > 0}>
-            <div class="mt-3 max-h-64 overflow-y-auto border border-border rounded">
+            <div class="mt-3 max-h-64 overflow-y-auto border border-border-subtle rounded">
               <For each={filteredBranches()}>
                 {(branch) => (
                   <button
@@ -146,8 +148,8 @@ export function BranchWorktreeModal(props: BranchWorktreeModalProps) {
                       branch.hasWorktree
                         ? 'opacity-50 cursor-not-allowed'
                         : selected() === branch.name
-                          ? 'bg-primary/20 text-primary'
-                          : 'text-text hover:bg-bg/50'
+                          ? 'bg-accent-primary/20 text-accent-primary'
+                          : 'text-text-main hover:bg-bg-main/50'
                     }`}
                     onClick={() => {
                       if (!branch.hasWorktree) {
@@ -158,12 +160,12 @@ export function BranchWorktreeModal(props: BranchWorktreeModalProps) {
                     <span class="truncate">{branch.name}</span>
                     <span class="ml-auto flex gap-1 shrink-0">
                       <Show when={branch.isRemote}>
-                        <span class="px-1.5 py-0.5 text-[10px] text-text-muted bg-bg rounded">
+                        <span class="px-1.5 py-0.5 text-[10px] text-text-dim bg-bg-main rounded">
                           remote
                         </span>
                       </Show>
                       <Show when={branch.hasWorktree}>
-                        <span class="px-1.5 py-0.5 text-[10px] text-info bg-bg rounded">
+                        <span class="px-1.5 py-0.5 text-[10px] text-accent-info bg-bg-main rounded">
                           in use
                         </span>
                       </Show>
@@ -177,24 +179,24 @@ export function BranchWorktreeModal(props: BranchWorktreeModalProps) {
           <Show when={selectedBranch()}>
             <div class="mt-3 space-y-1.5 text-xs">
               <div class="flex gap-2">
-                <span class="text-text-muted">Branch:</span>
-                <span class="text-text">{selectedBranch()?.name}</span>
+                <span class="text-text-dim">Branch:</span>
+                <span class="text-text-main">{selectedBranch()?.name}</span>
               </div>
               <div class="flex gap-2">
-                <span class="text-text-muted">Path:</span>
-                <span class="text-text truncate">{worktreePath()}</span>
+                <span class="text-text-dim">Path:</span>
+                <span class="text-text-main truncate">{worktreePath()}</span>
               </div>
             </div>
           </Show>
 
           <Show when={error()}>
-            <p class="mt-2 text-xs text-error">{error()}</p>
+            <p class="mt-2 text-xs text-accent-error">{error()}</p>
           </Show>
 
           <div class="mt-4 flex justify-end gap-2">
             <button
               type="button"
-              class="px-3 py-1.5 text-xs text-text-muted hover:text-text cursor-pointer rounded hover:bg-bg/50"
+              class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer rounded hover:bg-bg-main/50"
               onClick={() => props.onClose()}
             >
               Cancel
@@ -202,7 +204,7 @@ export function BranchWorktreeModal(props: BranchWorktreeModalProps) {
             <button
               type="button"
               disabled={isCreateDisabled()}
-              class="px-3 py-1.5 text-xs bg-primary text-bg rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+              class="px-3 py-1.5 text-xs bg-accent-primary text-bg rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
               onClick={handleCreate}
             >
               {creating() ? 'Creating...' : 'Create Worktree'}

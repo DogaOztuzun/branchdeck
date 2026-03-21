@@ -24,13 +24,13 @@ function typeLabel(type: RunLogEntry['type']): string {
 function typeColor(type: RunLogEntry['type']): string {
   switch (type) {
     case 'run_step':
-      return 'text-primary';
+      return 'text-accent-primary';
     case 'assistant_text':
-      return 'text-text-muted';
+      return 'text-text-dim';
     case 'tool_call':
-      return 'text-info';
+      return 'text-accent-info';
     case 'status_change':
-      return 'text-warning';
+      return 'text-accent-warning';
   }
 }
 
@@ -79,9 +79,9 @@ function EntryDetail(props: { entry: RunLogEntry }) {
       fallback={
         <Show
           when={props.entry.type === 'assistant_text'}
-          fallback={<span class="text-text truncate">{props.entry.detail}</span>}
+          fallback={<span class="text-text-main truncate">{props.entry.detail}</span>}
         >
-          <span class="text-text truncate italic">{props.entry.detail}</span>
+          <span class="text-text-main truncate italic">{props.entry.detail}</span>
         </Show>
       }
     >
@@ -102,9 +102,9 @@ function ToolCallDetail(props: { detail: string }) {
 
   return (
     <span class="truncate">
-      <span class="text-info font-semibold">{parts().tool}</span>
+      <span class="text-accent-info font-semibold">{parts().tool}</span>
       <Show when={parts().path}>
-        <span class="text-text-muted ml-1">{parts().path}</span>
+        <span class="text-text-dim ml-1">{parts().path}</span>
       </Show>
     </span>
   );
@@ -117,10 +117,11 @@ function CostBadge(props: { detail: string }) {
   });
 
   return (
-    <Show when={cost()} fallback={<span class="text-text truncate">{props.detail}</span>}>
+    <Show when={cost()} fallback={<span class="text-text-main truncate">{props.detail}</span>}>
       {(c) => (
-        <span class="text-text truncate">
-          {props.detail.replace(c(), '').trim()} <span class="text-primary font-medium">{c()}</span>
+        <span class="text-text-main truncate">
+          {props.detail.replace(c(), '').trim()}{' '}
+          <span class="text-accent-primary font-medium">{c()}</span>
         </span>
       )}
     </Show>
@@ -150,12 +151,14 @@ function RunHeader(props: { activeRun: RunInfo }) {
   onCleanup(() => clearInterval(interval));
 
   return (
-    <div class="flex items-center justify-between px-3 py-1.5 bg-surface-alt border-b border-border">
-      <span class="text-xs text-text">
+    <div class="flex items-center justify-between px-3 py-1.5 bg-bg-sidebar-alt border-b border-border-subtle">
+      <span class="text-xs text-text-main">
         {statusText(props.activeRun.status)}{' '}
-        <span class="text-text-muted">&mdash; {formatDuration(elapsed())}</span>
+        <span class="text-text-dim">&mdash; {formatDuration(elapsed())}</span>
       </span>
-      <span class="text-xs text-primary font-medium">{formatCost(props.activeRun.costUsd)}</span>
+      <span class="text-xs text-accent-primary font-medium">
+        {formatCost(props.activeRun.costUsd)}
+      </span>
     </div>
   );
 }
@@ -165,21 +168,21 @@ export function RunTimeline(props: RunTimelineProps) {
 
   return (
     <Show when={props.visible}>
-      <div class="border-t border-border bg-surface">
+      <div class="border-t border-border-subtle bg-bg-sidebar">
         <Show when={props.activeRun}>{(run) => <RunHeader activeRun={run()} />}</Show>
-        <div class="flex items-center justify-between px-3 py-1 border-b border-border">
-          <span class="text-[10px] text-text-muted uppercase tracking-wider">Run Timeline</span>
-          <span class="text-[10px] text-text-muted">{props.entries.length} events</span>
+        <div class="flex items-center justify-between px-3 py-1 border-b border-border-subtle">
+          <span class="text-[10px] text-text-dim uppercase tracking-wider">Run Timeline</span>
+          <span class="text-[10px] text-text-dim">{props.entries.length} events</span>
         </div>
         <div class="overflow-y-auto max-h-32">
           <Show
             when={reversed().length > 0}
-            fallback={<div class="px-3 py-2 text-xs text-text-muted">No run activity yet.</div>}
+            fallback={<div class="px-3 py-2 text-xs text-text-dim">No run activity yet.</div>}
           >
             <For each={reversed()}>
               {(entry) => (
-                <div class="flex items-baseline gap-2 px-3 py-0.5 text-[11px] hover:bg-bg/30">
-                  <span class="text-text-muted shrink-0 w-16">{formatTime(entry.ts)}</span>
+                <div class="flex items-baseline gap-2 px-3 py-0.5 text-[11px] hover:bg-bg-main/30">
+                  <span class="text-text-dim shrink-0 w-16">{formatTime(entry.ts)}</span>
                   <span class={`shrink-0 w-10 ${typeColor(entry.type)}`}>
                     {typeLabel(entry.type)}
                   </span>
