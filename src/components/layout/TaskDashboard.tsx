@@ -403,14 +403,15 @@ export function TaskDashboard() {
               </div>
             </Match>
             <Match when={filteredPrs().length > 0}>
-              <div class="p-1">
+              <div class="divide-y divide-border-subtle/30">
                 <For each={filteredPrs()}>
                   {(pr) => (
-                    <div class="w-full text-left px-2 py-1.5text-xs hover:bg-bg-main/50">
-                      <div class="flex items-center justify-between gap-1">
+                    <div class="px-3 py-2 text-xs hover:bg-bg-main/30 transition-colors duration-150">
+                      {/* Row 1: PR number + title (full width) */}
+                      <div class="flex items-start gap-1.5">
                         <input
                           type="checkbox"
-                          class="shrink-0 accent-accent-primary cursor-pointer"
+                          class="shrink-0 mt-0.5 accent-accent-primary cursor-pointer"
                           checked={selectedPrs().has(prKey(pr))}
                           onChange={() => togglePrSelection(pr)}
                         />
@@ -418,22 +419,35 @@ export function TaskDashboard() {
                           href={pr.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          class="flex-1 min-w-0 hover:underline"
+                          class="min-w-0 hover:underline"
                           title={pr.title}
                         >
-                          <div class="flex items-center gap-1.5">
-                            <span class="text-[11px] font-medium text-accent-primary shrink-0">
-                              #{pr.number}
-                            </span>
-                            <span class="text-[11px] text-text-main truncate">{pr.title}</span>
-                          </div>
-                          <div class="text-[10px] text-text-dim truncate mt-px">
-                            {pr.repoName}
-                          </div>
+                          <span class="text-[11px] font-medium text-accent-primary">#{pr.number}</span>
+                          {' '}
+                          <span class="text-[11px] text-text-main">{pr.title}</span>
                         </a>
+                      </div>
+                      {/* Row 2: repo + metadata */}
+                      <div class="flex items-center gap-2 mt-1 text-[10px] text-text-dim pl-5">
+                        <span class="truncate">{pr.repoName}</span>
+                        <CiBadge status={pr.ciStatus} />
+                        <ReviewBadge decision={pr.reviewDecision} />
+                        <Show when={pr.additions != null || pr.deletions != null}>
+                          <span>
+                            <span class="text-green-400">+{pr.additions ?? 0}</span>
+                            <span class="text-red-400"> -{pr.deletions ?? 0}</span>
+                          </span>
+                        </Show>
+                        <Show when={pr.createdAt}>
+                          <span>{formatAge(pr.createdAt)}</span>
+                        </Show>
+                      </div>
+                      {/* Row 3: author + shepherd action */}
+                      <div class="flex items-center justify-between mt-1 pl-5">
+                        <span class="text-[10px] text-text-dim">{pr.author}</span>
                         <button
                           type="button"
-                          class={`shrink-0 text-[10px] font-medium px-2 py-0.5 border cursor-pointer transition-colors duration-150 ${
+                          class={`text-[10px] font-medium px-2 py-0.5 border cursor-pointer transition-colors duration-150 ${
                             shepherding() === pr.number
                               ? 'border-accent-primary/30 text-accent-primary/50 bg-accent-primary/5'
                               : 'border-border-subtle text-text-dim hover:text-accent-primary hover:border-accent-primary/50 hover:bg-accent-primary/5'
@@ -444,23 +458,6 @@ export function TaskDashboard() {
                         >
                           {shepherding() === pr.number ? '...' : 'Shepherd'}
                         </button>
-                      </div>
-                      <div class="flex items-center gap-2 mt-0.5 text-[10px] text-text-dim">
-                        <CiBadge status={pr.ciStatus} />
-                        <ReviewBadge decision={pr.reviewDecision} />
-                        <Show when={pr.additions != null || pr.deletions != null}>
-                          <span>
-                            <span class="text-green-400">+{pr.additions ?? 0}</span>
-                            <span class="text-red-400"> -{pr.deletions ?? 0}</span>
-                          </span>
-                        </Show>
-                        <Show when={pr.changedFiles != null}>
-                          <span>{pr.changedFiles} files</span>
-                        </Show>
-                        <Show when={pr.createdAt}>
-                          <span>{formatAge(pr.createdAt)}</span>
-                        </Show>
-                        <span class="ml-auto">{pr.author}</span>
                       </div>
                     </div>
                   )}
