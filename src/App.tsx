@@ -2,7 +2,7 @@ import { Match, onMount, Switch } from 'solid-js';
 import { OrchestrationView } from './components/layout/OrchestrationView';
 import { Shell } from './components/layout/Shell';
 import { TopBar } from './components/layout/TopBar';
-import { ApprovalModal } from './components/task/ApprovalModal';
+import { ApprovalBanner } from './components/task/ApprovalModal';
 import { ToastRegion } from './components/ui/ToastRegion';
 import { registerShortcuts } from './lib/shortcuts';
 import { getLayoutStore } from './lib/stores/layout';
@@ -25,7 +25,7 @@ export function App() {
           <OrchestrationView />
         </Match>
       </Switch>
-      <ApprovalModal />
+      <ApprovalBanner />
       <ToastRegion />
     </div>
   );
