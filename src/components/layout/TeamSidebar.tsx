@@ -29,9 +29,21 @@ export function TeamSidebar() {
   const [definitions, setDefinitions] = createSignal<AgentDefinition[]>([]);
   const [showCreateTask, setShowCreateTask] = createSignal(false);
   const [launchError, setLaunchError] = createSignal<string | null>(null);
-  const [prContextCollapsed, setPrContextCollapsed] = createSignal(false);
-  const [knowledgeCollapsed, setKnowledgeCollapsed] = createSignal(false);
+  const [collapsedSections, setCollapsedSections] = createSignal<Set<string>>(new Set());
   const [agentsCollapsed, setAgentsCollapsed] = createSignal(false);
+
+  function isSectionCollapsed(key: string): boolean {
+    return collapsedSections().has(key);
+  }
+
+  function toggleSection(key: string) {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
   let launchErrorTimer: ReturnType<typeof setTimeout> | undefined;
 
   const repoPath = () => repoStore.state.activeRepoPath ?? '';
@@ -272,10 +284,10 @@ export function TeamSidebar() {
               <div class="border-b border-border-subtle">
                 <SectionHeader
                   label={`PR #${item.task.frontmatter.pr}`}
-                  collapsed={prContextCollapsed()}
-                  onToggle={() => setPrContextCollapsed((v) => !v)}
+                  collapsed={isSectionCollapsed(`pr:${item.task.path}`)}
+                  onToggle={() => toggleSection(`pr:${item.task.path}`)}
                 />
-                <Show when={!prContextCollapsed()}>
+                <Show when={!isSectionCollapsed(`pr:${item.task.path}`)}>
                   <div class="px-3 pb-2 text-[10px] space-y-1.5">
                     {/* Checks */}
                     <Show when={item.task.body.includes('Failing checks:')}>
@@ -350,8 +362,8 @@ export function TeamSidebar() {
               <div class="border-b border-border-subtle">
                 <SectionHeader
                   label="Prior Knowledge"
-                  collapsed={knowledgeCollapsed()}
-                  onToggle={() => setKnowledgeCollapsed((v) => !v)}
+                  collapsed={isSectionCollapsed(`knowledge:${item.task.path}`)}
+                  onToggle={() => toggleSection(`knowledge:${item.task.path}`)}
                   count={
                     item.task.body
                       .split('## Prior Knowledge')[1]
@@ -359,7 +371,7 @@ export function TeamSidebar() {
                       .filter((l) => l.startsWith('- ')).length
                   }
                 />
-                <Show when={!knowledgeCollapsed()}>
+                <Show when={!isSectionCollapsed(`knowledge:${item.task.path}`)}>
                   <div class="px-3 pb-2">
                     <div class="text-[10px] text-text-dim space-y-0.5 bg-bg-main/30 px-2 py-1.5 border border-border-subtle/30 max-h-32 overflow-y-auto">
                       <For
