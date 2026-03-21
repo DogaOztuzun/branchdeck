@@ -370,7 +370,7 @@ export function TaskDashboard() {
         <Show when={activeTab() === 'prs'}>
           <div class="px-2 py-1.5 flex items-center gap-1.5 border-b border-border-subtle/50">
             <select
-              class="text-[10px] bg-bg-main text-text-mainpx-1 py-0.5 border border-border-subtle/50"
+              class="text-[10px] bg-bg-main text-text-main px-1.5 py-0.5 border border-border-subtle/50 cursor-pointer [&>option]:bg-bg-main [&>option]:text-text-main"
               value={authorFilter()}
               onChange={(e) => setAuthorFilter(e.currentTarget.value)}
             >
@@ -378,7 +378,7 @@ export function TaskDashboard() {
               <For each={authors()}>{(a) => <option value={a}>{a}</option>}</For>
             </select>
             <select
-              class="text-[10px] bg-bg-main text-text-mainpx-1 py-0.5 border border-border-subtle/50"
+              class="text-[10px] bg-bg-main text-text-main px-1.5 py-0.5 border border-border-subtle/50 cursor-pointer [&>option]:bg-bg-main [&>option]:text-text-main"
               value={ciFilter()}
               onChange={(e) => setCiFilter(e.currentTarget.value)}
             >
