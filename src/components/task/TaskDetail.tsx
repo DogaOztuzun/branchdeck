@@ -34,8 +34,6 @@ export function TaskDetail(props: TaskDetailProps) {
   let launchErrorTimer: ReturnType<typeof setTimeout> | undefined;
   onCleanup(() => clearTimeout(launchErrorTimer));
 
-  const repoPath = () => repoStore.state.activeRepoPath ?? '';
-
   // Reset modal when worktree changes
   createEffect(() => {
     props.worktreePath;
