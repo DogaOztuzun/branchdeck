@@ -1,6 +1,6 @@
 import { createMemo, createSignal, For, Match, onMount, Show, Switch } from 'solid-js';
 import { enrichPrSummary, listOpenPrs } from '../../lib/commands/github';
-import { batchLaunch, shepherdPr } from '../../lib/commands/run';
+import { shepherdPr as orchestratorShepherdPr } from '../../lib/commands/lifecycle';
 import { getLayoutStore } from '../../lib/stores/layout';
 import { getRepoStore } from '../../lib/stores/repo';
 import type { PrSummary } from '../../types/github';
@@ -120,18 +120,13 @@ export function PrList() {
     setBatchRunning(true);
     setError(null);
     try {
-      const pairs: [string, string][] = [];
       for (const pr of filteredPrs()) {
         if (!selected.has(prKey(pr))) continue;
         const rp = repoPathForName(pr.repoName);
         if (!rp) continue;
-        const result = await shepherdPr(rp, pr.number, false);
-        pairs.push([result.task.path, result.worktreePath]);
+        await orchestratorShepherdPr(rp, pr.number);
       }
-      if (pairs.length > 0) {
-        await batchLaunch(pairs);
-        layout.setActiveView('orchestrations');
-      }
+      layout.setActiveView('orchestrations');
       setSelectedPrs(new Set());
     } catch (e) {
       setError(`Batch shepherd failed: ${e}`);
@@ -152,12 +147,10 @@ export function PrList() {
     setShepherding(pr.number);
     setError(null);
     try {
-      const result = await shepherdPr(rp, pr.number, true);
-      repoStore.selectRepoAndWorktree(rp, result.worktreePath);
-      layout.navigateToTask(result.worktreePath);
+      await orchestratorShepherdPr(rp, pr.number);
+      layout.setActiveView('orchestrations');
     } catch (e) {
       const errMsg = String(e);
-      // If worktree already exists, navigate to it instead of erroring
       if (errMsg.includes('Worktree already exists')) {
         const branch = pr.branch;
         const wts = repoStore.state.worktreesByRepo[rp] ?? [];

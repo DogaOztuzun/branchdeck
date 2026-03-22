@@ -1,6 +1,6 @@
 import { createSignal, For, Show } from 'solid-js';
-import type { AnalysisPlan, ApprovedPlan, PlanStep } from '../../types/lifecycle';
 import { relaunchPr, skipPr, writeApproval } from '../../lib/commands/lifecycle';
+import type { AnalysisPlan, ApprovedPlan, PlanStep } from '../../types/lifecycle';
 
 type AnalysisCardProps = {
   prKey: string;
