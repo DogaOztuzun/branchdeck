@@ -12,6 +12,8 @@ pub mod knowledge_ingestion;
 pub mod knowledge_mcp;
 pub mod knowledge_merge;
 pub mod knowledge_query;
+pub mod orchestrator;
+pub mod pr_poller;
 pub mod run_effects;
 pub mod run_manager;
 pub mod run_responses;

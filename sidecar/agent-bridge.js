@@ -382,12 +382,18 @@ async function runSession(request, resumeSessionId = null) {
 
   activeAbort = new AbortController();
 
+  const requestedMode = request.options?.permissionMode ?? "acceptEdits";
+
   const options = {
     cwd: request.worktree,
     abortController: activeAbort,
-    permissionMode: "acceptEdits",
+    permissionMode: requestedMode,
     hooks: buildHooks(),
-    canUseTool: async (toolName, input, callbackOptions) => {
+  };
+
+  // Only wire up interactive permission flow if not bypassing
+  if (requestedMode !== "bypassPermissions") {
+    options.canUseTool = async (toolName, input, callbackOptions) => {
       const toolUseId = callbackOptions.toolUseID;
       send({
         type: "permission_request",
@@ -399,8 +405,8 @@ async function runSession(request, resumeSessionId = null) {
       return new Promise((resolve) => {
         pendingPermissions.set(toolUseId, resolve);
       });
-    },
-  };
+    };
+  }
 
   if (resumeSessionId) options.resume = resumeSessionId;
   if (request.options?.max_turns) options.maxTurns = request.options.max_turns;

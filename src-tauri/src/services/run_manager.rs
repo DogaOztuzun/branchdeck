@@ -376,6 +376,17 @@ impl RunManager {
         info!("Cancelled queue: cleared {cleared} queued items");
     }
 
+    /// Remove a queued run by worktree path. Returns true if found and removed.
+    pub fn remove_queued_by_worktree(&mut self, worktree_path: &str) -> bool {
+        let before = self.run_queue.len();
+        self.run_queue.retain(|r| r.worktree_path != worktree_path);
+        let removed = before - self.run_queue.len();
+        if removed > 0 {
+            info!("Removed {removed} queued run(s) for worktree {worktree_path}");
+        }
+        removed > 0
+    }
+
     /// Check if there's a next item in the queue and return it.
     /// Called after a run completes or fails to trigger auto-advance.
     fn dequeue_next(&mut self) -> Option<QueuedRun> {
@@ -625,6 +636,7 @@ pub async fn retry_run<R: tauri::Runtime>(
     let options = LaunchOptions {
         max_turns: None,
         max_budget_usd: None,
+        permission_mode: None,
     };
     launch_run(state, app_handle, task_path, worktree_path, options).await
 }
@@ -688,6 +700,7 @@ pub async fn resume_run<R: tauri::Runtime>(
         options: LaunchOptions {
             max_turns: None,
             max_budget_usd: None,
+            permission_mode: None,
         },
         hook_port: crate::HOOK_RECEIVER_PORT,
         tab_id: tab_id.clone(),
@@ -851,6 +864,7 @@ pub async fn batch_launch<R: tauri::Runtime>(
             let options = LaunchOptions {
                 max_turns: None,
                 max_budget_usd: None,
+                permission_mode: None,
             };
             launch_run(
                 Arc::clone(&state),
@@ -912,6 +926,7 @@ pub async fn advance_queue<R: tauri::Runtime>(
         let options = LaunchOptions {
             max_turns: None,
             max_budget_usd: None,
+            permission_mode: None,
         };
         if let Err(e) = launch_run(
             Arc::clone(&state),
@@ -936,6 +951,49 @@ pub async fn advance_queue<R: tauri::Runtime>(
     }
 
     Ok(())
+}
+
+/// Enqueue a single run without clearing the existing queue.
+/// Unlike `batch_launch`, this appends non-destructively.
+/// If no run is active, starts immediately.
+///
+/// # Errors
+///
+/// Returns `AppError` if the first run cannot be launched.
+pub async fn enqueue_run<R: tauri::Runtime>(
+    state: RunManagerState,
+    app_handle: tauri::AppHandle<R>,
+    task_path: &str,
+    worktree_path: &str,
+    options: LaunchOptions,
+) -> Result<QueueStatus, AppError> {
+    // Single lock acquisition: push to queue and dequeue if no active run
+    let next_to_launch = {
+        let mut manager = state.lock().await;
+        manager.run_queue.push_back(QueuedRun {
+            task_path: task_path.to_string(),
+            worktree_path: worktree_path.to_string(),
+        });
+        if manager.active_run.is_none() {
+            manager.dequeue_next()
+        } else {
+            None
+        }
+    };
+
+    if let Some(next) = next_to_launch {
+        launch_run(
+            Arc::clone(&state),
+            app_handle,
+            &next.task_path,
+            &next.worktree_path,
+            options,
+        )
+        .await?;
+    }
+
+    let manager = state.lock().await;
+    Ok(manager.get_queue_status())
 }
 
 /// Type alias for the managed state.

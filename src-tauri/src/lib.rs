@@ -252,10 +252,49 @@ pub fn run() {
                 sidecar_path,
                 Arc::clone(&event_bus),
             ));
+            app.manage(Arc::clone(&event_bus));
+
+            // Orchestrator state
+            let orchestrator_state = services::orchestrator::create_orchestrator_state(
+                models::orchestrator::OrchestratorConfig::default(),
+            );
+
+            // Populate repo_paths mapping (owner/repo → filesystem path)
+            let repo_paths = services::config::load_global_config()
+                .map(|c| c.repos)
+                .unwrap_or_default();
+            {
+                let mut orch = tauri::async_runtime::block_on(orchestrator_state.lock());
+                for repo_path in &repo_paths {
+                    if let Ok((owner, repo)) =
+                        services::github::resolve_owner_repo(std::path::Path::new(repo_path))
+                    {
+                        orch.repo_paths
+                            .insert(format!("{owner}/{repo}"), repo_path.clone());
+                    }
+                }
+            }
+
+            app.manage(orchestrator_state.clone());
 
             recover_stale_runs(app.handle());
             setup_agent_monitoring(app, &event_bus, &activity_store);
             start_stale_checker(app);
+
+            // Start orchestrator event loop
+            let rm_state: services::run_manager::RunManagerState = app
+                .state::<services::run_manager::RunManagerState>()
+                .inner()
+                .clone();
+            services::orchestrator::start_orchestrator(
+                orchestrator_state,
+                Arc::clone(&event_bus),
+                rm_state,
+                app.handle().clone(),
+            );
+
+            // Start PR poller
+            services::pr_poller::start_pr_poller(Arc::clone(&event_bus), repo_paths);
 
             // Knowledge service initialization
             #[cfg(feature = "knowledge")]
@@ -371,6 +410,14 @@ pub fn run() {
             commands::run::batch_launch_cmd,
             commands::run::cancel_queue_cmd,
             commands::run::queue_status_cmd,
+            // Orchestrator
+            commands::orchestrator::relaunch_pr_cmd,
+            commands::orchestrator::skip_pr_cmd,
+            commands::orchestrator::get_lifecycles_cmd,
+            commands::orchestrator::toggle_orchestrator_cmd,
+            commands::orchestrator::orchestrator_shepherd_pr_cmd,
+            commands::orchestrator::read_analysis_cmd,
+            commands::orchestrator::write_approval_cmd,
             // Task
             commands::task::create_task_cmd,
             commands::task::get_task_cmd,

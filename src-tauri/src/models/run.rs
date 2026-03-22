@@ -56,6 +56,8 @@ pub enum SidecarRequest {
 pub struct LaunchOptions {
     pub max_turns: Option<u32>,
     pub max_budget_usd: Option<f64>,
+    #[serde(default)]
+    pub permission_mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

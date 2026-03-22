@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use super::github::PrSummary;
+
 pub type EpochMs = u64;
 
 #[must_use]
@@ -78,6 +80,17 @@ pub enum Event {
         cost_usd: f64,
         elapsed_secs: u64,
         ts: EpochMs,
+    },
+    #[serde(rename_all = "camelCase")]
+    PrStatusChanged {
+        repo: String,
+        prs: Vec<PrSummary>,
+        ts: EpochMs,
+    },
+    #[serde(rename_all = "camelCase")]
+    RetryDue {
+        pr_key: String,
+        worktree_path: String,
     },
 }
 

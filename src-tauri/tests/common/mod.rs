@@ -43,6 +43,39 @@ run-count: {run_count}
     )
 }
 
+/// Build a `PrSummary` for orchestrator tests.
+pub fn make_pr_status(number: u64, failing: bool) -> branchdeck_lib::models::github::PrSummary {
+    branchdeck_lib::models::github::PrSummary {
+        number,
+        title: format!("PR #{number}"),
+        branch: format!("fix/pr-{number}"),
+        base_branch: "main".to_string(),
+        url: format!("https://github.com/test/repo/pull/{number}"),
+        ci_status: Some(if failing { "FAILURE" } else { "SUCCESS" }.to_string()),
+        review_decision: None,
+        repo_name: "test/repo".to_string(),
+        author: "alice".to_string(),
+        additions: None,
+        deletions: None,
+        changed_files: None,
+        created_at: None,
+        head_sha: None,
+    }
+}
+
+/// Build a `RunningEntry` for orchestrator tests.
+pub fn make_running_entry(pr_key: &str) -> branchdeck_lib::models::orchestrator::RunningEntry {
+    branchdeck_lib::models::orchestrator::RunningEntry {
+        pr_key: pr_key.to_string(),
+        worktree_path: format!("/tmp/wt/{pr_key}"),
+        tab_id: format!("tab-{pr_key}"),
+        started_at: 1000,
+        attempt: 1,
+        branch: "fix/test".to_string(),
+        base_branch: "main".to_string(),
+    }
+}
+
 /// Build a `RunInfo` for testing. No filesystem needed.
 pub fn make_run_info(status: RunStatus, session_id: Option<&str>) -> RunInfo {
     RunInfo {

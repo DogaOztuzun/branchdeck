@@ -9,31 +9,16 @@ import {
 } from '../../lib/commands/run';
 import { listTasks } from '../../lib/commands/task';
 import { getLayoutStore } from '../../lib/stores/layout';
+import { getLifecycleStore } from '../../lib/stores/lifecycle';
 import { getRepoStore } from '../../lib/stores/repo';
 import { getTaskStore, worktreePathFromTaskPath } from '../../lib/stores/task';
 import type { QueueStatus } from '../../types/github';
+import type { LifecycleStatus } from '../../types/lifecycle';
 import type { RunInfo, RunStepEvent } from '../../types/run';
 import type { TaskInfo, TaskStatus } from '../../types/task';
+import { AnalysisCard } from '../pr/AnalysisCard';
 import { TaskBadge } from '../task/TaskBadge';
 import { Button } from '../ui/Button';
-
-type RunCardStatus = 'running' | 'succeeded' | 'failed' | 'queued' | 'cancelled';
-
-function taskStatusToCardStatus(status: TaskStatus): RunCardStatus {
-  switch (status) {
-    case 'running':
-    case 'blocked':
-      return 'running';
-    case 'succeeded':
-      return 'succeeded';
-    case 'failed':
-      return 'failed';
-    case 'cancelled':
-      return 'cancelled';
-    case 'created':
-      return 'queued';
-  }
-}
 
 function TaskCard(props: {
   task: TaskInfo;
@@ -237,10 +222,43 @@ const STATUS_ORDER: Record<TaskStatus, number> = {
   succeeded: 5,
 };
 
+const LIFECYCLE_STATUS_LABELS: Record<LifecycleStatus, string> = {
+  running: 'Analyzing',
+  reviewReady: 'Review Ready',
+  approved: 'Approved',
+  fixing: 'Fixing',
+  completed: 'Completed',
+  retrying: 'Retrying',
+  stale: 'Stale — CI now passing',
+  failed: 'Failed — retries exhausted',
+};
+
+const LIFECYCLE_STATUS_COLORS: Record<LifecycleStatus, string> = {
+  running: 'text-[var(--color-warning)]',
+  reviewReady: 'text-accent-primary',
+  approved: 'text-[var(--color-info)]',
+  fixing: 'text-[var(--color-warning)]',
+  completed: 'text-[var(--color-success)]',
+  retrying: 'text-[var(--color-error)]',
+  stale: 'text-[var(--color-muted)]',
+  failed: 'text-[var(--color-error)]',
+};
+
+const LIFECYCLE_STATUS_ORDER: Record<LifecycleStatus, number> = {
+  stale: 0,
+  reviewReady: 1,
+  running: 2,
+  fixing: 3,
+  retrying: 4,
+  failed: 5,
+  approved: 6,
+  completed: 7,
+};
+
 export function OrchestrationView() {
   const layout = getLayoutStore();
   const repoStore = getRepoStore();
-  const _taskStore = getTaskStore();
+  const lifecycleStore = getLifecycleStore();
   const [queue, setQueue] = createSignal<QueueStatus | null>(null);
   const [activeRun, setActiveRun] = createSignal<RunInfo | null>(null);
   const [lastSteps, setLastSteps] = createSignal<Record<string, string>>({});
@@ -291,6 +309,14 @@ export function OrchestrationView() {
     ),
   );
 
+  const [expandedLifecycle, setExpandedLifecycle] = createSignal<string | null>(null);
+
+  const sortedLifecycles = createMemo(() =>
+    [...lifecycleStore.getAllLifecycles()].sort(
+      (a, b) => LIFECYCLE_STATUS_ORDER[a.status] - LIFECYCLE_STATUS_ORDER[b.status],
+    ),
+  );
+
   onMount(async () => {
     const qs = await getQueueStatus();
     if (qs.queued.length > 0 || qs.active) {
@@ -303,6 +329,8 @@ export function OrchestrationView() {
       // Best-effort
     }
     loadAllTasks();
+    lifecycleStore.startListening();
+    lifecycleStore.loadInitial();
   });
 
   const unlisteners: (() => void)[] = [];
@@ -333,6 +361,7 @@ export function OrchestrationView() {
 
   onCleanup(() => {
     for (const fn of unlisteners) fn();
+    lifecycleStore.stopListening();
   });
 
   const totalQueued = () => queue()?.queued.length ?? 0;
@@ -413,8 +442,62 @@ export function OrchestrationView() {
         </div>
       </div>
 
-      {/* Task grid */}
+      {/* Lifecycle + Task grid */}
       <div class="flex-1 overflow-y-auto p-4">
+        {/* Lifecycle entries */}
+        <Show when={sortedLifecycles().length > 0}>
+          <div class="mb-4">
+            <div class="text-xs text-text-dim uppercase mb-2">PR Lifecycles</div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              <For each={sortedLifecycles()}>
+                {(entry) => {
+                  const analysis = () => lifecycleStore.getAnalysisPlan(entry.prKey);
+                  const isExpanded = () => expandedLifecycle() === entry.prKey;
+
+                  return (
+                    <div>
+                      <Show
+                        when={isExpanded() && entry.status === 'reviewReady' && analysis()}
+                        fallback={
+                          <button
+                            type="button"
+                            class="w-full text-left bg-bg-sidebar border border-border-subtle p-3 hover:border-accent-primary/30 transition-colors duration-150 cursor-pointer"
+                            onClick={() => setExpandedLifecycle(isExpanded() ? null : entry.prKey)}
+                          >
+                            <div class="flex items-center justify-between">
+                              <span class="text-base font-medium text-text-main">
+                                {entry.prKey}
+                              </span>
+                              <span
+                                class={`text-xs font-medium uppercase ${LIFECYCLE_STATUS_COLORS[entry.status]}`}
+                              >
+                                {LIFECYCLE_STATUS_LABELS[entry.status]}
+                              </span>
+                            </div>
+                            <div class="text-xs text-text-dim mt-1">Attempt {entry.attempt}</div>
+                          </button>
+                        }
+                      >
+                        {(() => {
+                          const a = analysis();
+                          return a ? (
+                            <AnalysisCard
+                              prKey={entry.prKey}
+                              worktreePath={entry.worktreePath}
+                              analysis={a}
+                            />
+                          ) : null;
+                        })()}
+                      </Show>
+                    </div>
+                  );
+                }}
+              </For>
+            </div>
+          </div>
+        </Show>
+
+        {/* Task grid */}
         <Show
           when={sortedTasks().length > 0}
           fallback={

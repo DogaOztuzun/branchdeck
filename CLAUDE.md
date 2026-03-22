@@ -104,7 +104,8 @@ No business logic in Tauri command handlers — commands validate args, call a s
 6. IPC wrapper: `src/lib/commands/` — with try/catch + `logError`
 7. Store: `src/lib/stores/` — if feature needs reactive state
 8. Component: `src/components/{category}/`
-9. **Verify before commit:** `bun run verify`
+9. **Lifecycle trace** — before committing, trace one complete user scenario through every function call. Verify every field exists at every step and every effect variant is implemented (not stubbed). See "Effect Executor Completeness" above.
+10. **Verify before commit:** `bun run verify`
 
 ### Logging
 All service code must include structured logging via `tauri-plugin-log` (Rust) and `@tauri-apps/plugin-log` (frontend).
@@ -170,6 +171,16 @@ When adding new service logic:
 3. **No `AppHandle` in business logic** — `AppHandle<R>` belongs in the executor and thin wrappers, never in pure functions.
 4. **No `now_epoch_ms()` inside pure functions** — pass time as a parameter for deterministic testing.
 5. **Keep the `RunEffect` enum flat** — one line per executor arm. If it grows past 20 variants, consider grouping into sub-enums.
+
+### Effect Executor Completeness (CRITICAL)
+
+The apply/effect pattern only works if **every effect variant actually does its job** in the executor. This is the most common source of bugs — pure functions get tested, executors get stubbed.
+
+1. **No no-op match arms** — if an executor arm logs but doesn't act (`debug!("handled elsewhere")`), that's a bug. Either implement the side effect or don't emit the effect. Every match arm must do real work.
+2. **Don't fabricate IDs** — if a component (e.g., RunManager) generates an ID (tab_id, session_id), read it from that component. Never generate your own copy.
+3. **Trace the full lifecycle before committing** — pick one concrete scenario (e.g., "PR poll → dispatch → analysis → review → approve → fix → complete") and walk through every function call, verifying each field is present and each effect variant is implemented. This catches missing fields, wrong paths, and no-op arms.
+4. **Checklist each effect variant** — for every variant in the effect enum, write one line: what it must do. Verify the executor does exactly that. Example: "`DispatchSession`: creates worktree, writes pr-context.json, deploys skill, creates task.md, enqueues run, records running entry with correct tab_id and attempt."
+5. **Shared helpers for shared logic** — if two code paths (e.g., auto-dispatch and manual trigger) need the same computation (worktree paths, branch sanitization), extract a shared function. Divergent implementations of the same logic = bugs.
 
 ### Test Files
 
