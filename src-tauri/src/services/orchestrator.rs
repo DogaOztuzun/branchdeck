@@ -528,12 +528,18 @@ pub async fn execute_effects<R: tauri::Runtime>(
                 deploy_skill_file(&worktree_path);
                 let task_path = create_orchestrator_task(&worktree_path, &key, &pr_context);
 
-                // Enqueue via RunManager
+                // Enqueue via RunManager with bypassPermissions for autonomous operation
+                let launch_options = crate::models::run::LaunchOptions {
+                    max_turns: None,
+                    max_budget_usd: None,
+                    permission_mode: Some("bypassPermissions".to_string()),
+                };
                 match crate::services::run_manager::enqueue_run(
                     std::sync::Arc::clone(run_manager),
                     app_handle.clone(),
                     &task_path,
                     &worktree_path,
+                    launch_options,
                 )
                 .await
                 {

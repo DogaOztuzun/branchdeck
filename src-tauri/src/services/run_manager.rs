@@ -625,6 +625,7 @@ pub async fn retry_run<R: tauri::Runtime>(
     let options = LaunchOptions {
         max_turns: None,
         max_budget_usd: None,
+        permission_mode: None,
     };
     launch_run(state, app_handle, task_path, worktree_path, options).await
 }
@@ -688,6 +689,7 @@ pub async fn resume_run<R: tauri::Runtime>(
         options: LaunchOptions {
             max_turns: None,
             max_budget_usd: None,
+            permission_mode: None,
         },
         hook_port: crate::HOOK_RECEIVER_PORT,
         tab_id: tab_id.clone(),
@@ -851,6 +853,7 @@ pub async fn batch_launch<R: tauri::Runtime>(
             let options = LaunchOptions {
                 max_turns: None,
                 max_budget_usd: None,
+                permission_mode: None,
             };
             launch_run(
                 Arc::clone(&state),
@@ -912,6 +915,7 @@ pub async fn advance_queue<R: tauri::Runtime>(
         let options = LaunchOptions {
             max_turns: None,
             max_budget_usd: None,
+            permission_mode: None,
         };
         if let Err(e) = launch_run(
             Arc::clone(&state),
@@ -950,6 +954,7 @@ pub async fn enqueue_run<R: tauri::Runtime>(
     app_handle: tauri::AppHandle<R>,
     task_path: &str,
     worktree_path: &str,
+    options: LaunchOptions,
 ) -> Result<QueueStatus, AppError> {
     let should_launch = {
         let mut manager = state.lock().await;
@@ -965,10 +970,6 @@ pub async fn enqueue_run<R: tauri::Runtime>(
             let mut manager = state.lock().await;
             manager.dequeue_next()
         } {
-            let options = LaunchOptions {
-                max_turns: None,
-                max_budget_usd: None,
-            };
             launch_run(
                 Arc::clone(&state),
                 app_handle,

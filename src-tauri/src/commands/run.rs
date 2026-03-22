@@ -19,6 +19,7 @@ pub async fn launch_run_cmd(
     let options = LaunchOptions {
         max_turns,
         max_budget_usd,
+        permission_mode: None,
     };
     let state = Arc::clone(&run_manager);
     run_manager::launch_run(state, app_handle, &task_path, &worktree_path, options).await
@@ -94,6 +95,7 @@ pub async fn shepherd_pr_cmd(
         let options = LaunchOptions {
             max_turns: None,
             max_budget_usd: None,
+            permission_mode: None,
         };
         if let Err(e) = run_manager::launch_run(
             state,
