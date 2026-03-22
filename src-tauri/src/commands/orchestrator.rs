@@ -1,6 +1,6 @@
 use crate::error::AppError;
 use crate::models::orchestrator::{
-    AnalysisPlan, ApprovedPlan, LifecycleEvent, LifecycleStatus, Orchestrator,
+    AnalysisPlan, ApprovedPlan, LifecycleEvent, LifecycleStatus,
 };
 use crate::services::orchestrator::{self as orch_service, OrchestratorState};
 use crate::services::run_manager::RunManagerState;
