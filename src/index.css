@@ -41,7 +41,7 @@
   --color-destructive: #f7768e;
   --color-destructive-foreground: #1a1b26;
   --color-border: #101014;
-  --color-input: #14141b;
+  --color-input: #292e42;
   --color-ring: #7aa2f7;
 
   /* ── Animations for Lyra components ── */
@@ -220,7 +220,7 @@ body,
 /* Checkbox */
 .z-checkbox-control,
 .z-checkbox {
-  @apply border-input data-checked:bg-primary data-checked:text-primary-foreground data-checked:border-primary focus-visible:ring-ring/50 size-4 shrink-0 rounded-none border shadow-xs transition-shadow focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-50;
+  @apply border-muted-foreground/50 data-checked:bg-primary data-checked:text-primary-foreground data-checked:border-primary focus-visible:ring-ring/50 size-4 shrink-0 rounded-none border shadow-xs transition-shadow focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-50;
 }
 
 .z-checkbox-indicator {
