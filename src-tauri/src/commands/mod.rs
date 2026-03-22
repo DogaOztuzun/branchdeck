@@ -3,6 +3,7 @@ pub mod git;
 pub mod github;
 #[cfg(feature = "knowledge")]
 pub mod knowledge;
+pub mod orchestrator;
 pub mod run;
 pub mod task;
 pub mod terminal;
