@@ -1,8 +1,8 @@
-import { Dialog } from '@kobalte/core';
 import { createEffect, createMemo, createSignal, For, Show } from 'solid-js';
 import { listBranches } from '../../lib/commands/git';
 import { getRepoStore } from '../../lib/stores/repo';
 import type { BranchInfo, WorktreeInfo } from '../../types/git';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/Dialog';
 
 type BranchWorktreeModalProps = {
   open: boolean;
@@ -99,119 +99,112 @@ export function BranchWorktreeModal(props: BranchWorktreeModalProps) {
   }
 
   return (
-    <Dialog.Root
+    <Dialog
       open={props.open}
       onOpenChange={(open) => {
         if (!open) props.onClose();
       }}
     >
-      <Dialog.Portal>
-        <Dialog.Overlay class="fixed inset-0 z-40 bg-black/50" />
-        <Dialog.Content class="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 bg-bg-sidebar border border-border-subtle shadow-lg p-4">
-          <Dialog.Title class="text-sm font-semibold text-text-main mb-3">
-            Checkout Branch
-          </Dialog.Title>
+      <DialogContent class="max-w-sm" showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>Checkout Branch</DialogTitle>
+        </DialogHeader>
 
-          <input
-            type="text"
-            placeholder="Search branches..."
-            value={search()}
-            onInput={(e) => setSearch(e.currentTarget.value)}
-            autofocus
-            class="w-full px-3 py-1.5 text-xs bg-bg-main border border-border-subtle text-text-main placeholder:text-text-dim focus:outline-none focus:border-accent-primary"
-          />
+        <input
+          type="text"
+          placeholder="Search branches..."
+          value={search()}
+          onInput={(e) => setSearch(e.currentTarget.value)}
+          autofocus
+          class="z-input w-full"
+        />
 
-          <Show when={loading()}>
-            <div class="mt-3 text-xs text-text-dim">Loading branches...</div>
-          </Show>
+        <Show when={loading()}>
+          <div class="mt-3 text-base text-text-dim">Loading branches...</div>
+        </Show>
 
-          <Show
-            when={
-              !loading() && !error() && filteredBranches().length === 0 && branches().length > 0
-            }
-          >
-            <div class="mt-3 text-xs text-text-dim">No branches match your search.</div>
-          </Show>
+        <Show
+          when={!loading() && !error() && filteredBranches().length === 0 && branches().length > 0}
+        >
+          <div class="mt-3 text-base text-text-dim">No branches match your search.</div>
+        </Show>
 
-          <Show when={!loading() && !error() && branches().length === 0}>
-            <div class="mt-3 text-xs text-text-dim">No branches found.</div>
-          </Show>
+        <Show when={!loading() && !error() && branches().length === 0}>
+          <div class="mt-3 text-base text-text-dim">No branches found.</div>
+        </Show>
 
-          <Show when={!loading() && filteredBranches().length > 0}>
-            <div class="mt-3 max-h-64 overflow-y-auto border border-border-subtle">
-              <For each={filteredBranches()}>
-                {(branch) => (
-                  <button
-                    type="button"
-                    disabled={branch.hasWorktree}
-                    class={`flex items-center gap-2 w-full px-3 py-1.5 text-xs text-left cursor-pointer ${
-                      branch.hasWorktree
-                        ? 'opacity-50 cursor-not-allowed'
-                        : selected() === branch.name
-                          ? 'bg-accent-primary/20 text-accent-primary'
-                          : 'text-text-main hover:bg-bg-main/50'
-                    }`}
-                    onClick={() => {
-                      if (!branch.hasWorktree) {
-                        setSelected(branch.name);
-                      }
-                    }}
-                  >
-                    <span class="truncate">{branch.name}</span>
-                    <span class="ml-auto flex gap-1 shrink-0">
-                      <Show when={branch.isRemote}>
-                        <span class="px-1.5 py-0.5 text-[10px] text-text-dim bg-bg-main">
-                          remote
-                        </span>
-                      </Show>
-                      <Show when={branch.hasWorktree}>
-                        <span class="px-1.5 py-0.5 text-[10px] text-accent-info bg-bg-main">
-                          in use
-                        </span>
-                      </Show>
-                    </span>
-                  </button>
-                )}
-              </For>
-            </div>
-          </Show>
-
-          <Show when={selectedBranch()}>
-            <div class="mt-3 space-y-1.5 text-xs">
-              <div class="flex gap-2">
-                <span class="text-text-dim">Branch:</span>
-                <span class="text-text-main">{selectedBranch()?.name}</span>
-              </div>
-              <div class="flex gap-2">
-                <span class="text-text-dim">Path:</span>
-                <span class="text-text-main truncate">{worktreePath()}</span>
-              </div>
-            </div>
-          </Show>
-
-          <Show when={error()}>
-            <p class="mt-2 text-xs text-accent-error">{error()}</p>
-          </Show>
-
-          <div class="mt-4 flex justify-end gap-2">
-            <button
-              type="button"
-              class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
-              onClick={() => props.onClose()}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={isCreateDisabled()}
-              class="px-3 py-1.5 text-xs bg-accent-primary text-bg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
-              onClick={handleCreate}
-            >
-              {creating() ? 'Creating...' : 'Create Worktree'}
-            </button>
+        <Show when={!loading() && filteredBranches().length > 0}>
+          <div class="mt-3 max-h-64 overflow-y-auto border border-border-subtle">
+            <For each={filteredBranches()}>
+              {(branch) => (
+                <button
+                  type="button"
+                  disabled={branch.hasWorktree}
+                  class={`flex items-center gap-2 w-full px-3 py-1.5 text-base text-left cursor-pointer ${
+                    branch.hasWorktree
+                      ? 'opacity-50 cursor-not-allowed'
+                      : selected() === branch.name
+                        ? 'bg-accent-primary/20 text-accent-primary'
+                        : 'text-text-main hover:bg-bg-main/50'
+                  }`}
+                  onClick={() => {
+                    if (!branch.hasWorktree) {
+                      setSelected(branch.name);
+                    }
+                  }}
+                >
+                  <span class="truncate">{branch.name}</span>
+                  <span class="ml-auto flex gap-1 shrink-0">
+                    <Show when={branch.isRemote}>
+                      <span class="px-1.5 py-0.5 text-base text-text-dim bg-bg-main">remote</span>
+                    </Show>
+                    <Show when={branch.hasWorktree}>
+                      <span class="px-1.5 py-0.5 text-base text-accent-info bg-bg-main">
+                        in use
+                      </span>
+                    </Show>
+                  </span>
+                </button>
+              )}
+            </For>
           </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+        </Show>
+
+        <Show when={selectedBranch()}>
+          <div class="mt-3 space-y-1.5 text-base">
+            <div class="flex gap-2">
+              <span class="text-text-dim">Branch:</span>
+              <span class="text-text-main">{selectedBranch()?.name}</span>
+            </div>
+            <div class="flex gap-2">
+              <span class="text-text-dim">Path:</span>
+              <span class="text-text-main truncate">{worktreePath()}</span>
+            </div>
+          </div>
+        </Show>
+
+        <Show when={error()}>
+          <p class="mt-2 text-base text-accent-error">{error()}</p>
+        </Show>
+
+        <div class="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            class="px-3 py-1.5 text-base text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
+            onClick={() => props.onClose()}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={isCreateDisabled()}
+            class="px-3 py-1.5 text-base bg-accent-primary text-bg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+            onClick={handleCreate}
+          >
+            {creating() ? 'Creating...' : 'Create Worktree'}
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

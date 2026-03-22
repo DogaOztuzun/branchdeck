@@ -40,7 +40,7 @@ export function FileStatusBar() {
       <div class="border-t border-border-subtle bg-bg-sidebar">
         <button
           type="button"
-          class="flex items-center justify-between w-full px-3 py-0.5 text-[10px] text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/30 transition-colors"
+          class="flex items-center justify-between w-full px-3 py-0.5 text-base text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/30 transition-colors"
           onClick={() => setExpanded((v) => !v)}
         >
           <span>

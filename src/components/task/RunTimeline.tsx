@@ -152,11 +152,11 @@ function RunHeader(props: { activeRun: RunInfo }) {
 
   return (
     <div class="flex items-center justify-between px-3 py-1.5 bg-bg-sidebar-alt border-b border-border-subtle">
-      <span class="text-xs text-text-main">
+      <span class="text-base text-text-main">
         {statusText(props.activeRun.status)}{' '}
         <span class="text-text-dim">&mdash; {formatDuration(elapsed())}</span>
       </span>
-      <span class="text-xs text-accent-primary font-medium">
+      <span class="text-base text-accent-primary font-medium">
         {formatCost(props.activeRun.costUsd)}
       </span>
     </div>
@@ -172,16 +172,16 @@ export function RunTimeline(props: RunTimelineProps) {
         <Show when={props.activeRun}>{(run) => <RunHeader activeRun={run()} />}</Show>
         <div class="flex items-center justify-between px-3 py-1 border-b border-border-subtle">
           <span class="text-[10px] text-text-dim uppercase tracking-wider">Run Timeline</span>
-          <span class="text-[10px] text-text-dim">{props.entries.length} events</span>
+          <span class="text-base text-text-dim">{props.entries.length} events</span>
         </div>
         <div class="overflow-y-auto max-h-32">
           <Show
             when={reversed().length > 0}
-            fallback={<div class="px-3 py-2 text-xs text-text-dim">No run activity yet.</div>}
+            fallback={<div class="px-3 py-2 text-base text-text-dim">No run activity yet.</div>}
           >
             <For each={reversed()}>
               {(entry) => (
-                <div class="flex items-baseline gap-2 px-3 py-0.5 text-[11px] hover:bg-bg-main/30">
+                <div class="flex items-baseline gap-2 px-3 py-0.5 text-base hover:bg-bg-main/30">
                   <span class="text-text-dim shrink-0 w-16">{formatTime(entry.ts)}</span>
                   <span class={`shrink-0 w-10 ${typeColor(entry.type)}`}>
                     {typeLabel(entry.type)}

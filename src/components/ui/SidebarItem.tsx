@@ -38,7 +38,7 @@ export function SidebarItem(props: SidebarItemProps) {
             return <Icon size={14} class={iconClass()} />;
           }}
         </Show>
-        <span class="text-xs font-medium truncate">{props.label}</span>
+        <span class="text-base font-medium truncate">{props.label}</span>
         {props.children}
       </div>
       <div class="flex items-center gap-2 shrink-0">

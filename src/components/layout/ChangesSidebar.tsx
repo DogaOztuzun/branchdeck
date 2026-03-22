@@ -57,7 +57,7 @@ export function ChangesSidebar() {
 
   return (
     <div class="flex flex-col h-full bg-bg-sidebar">
-      <div class="px-3 py-2 text-xs font-bold text-text-dim uppercase tracking-wider border-b border-border-subtle">
+      <div class="px-3 py-2 text-base font-bold text-text-dim uppercase tracking-wider border-b border-border-subtle">
         Changes
         <Show when={repoStore.state.statuses.length > 0}>
           <span class="ml-1.5 text-text-dim font-normal">({repoStore.state.statuses.length})</span>
@@ -66,11 +66,11 @@ export function ChangesSidebar() {
       <div class="flex-1 overflow-y-auto">
         <Show
           when={repoStore.state.statuses.length > 0}
-          fallback={<div class="px-3 py-4 text-xs text-text-dim">No changes detected</div>}
+          fallback={<div class="px-3 py-4 text-base text-text-dim">No changes detected</div>}
         >
           <For each={repoStore.state.statuses}>
             {(file) => (
-              <div class="flex items-center px-3 py-1 text-xs hover:bg-bg-main/50 cursor-default">
+              <div class="flex items-center px-3 py-1 text-base hover:bg-bg-main/50 cursor-default">
                 <span
                   class={`w-4 font-bold ${statusColor(file.status)}`}
                   title={statusTooltip(file.status)}

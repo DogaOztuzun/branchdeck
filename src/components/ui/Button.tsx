@@ -1,8 +1,8 @@
 import type { JSX } from 'solid-js';
 import { cn } from '../../lib/cn';
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
-type ButtonSize = 'default' | 'compact';
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline';
+type ButtonSize = 'default' | 'compact' | 'icon';
 
 type ButtonProps = {
   variant?: ButtonVariant;
@@ -12,16 +12,17 @@ type ButtonProps = {
 } & Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, 'class'>;
 
 const variantStyles: Record<ButtonVariant, string> = {
-  primary: 'bg-accent-primary text-bg-main hover:opacity-90',
-  secondary: 'bg-bg-sidebar text-text-main border border-border-subtle hover:bg-surface-raised',
-  ghost:
-    'bg-transparent text-text-dim border border-border-subtle hover:text-text-main hover:bg-bg-main/50',
-  danger: 'bg-transparent text-accent-error border border-accent-error/30 hover:bg-accent-error/10',
+  primary: 'z-button-variant-default',
+  secondary: 'z-button-variant-secondary',
+  ghost: 'z-button-variant-ghost',
+  danger: 'z-button-variant-destructive',
+  outline: 'z-button-variant-outline',
 };
 
 const sizeStyles: Record<ButtonSize, string> = {
-  default: 'h-8 px-4 text-xs',
-  compact: 'h-6 px-3 text-[10px]',
+  default: 'z-button-size-default',
+  compact: 'z-button-size-sm',
+  icon: 'z-button-size-icon',
 };
 
 export function Button(props: ButtonProps) {
@@ -30,7 +31,7 @@ export function Button(props: ButtonProps) {
       {...props}
       type={props.type ?? 'button'}
       class={cn(
-        'inline-flex items-center justify-center font-medium transition-colors duration-150 cursor-pointer select-none',
+        'z-button',
         variantStyles[props.variant ?? 'secondary'],
         sizeStyles[props.size ?? 'default'],
         props.class,

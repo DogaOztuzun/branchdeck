@@ -9,18 +9,73 @@
   --font-mono:
     "JetBrains Mono", "Fira Code", "Cascadia Code", ui-monospace, SFMono-Regular, monospace;
 
+  /* ── Font scale (aligned to DESIGN.md) ── */
+  --text-xs: 10px;
+  --text-xs--line-height: 1.4;
+  --text-sm: 12px;
+  --text-sm--line-height: 1.5;
+  --text-base: 13px;
+  --text-base--line-height: 1.6;
+  --text-lg: 16px;
+  --text-lg--line-height: 1.5;
+  --text-xl: 20px;
+  --text-xl--line-height: 1.4;
+
+  /* ── Branchdeck palette (Tokyo Night — aligned to VS Code theme) ── */
   --color-bg-main: #1a1b26;
-  --color-bg-sidebar: #24283b;
-  --color-bg-panel: #24283b;
-  --color-surface-raised: #292e42;
-  --color-border-subtle: #414868;
+  --color-bg-sidebar: #16161e;
+  --color-bg-panel: #16161e;
+  --color-surface-raised: #1e202e;
+  --color-border-subtle: #101014;
   --color-accent-primary: #7aa2f7;
   --color-accent-success: #9ece6a;
   --color-accent-warning: #e0af68;
   --color-accent-error: #f7768e;
   --color-accent-info: #7dcfff;
-  --color-text-main: #c0caf5;
-  --color-text-dim: #565f89;
+  --color-text-main: #a9b1d6;
+  --color-text-dim: #787c99;
+
+  /* ── shadcn/Lyra semantic tokens → Tokyo Night mapping ── */
+  --color-background: #1a1b26;
+  --color-foreground: #a9b1d6;
+  --color-card: #16161e;
+  --color-card-foreground: #a9b1d6;
+  --color-popover: #16161e;
+  --color-popover-foreground: #a9b1d6;
+  --color-primary: #7aa2f7;
+  --color-primary-foreground: #1a1b26;
+  --color-secondary: #1e202e;
+  --color-secondary-foreground: #a9b1d6;
+  --color-muted: #1e202e;
+  --color-muted-foreground: #787c99;
+  --color-accent: #1e202e;
+  --color-accent-foreground: #a9b1d6;
+  --color-destructive: #f7768e;
+  --color-destructive-foreground: #1a1b26;
+  --color-border: #101014;
+  --color-input: #292e42;
+  --color-ring: #7aa2f7;
+
+  /* ── Animations for Lyra components ── */
+  --animate-accordion-down: accordion-down 0.15s ease-out;
+  --animate-accordion-up: accordion-up 0.15s ease-out;
+}
+
+@keyframes accordion-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--kb-accordion-content-height);
+  }
+}
+@keyframes accordion-up {
+  from {
+    height: var(--kb-accordion-content-height);
+  }
+  to {
+    height: 0;
+  }
 }
 
 html,
@@ -40,7 +95,329 @@ body,
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Override solid-resizable-panels handle defaults (higher specificity) */
+/* ── Lyra component styles (from Zaidan, adapted for Tokyo Night) ── */
+
+/* Select */
+.z-select-trigger {
+  @apply border-input focus-visible:ring-ring/50 focus-visible:border-ring flex h-8 w-full items-center justify-between gap-2 rounded-none border bg-transparent px-3 py-1.5 text-[13px] shadow-xs transition-colors focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-50 *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:truncate [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-muted-foreground;
+}
+
+.z-select-content {
+  @apply bg-popover text-popover-foreground z-50 min-w-[8rem] overflow-hidden rounded-none border p-0.5 shadow-md;
+}
+
+.z-select-viewport {
+  @apply p-0;
+}
+
+.z-select-item {
+  @apply focus:bg-accent focus:text-accent-foreground data-highlighted:bg-accent data-highlighted:text-accent-foreground relative flex w-full cursor-default items-center gap-2 rounded-none py-1.5 pl-7 pr-3 text-[13px] outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0;
+}
+
+.z-select-item-indicator {
+  @apply absolute left-1.5 flex size-4 items-center justify-center [&>svg]:size-3.5;
+}
+
+.z-select-separator {
+  @apply bg-border -mx-0.5 my-0.5 h-px;
+}
+
+.z-select-label {
+  @apply text-muted-foreground px-2 py-1 text-base font-medium;
+}
+
+/* Dialog */
+.z-dialog-overlay {
+  @apply fixed inset-0 z-50 bg-black/60 duration-100;
+}
+
+.z-dialog-content {
+  @apply bg-background fixed top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2 flex flex-col gap-3 rounded-none border p-4 shadow-lg duration-100;
+}
+
+.z-dialog-header {
+  @apply flex flex-col gap-1 mb-1;
+}
+
+.z-dialog-footer {
+  @apply flex flex-col-reverse gap-2 sm:flex-row sm:justify-end;
+}
+
+.z-dialog-title {
+  @apply text-sm font-semibold leading-none;
+}
+
+.z-dialog-description {
+  @apply text-muted-foreground text-base;
+}
+
+.z-dialog-close-button {
+  @apply absolute top-3 right-3 cursor-pointer rounded-none text-muted-foreground opacity-70 transition-opacity hover:opacity-100 hover:text-foreground focus:outline-none [&>svg]:size-4;
+}
+
+/* Button */
+.z-button {
+  @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-none text-base font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0;
+}
+
+.z-button-variant-default {
+  @apply bg-primary text-primary-foreground shadow-xs hover:bg-primary/90;
+}
+
+.z-button-variant-destructive {
+  @apply bg-destructive text-destructive-foreground shadow-xs hover:bg-destructive/90;
+}
+
+.z-button-variant-outline {
+  @apply border border-muted-foreground/30 bg-background shadow-xs hover:bg-accent hover:text-accent-foreground;
+}
+
+.z-button-variant-secondary {
+  @apply bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80;
+}
+
+.z-button-variant-ghost {
+  @apply hover:bg-accent hover:text-accent-foreground;
+}
+
+.z-button-variant-link {
+  @apply text-primary underline-offset-4 hover:underline;
+}
+
+.z-button-size-default {
+  @apply h-8 px-3 py-1.5;
+}
+
+.z-button-size-sm {
+  @apply h-6 px-2.5;
+}
+
+.z-button-size-lg {
+  @apply h-9 px-4;
+}
+
+.z-button-size-icon {
+  @apply size-8;
+}
+
+/* Badge */
+.z-badge {
+  @apply h-5 gap-1 rounded-none border border-transparent px-2 py-0.5 text-base font-medium transition-all [&>svg]:size-3;
+}
+
+.z-badge-variant-default {
+  @apply bg-primary text-primary-foreground;
+}
+
+.z-badge-variant-secondary {
+  @apply bg-secondary text-secondary-foreground;
+}
+
+.z-badge-variant-outline {
+  @apply border-border text-foreground;
+}
+
+.z-badge-variant-destructive {
+  @apply bg-destructive/10 text-destructive;
+}
+
+.z-badge-variant-success {
+  @apply bg-accent-success/10 text-accent-success;
+}
+
+.z-badge-variant-warning {
+  @apply bg-accent-warning/10 text-accent-warning;
+}
+
+/* Checkbox */
+.z-checkbox-control,
+.z-checkbox {
+  @apply border-muted-foreground/50 data-checked:bg-primary data-checked:text-primary-foreground data-checked:border-primary focus-visible:ring-ring/50 size-4 shrink-0 rounded-none border shadow-xs transition-shadow focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+.z-checkbox-indicator {
+  @apply flex items-center justify-center text-current [&>svg]:size-3.5;
+}
+
+/* Tabs */
+.z-tabs-list {
+  @apply bg-transparent flex h-auto gap-0 border-b border-border p-0;
+}
+
+.z-tabs-trigger {
+  @apply data-selected:bg-bg-main data-selected:text-foreground rounded-none border-x border-t border-transparent px-3 py-1.5 text-base text-muted-foreground transition-colors hover:text-foreground data-selected:border-border cursor-pointer;
+}
+
+.z-tabs-content {
+  @apply mt-0 focus-visible:ring-ring/50 focus-visible:ring-1 focus-visible:outline-none;
+}
+
+/* Tooltip */
+.z-tooltip-content {
+  @apply bg-popover text-popover-foreground z-50 overflow-hidden rounded-none border px-2 py-1.5 text-base shadow-md;
+}
+
+/* Input */
+.z-input {
+  @apply border-input focus-visible:ring-ring/50 focus-visible:border-ring flex h-8 w-full min-w-0 rounded-none border bg-transparent px-3 py-1.5 text-[13px] shadow-xs transition-colors outline-none focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+/* Separator */
+.z-separator {
+  @apply bg-border shrink-0;
+}
+
+.z-separator-horizontal {
+  @apply h-px w-full;
+}
+
+.z-separator-vertical {
+  @apply h-full w-px;
+}
+
+/* Label */
+.z-label {
+  @apply text-base font-medium leading-none;
+}
+
+/* Accordion */
+.z-accordion-item {
+  @apply not-last:border-b;
+}
+
+.z-accordion-trigger {
+  @apply focus-visible:ring-ring/50 focus-visible:border-ring **:data-[slot=accordion-trigger-icon]:text-muted-foreground rounded-none py-2.5 text-left text-base font-medium hover:underline focus-visible:ring-1 **:data-[slot=accordion-trigger-icon]:ml-auto **:data-[slot=accordion-trigger-icon]:size-4;
+}
+
+.z-accordion-content {
+  @apply text-base overflow-hidden;
+}
+
+.z-accordion-content-inner {
+  @apply pt-0 pb-2.5;
+}
+
+/* Breadcrumb */
+.z-breadcrumb-list {
+  @apply text-muted-foreground gap-1.5 text-base;
+}
+
+.z-breadcrumb-item {
+  @apply gap-1;
+}
+
+.z-breadcrumb-link {
+  @apply hover:text-foreground transition-colors;
+}
+
+.z-breadcrumb-page {
+  @apply text-foreground font-normal;
+}
+
+.z-breadcrumb-separator {
+  @apply [&>svg]:size-3.5;
+}
+
+.z-breadcrumb-ellipsis {
+  @apply size-5 [&>svg]:size-4;
+}
+
+/* Context Menu */
+.z-context-menu-content {
+  @apply ring-foreground/10 bg-popover text-popover-foreground min-w-36 rounded-none shadow-md ring-1 duration-100;
+}
+
+.z-context-menu-item {
+  @apply focus:bg-accent focus:text-accent-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 gap-2 rounded-none px-2 py-2 text-base [&_svg:not([class*='size-'])]:size-4;
+}
+
+.z-context-menu-checkbox-item {
+  @apply focus:bg-accent focus:text-accent-foreground gap-2 rounded-none py-2 pr-8 pl-2 text-base [&_svg:not([class*='size-'])]:size-4;
+}
+
+.z-context-menu-radio-item {
+  @apply focus:bg-accent focus:text-accent-foreground gap-2 rounded-none py-2 pr-8 pl-2 text-base [&_svg:not([class*='size-'])]:size-4;
+}
+
+.z-context-menu-item-indicator {
+  @apply absolute right-2;
+}
+
+.z-context-menu-label {
+  @apply text-muted-foreground px-2 py-2 text-base;
+}
+
+.z-context-menu-separator {
+  @apply bg-border -mx-1 h-px;
+}
+
+.z-context-menu-shortcut {
+  @apply text-muted-foreground ml-auto text-base tracking-widest;
+}
+
+/* Command */
+.z-command {
+  @apply bg-popover text-popover-foreground rounded-none;
+}
+
+.z-command-input-wrapper {
+  @apply border-b pb-0;
+}
+
+.z-command-input-group {
+  @apply bg-input/30 border-input/30 h-8 border-none shadow-none;
+}
+
+.z-command-input-icon {
+  @apply size-4 shrink-0 opacity-50;
+}
+
+.z-command-input {
+  @apply w-full text-base;
+}
+
+.z-command-list {
+  @apply max-h-72 scroll-py-0 outline-none overflow-y-auto;
+}
+
+.z-command-empty {
+  @apply py-4 text-center text-base;
+}
+
+.z-command-group {
+  @apply p-1 [&_[data-slot=command-group-heading]]:text-muted-foreground [&_[data-slot=command-group-heading]]:px-2 [&_[data-slot=command-group-heading]]:py-1 [&_[data-slot=command-group-heading]]:text-base [&_[data-slot=command-group-heading]]:font-medium;
+}
+
+.z-command-item {
+  @apply data-highlighted:bg-accent data-highlighted:text-accent-foreground [&_svg:not([class*='size-'])]:size-4 gap-2 rounded-none px-2 py-2 text-base select-none;
+}
+
+.z-command-shortcut {
+  @apply text-muted-foreground ml-auto text-base tracking-widest;
+}
+
+.z-command-separator {
+  @apply bg-border -mx-1 h-px;
+}
+
+/* Input Group */
+.z-input-group {
+  @apply border-input has-[[data-slot=input-group-control]:focus-visible]:border-ring has-[[data-slot=input-group-control]:focus-visible]:ring-ring/50 h-8 rounded-none border transition-colors has-disabled:opacity-50 has-[[data-slot=input-group-control]:focus-visible]:ring-1;
+}
+
+.z-input-group-addon {
+  @apply text-muted-foreground h-auto gap-2 py-1.5 text-base font-medium [&>svg:not([class*='size-'])]:size-4;
+}
+
+.z-input-group-addon-align-inline-start {
+  @apply pl-2;
+}
+
+.z-input-group-addon-align-inline-end {
+  @apply pr-2;
+}
+
+/* ── Override solid-resizable-panels handle defaults ── */
 .ResizeablePanelGroup .ResizeablePanelGroup-ResizeHandle {
   background-color: transparent;
   border-radius: 0;
@@ -78,11 +455,6 @@ body,
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-dim);
-}
-
-/* Sharp corners utility */
-.sharp {
-  border-radius: 0 !important;
 }
 
 /* Terminal cursor blink */

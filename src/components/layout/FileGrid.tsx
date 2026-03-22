@@ -189,11 +189,11 @@ export function FileGrid(props: FileGridProps) {
     <div class="overflow-y-auto max-h-52 p-2">
       <Show
         when={entries().length > 0}
-        fallback={<div class="text-[10px] text-text-dim text-center py-2">No file activity</div>}
+        fallback={<div class="text-base text-text-dim text-center py-2">No file activity</div>}
       >
         <div class="flex items-center justify-between mb-1.5 px-0.5">
           <span class="text-[10px] uppercase text-text-dim tracking-wider">Files</span>
-          <span class="text-[10px] text-text-dim">{entries().length}</span>
+          <span class="text-base text-text-dim">{entries().length}</span>
         </div>
         <div class="flex flex-wrap gap-[3px] items-center">
           <For each={entries()}>
@@ -216,30 +216,30 @@ export function FileGrid(props: FileGridProps) {
         <Show when={hoveredFile()}>
           {(hovered) => (
             <div
-              class="fixed z-50 px-2 py-1.5 bg-bg-sidebar border border-border-subtle shadow-lg text-xs max-w-72 pointer-events-none"
+              class="fixed z-50 px-2 py-1.5 bg-bg-sidebar border border-border-subtle shadow-lg text-base max-w-72 pointer-events-none"
               style={{
                 left: `${hovered().x + 12}px`,
                 top: `${hovered().y - 8}px`,
               }}
             >
-              <div class="text-text-main truncate font-mono text-[11px]">
+              <div class="text-text-main truncate font-mono text-base">
                 {shortPath(hovered().entry.path, 2)}
               </div>
-              <div class={`text-[10px] mt-0.5 ${dotTextColor(hovered().entry.state)}`}>
+              <div class={`text-base mt-0.5 ${dotTextColor(hovered().entry.state)}`}>
                 {stateLabel(hovered().entry.state)}
               </div>
               <Show when={hovered().entry.gitStatus}>
-                <div class="text-[10px] text-text-dim">Git: {hovered().entry.gitStatus}</div>
+                <div class="text-base text-text-dim">Git: {hovered().entry.gitStatus}</div>
               </Show>
               <Show when={hovered().entry.access}>
                 {(access) => (
-                  <div class="text-[10px] text-text-dim mt-0.5">
+                  <div class="text-base text-text-dim mt-0.5">
                     {access().lastTool} ({access().accessCount}x)
                   </div>
                 )}
               </Show>
               <Show when={hovered().entry.agentCount > 1}>
-                <div class="text-[10px] text-accent-info mt-0.5">
+                <div class="text-base text-accent-info mt-0.5">
                   {hovered().entry.agentCount} agents
                 </div>
               </Show>

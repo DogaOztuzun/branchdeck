@@ -89,11 +89,11 @@ export function TerminalArea() {
               <div class="flex gap-3">
                 <Button variant="ghost" onClick={() => terminalStore.openShellTab(worktreePath())}>
                   Open Terminal
-                  <span class="ml-2 text-text-dim text-[10px]">Ctrl+Shift+T</span>
+                  <span class="ml-2 text-text-dim text-base">Ctrl+Shift+T</span>
                 </Button>
                 <Button variant="ghost" onClick={() => terminalStore.openClaudeTab(worktreePath())}>
                   Start Claude Code
-                  <span class="ml-2 text-text-dim text-[10px]">Ctrl+Shift+A</span>
+                  <span class="ml-2 text-text-dim text-base">Ctrl+Shift+A</span>
                 </Button>
               </div>
             </Show>
@@ -112,7 +112,7 @@ export function TerminalArea() {
         <div class="flex items-center border-t border-border-subtle bg-bg-sidebar px-2">
           <button
             type="button"
-            class="px-2 py-0.5 text-[10px] text-text-dim hover:text-text-main cursor-pointer"
+            class="px-2 py-0.5 text-base text-text-dim hover:text-text-main cursor-pointer"
             onClick={() => setActivityVisible((v) => !v)}
           >
             {activityVisible() ? '\u25BC' : '\u25B6'} Activity

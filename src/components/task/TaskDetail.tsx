@@ -115,11 +115,11 @@ export function TaskDetail(props: TaskDetailProps) {
           when={task()}
           fallback={
             <div class="px-3 py-4 text-center">
-              <div class="text-xs text-text-dim mb-3">No task for this worktree</div>
+              <div class="text-base text-text-dim mb-3">No task for this worktree</div>
               <Show when={worktree()}>
                 <button
                   type="button"
-                  class="text-[10px] text-accent-primary hover:text-accent-primary/80 cursor-pointer"
+                  class="text-base text-accent-primary hover:text-accent-primary/80 cursor-pointer"
                   onClick={() => setShowCreateTask(true)}
                 >
                   + Create Task
@@ -132,17 +132,17 @@ export function TaskDetail(props: TaskDetailProps) {
             <>
               {/* 1. Task Header */}
               <div class="px-3 py-2 border-b border-border-subtle">
-                <div class="text-[11px] text-text-main font-medium truncate">
+                <div class="text-base text-text-main font-medium truncate">
                   {worktree()?.branch ?? 'unknown'}
                 </div>
                 <div class="flex items-center justify-between mt-1">
-                  <span class="text-[10px] text-text-dim">
+                  <span class="text-base text-text-dim">
                     {t().frontmatter.type === 'pr-shepherd' ? 'PR Shepherd' : 'Issue Fix'}
                   </span>
                   <TaskBadge status={t().frontmatter.status} />
                 </div>
                 {/* Metadata */}
-                <div class="flex items-center gap-2 mt-1 text-[10px] text-text-dim">
+                <div class="flex items-center gap-2 mt-1 text-base text-text-dim">
                   <Show when={t().frontmatter.pr}>
                     <span>PR #{t().frontmatter.pr}</span>
                   </Show>
@@ -170,7 +170,7 @@ export function TaskDetail(props: TaskDetailProps) {
                   <Show when={canLaunch() && t().frontmatter.status === 'created'}>
                     <button
                       type="button"
-                      class="px-2 py-1 text-[10px] text-text-dim hover:text-text-main border border-border-subtle hover:border-accent-primary cursor-pointer"
+                      class="px-2 py-1 text-base text-text-dim hover:text-text-main border border-border-subtle hover:border-accent-primary cursor-pointer"
                       onClick={() => handleLaunch(t())}
                     >
                       Launch
@@ -179,7 +179,7 @@ export function TaskDetail(props: TaskDetailProps) {
                   <Show when={taskStore.state.activeRun && t().frontmatter.status === 'running'}>
                     <button
                       type="button"
-                      class="px-2 py-1 text-[10px] text-red-400 hover:text-red-300 border border-border-subtle hover:border-red-400 cursor-pointer"
+                      class="px-2 py-1 text-base text-red-400 hover:text-red-300 border border-border-subtle hover:border-red-400 cursor-pointer"
                       onClick={() => cancelRun().catch(() => {})}
                     >
                       Cancel
@@ -194,14 +194,14 @@ export function TaskDetail(props: TaskDetailProps) {
                   >
                     <button
                       type="button"
-                      class="px-2 py-1 text-[10px] text-text-dim hover:text-text-main border border-border-subtle hover:border-accent-primary cursor-pointer"
+                      class="px-2 py-1 text-base text-text-dim hover:text-text-main border border-border-subtle hover:border-accent-primary cursor-pointer"
                       onClick={() => retryRun(t().path, props.worktreePath).catch(() => {})}
                     >
                       Retry
                     </button>
                     <button
                       type="button"
-                      class="px-2 py-1 text-[10px] text-text-dim hover:text-text-main border border-border-subtle hover:border-accent-info cursor-pointer"
+                      class="px-2 py-1 text-base text-text-dim hover:text-text-main border border-border-subtle hover:border-accent-info cursor-pointer"
                       onClick={() => resumeRun(t().path, props.worktreePath).catch(() => {})}
                     >
                       Resume
@@ -209,7 +209,7 @@ export function TaskDetail(props: TaskDetailProps) {
                   </Show>
                 </div>
                 <Show when={launchError()}>
-                  <p class="mt-1 text-[10px] text-accent-error truncate">{launchError()}</p>
+                  <p class="mt-1 text-base text-accent-error truncate">{launchError()}</p>
                 </Show>
               </div>
 
@@ -219,10 +219,10 @@ export function TaskDetail(props: TaskDetailProps) {
                   <div class="text-[10px] uppercase text-text-dim tracking-wider mb-1.5">
                     PR #{t().frontmatter.pr}
                   </div>
-                  <div class="text-[10px] space-y-1.5">
+                  <div class="text-base space-y-1.5">
                     {/* Checks */}
                     <div class="flex items-center gap-2">
-                      <span class="text-text-dim w-14 shrink-0">Checks</span>
+                      <span class="text-text-dim w-16 shrink-0">Checks</span>
                       <Show
                         when={t().body.includes('Failing checks:')}
                         fallback={<span class="text-accent-success">passing</span>}
@@ -238,8 +238,8 @@ export function TaskDetail(props: TaskDetailProps) {
                     </div>
                     {/* Reviews */}
                     <div class="flex items-center gap-2">
-                      <span class="text-text-dim w-14 shrink-0">Reviews</span>
-                      <span class="text-text-main">
+                      <span class="text-text-dim w-16 shrink-0">Reviews</span>
+                      <span class="text-text-main truncate">
                         {t()
                           .body.split('\n')
                           .find((l) => l.includes('Reviews:'))
@@ -250,7 +250,7 @@ export function TaskDetail(props: TaskDetailProps) {
                     {/* Diff */}
                     <Show when={t().body.includes('Diff:')}>
                       <div class="flex items-center gap-2">
-                        <span class="text-text-dim w-14 shrink-0">Diff</span>
+                        <span class="text-text-dim w-16 shrink-0">Diff</span>
                         {(() => {
                           const line =
                             t()
@@ -297,10 +297,10 @@ export function TaskDetail(props: TaskDetailProps) {
                   </button>
                   <Show when={knowledgeExpanded()}>
                     <div class="px-3 pb-2">
-                      <div class="text-[10px] text-text-dim space-y-0.5 bg-bg-main/30 px-2 py-1.5 border border-border-subtle/30 max-h-32 overflow-y-auto">
+                      <div class="text-base text-text-dim space-y-0.5 bg-bg-main/30 px-2 py-1.5 border border-border-subtle/30 max-h-32 overflow-y-auto">
                         <For each={knowledgeItems()}>
                           {(line) => (
-                            <div class="text-[10px] leading-relaxed break-words">
+                            <div class="text-base leading-relaxed break-words">
                               {line.replace('- ', '')}
                             </div>
                           )}
@@ -318,14 +318,14 @@ export function TaskDetail(props: TaskDetailProps) {
                   <div class="mt-1 space-y-0.5">
                     <For each={activeAgents()}>
                       {(item) => (
-                        <div class="flex items-center gap-2 px-3 py-1 text-xs hover:bg-bg-main/30">
+                        <div class="flex items-center gap-2 px-3 py-1 text-base hover:bg-bg-main/30">
                           <span
                             class={`w-2 h-2 rounded-full shrink-0 ${statusColor(item.agent?.status ?? 'stopped')}`}
                           />
                           <div class="flex-1 min-w-0">
                             <div class="text-text-main truncate">{item.tab.title}</div>
                             <Show when={item.agent?.currentTool}>
-                              <div class="text-[10px] text-text-dim truncate">
+                              <div class="text-base text-text-dim truncate">
                                 {item.agent?.currentTool}
                                 <Show when={item.agent?.currentFile}>
                                   {' '}
@@ -334,7 +334,7 @@ export function TaskDetail(props: TaskDetailProps) {
                               </div>
                             </Show>
                             <Show when={item.agent && item.agent.subagentCount > 0}>
-                              <div class="text-[10px] text-accent-info">
+                              <div class="text-base text-accent-info">
                                 +{item.agent?.subagentCount} subagent
                                 {item.agent?.subagentCount === 1 ? '' : 's'}
                               </div>
@@ -367,7 +367,7 @@ export function TaskDetail(props: TaskDetailProps) {
         <div class="p-2 border-t border-border-subtle">
           <button
             type="button"
-            class="text-[10px] text-text-dim hover:text-text-main cursor-pointer"
+            class="text-base text-text-dim hover:text-text-main cursor-pointer"
             onClick={() => layoutStore.showRightPanel({ kind: 'agents' })}
           >
             View Agents

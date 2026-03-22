@@ -76,14 +76,14 @@ export function AgentsPanel() {
           <div class="mt-1 space-y-0.5">
             <For each={activeAgents()}>
               {(item) => (
-                <div class="flex items-center gap-2 px-3 py-1 text-xs hover:bg-bg-main/30">
+                <div class="flex items-center gap-2 px-3 py-1 text-base hover:bg-bg-main/30">
                   <span
                     class={`w-2 h-2 rounded-full shrink-0 ${statusColor(item.agent?.status ?? 'stopped')}`}
                   />
                   <div class="flex-1 min-w-0">
                     <div class="text-text-main truncate">{item.tab.title}</div>
                     <Show when={item.agent?.currentTool}>
-                      <div class="text-[10px] text-text-dim truncate">
+                      <div class="text-base text-text-dim truncate">
                         {item.agent?.currentTool}
                         <Show when={item.agent?.currentFile}>
                           {' '}
@@ -92,7 +92,7 @@ export function AgentsPanel() {
                       </div>
                     </Show>
                     <Show when={item.agent && item.agent.subagentCount > 0}>
-                      <div class="text-[10px] text-accent-info">
+                      <div class="text-base text-accent-info">
                         +{item.agent?.subagentCount} subagent
                         {item.agent?.subagentCount === 1 ? '' : 's'}
                       </div>
@@ -110,10 +110,10 @@ export function AgentsPanel() {
         <Show
           when={definitions().length > 0}
           fallback={
-            <div class="px-3 py-6 text-xs text-text-dim text-center">
+            <div class="px-3 py-6 text-base text-text-dim text-center">
               <Show when={repoPath()} fallback={<span>Select a repository to see agents</span>}>
                 <div>No Claude agents defined</div>
-                <div class="mt-2 text-[10px]">Open a Claude Code terminal to get started</div>
+                <div class="mt-2 text-base">Open a Claude Code terminal to get started</div>
                 <div class="mt-1 text-[10px] text-text-dim/50">
                   or add agents in .claude/agents/*.md
                 </div>
@@ -134,18 +134,18 @@ export function AgentsPanel() {
                   {(def) => (
                     <div class="group flex items-start gap-2 px-3 py-1.5 hover:bg-bg-main/30">
                       <div class="flex-1 min-w-0">
-                        <div class="text-xs text-text-main truncate">{def.name}</div>
+                        <div class="text-base text-text-main truncate">{def.name}</div>
                         <Show when={def.description}>
-                          <div class="text-[10px] text-text-dim truncate">{def.description}</div>
+                          <div class="text-base text-text-dim truncate">{def.description}</div>
                         </Show>
                         <div class="flex gap-1.5 mt-0.5">
                           <Show when={def.model}>
-                            <span class="text-[9px] px-1 bg-bg-main text-accent-info">
+                            <span class="text-[10px] px-1 bg-bg-main text-accent-info">
                               {def.model}
                             </span>
                           </Show>
                           <Show when={def.permissionMode}>
-                            <span class="text-[9px] px-1 bg-bg-main text-accent-warning">
+                            <span class="text-[10px] px-1 bg-bg-main text-accent-warning">
                               {def.permissionMode}
                             </span>
                           </Show>
@@ -153,7 +153,7 @@ export function AgentsPanel() {
                       </div>
                       <button
                         type="button"
-                        class="opacity-0 group-hover:opacity-100 shrink-0 mt-0.5 px-1.5 py-0.5 text-[10px] text-text-dim hover:text-text-main border border-border-subtle hover:border-accent-primary cursor-pointer transition-opacity"
+                        class="opacity-0 group-hover:opacity-100 shrink-0 mt-0.5 px-1.5 py-0.5 text-base text-text-dim hover:text-text-main border border-border-subtle hover:border-accent-primary cursor-pointer transition-opacity"
                         onClick={() => launchAgent(def)}
                         disabled={!worktreePath()}
                       >

@@ -1,7 +1,8 @@
-import { Dialog } from '@kobalte/core';
 import { createEffect, createMemo, createSignal, Show } from 'solid-js';
 import { createTask, watchTaskPath } from '../../lib/commands/task';
 import type { TaskType } from '../../types/task';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/Dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
 
 type CreateTaskModalProps = {
   open: boolean;
@@ -82,102 +83,108 @@ export function CreateTaskModal(props: CreateTaskModalProps) {
   }
 
   return (
-    <Dialog.Root
+    <Dialog
       open={props.open}
       onOpenChange={(open) => {
         if (!open) props.onClose();
       }}
     >
-      <Dialog.Portal>
-        <Dialog.Overlay class="fixed inset-0 z-40 bg-black/50" />
-        <Dialog.Content class="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 bg-bg-sidebar border border-border-subtle shadow-lg p-4">
-          <Dialog.Title class="text-sm font-semibold text-text-main mb-3">New Task</Dialog.Title>
+      <DialogContent class="max-w-sm" showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>New Task</DialogTitle>
+        </DialogHeader>
 
-          <form onSubmit={handleCreate}>
-            <div>
-              <label class="text-xs text-text-dim" for="task-type-select">
-                Task type
-              </label>
-              <select
-                id="task-type-select"
+        <form onSubmit={handleCreate}>
+          <div>
+            <span class="text-base text-text-dim">Task type</span>
+            <div class="mt-1">
+              <Select
+                options={['issue-fix', 'pr-shepherd'] as TaskType[]}
                 value={taskType()}
-                onChange={(e) => handleTypeChange(e.currentTarget.value as TaskType)}
-                style={{
-                  'background-color': 'var(--color-bg-main)',
-                  color: 'var(--color-text-main)',
-                }}
-                class="w-full mt-1 px-3 py-1.5 text-xs border border-border-subtle focus:outline-none focus:border-accent-primary appearance-none [&>option]:bg-bg-main [&>option]:text-text-main"
+                onChange={(val) => handleTypeChange((val ?? 'issue-fix') as TaskType)}
+                placeholder="Select task type"
+                itemComponent={(props) => (
+                  <SelectItem item={props.item}>
+                    {props.item.rawValue === 'issue-fix' ? 'Issue Fix' : 'PR Shepherd'}
+                  </SelectItem>
+                )}
               >
-                <option value="issue-fix">Issue Fix</option>
-                <option value="pr-shepherd">PR Shepherd</option>
-              </select>
+                <SelectTrigger>
+                  <SelectValue<string>>
+                    {(state) =>
+                      state.selectedOption() === 'issue-fix' ? 'Issue Fix' : 'PR Shepherd'
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent />
+              </Select>
             </div>
+          </div>
 
-            <Show when={isPrShepherd()}>
-              <div class="mt-2">
-                <label class="text-xs text-text-dim" for="pr-number-input">
-                  PR number
-                </label>
-                <input
-                  id="pr-number-input"
-                  type="number"
-                  min="1"
-                  placeholder="#123"
-                  value={prNumber()}
-                  onInput={(e) => setPrNumber(e.currentTarget.value)}
-                  class="w-full mt-1 px-3 py-1.5 text-xs bg-bg-main border border-border-subtle text-text-main placeholder:text-text-dim focus:outline-none focus:border-accent-primary"
-                />
-              </div>
-            </Show>
-
+          <Show when={isPrShepherd()}>
             <div class="mt-2">
-              <label class="text-xs text-text-dim" for="task-description">
-                Description
+              <label class="text-base text-text-dim" for="pr-number-input">
+                PR number
               </label>
-              <textarea
-                id="task-description"
-                placeholder="What should the agent do?"
-                value={description()}
-                onInput={(e) => setDescription(e.currentTarget.value)}
-                rows={3}
-                class="w-full mt-1 px-3 py-1.5 text-xs bg-bg-main border border-border-subtle text-text-main placeholder:text-text-dim focus:outline-none focus:border-accent-primary resize-y"
+              <input
+                id="pr-number-input"
+                type="number"
+                min="1"
+                placeholder="#123"
+                value={prNumber()}
+                onInput={(e) => setPrNumber(e.currentTarget.value)}
+                class="z-input w-full mt-1"
               />
             </div>
+          </Show>
 
-            <div class="mt-3 space-y-1.5 text-xs">
-              <div class="flex gap-2">
-                <span class="text-text-dim">Repo:</span>
-                <span class="text-text-main truncate">{props.repo}</span>
-              </div>
-              <div class="flex gap-2">
-                <span class="text-text-dim">Branch:</span>
-                <span class="text-text-main truncate">{props.branch}</span>
-              </div>
+          <div class="mt-2">
+            <label class="text-base text-text-dim" for="task-description">
+              Description
+            </label>
+            <textarea
+              id="task-description"
+              placeholder="What should the agent do?"
+              value={description()}
+              onInput={(e) => setDescription(e.currentTarget.value)}
+              rows={3}
+              class="z-input w-full mt-1 resize-y"
+            />
+          </div>
+
+          <div class="mt-3 space-y-1.5 text-base">
+            <div class="flex gap-2">
+              <span class="text-text-dim">Repo:</span>
+              <span class="text-text-main truncate">{props.repo}</span>
             </div>
-
-            <Show when={error()}>
-              <p class="mt-2 text-xs text-accent-error">{error()}</p>
-            </Show>
-
-            <div class="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
-                onClick={() => props.onClose()}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isCreateDisabled()}
-                class="px-3 py-1.5 text-xs bg-accent-primary text-bg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
-              >
-                {creating() ? 'Creating...' : 'Create Task'}
-              </button>
+            <div class="flex gap-2">
+              <span class="text-text-dim">Branch:</span>
+              <span class="text-text-main truncate">{props.branch}</span>
             </div>
-          </form>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+          </div>
+
+          <Show when={error()}>
+            <p class="mt-2 text-base text-accent-error">{error()}</p>
+          </Show>
+
+          <div class="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              class="px-3 py-1.5 text-base text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
+              onClick={() => props.onClose()}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isCreateDisabled()}
+              class="px-3 py-1.5 text-base bg-accent-primary text-bg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+            >
+              {creating() ? 'Creating...' : 'Create Task'}
+            </button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

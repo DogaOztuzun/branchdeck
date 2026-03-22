@@ -143,7 +143,7 @@ export function PrTooltip(props: PrTooltipProps) {
     <Portal>
       {/* biome-ignore lint/a11y/noStaticElementInteractions: tooltip hover behavior, not interactive content */}
       <div
-        class="fixed z-50 max-w-[320px] border border-border-subtle bg-bg-sidebar p-3 text-xs shadow-lg space-y-2"
+        class="fixed z-50 max-w-[320px] border border-border bg-popover text-popover-foreground p-3 text-base shadow-lg space-y-2"
         style={{
           top: `${position().top}px`,
           left: `${position().left}px`,
@@ -156,7 +156,7 @@ export function PrTooltip(props: PrTooltipProps) {
           {props.pr.url ? (
             <button
               type="button"
-              class="font-semibold text-blue-400 hover:underline cursor-pointer"
+              class="font-semibold text-primary hover:underline cursor-pointer"
               onClick={() => openUrl(props.pr.url)}
             >
               PR #{props.pr.number}
@@ -165,7 +165,7 @@ export function PrTooltip(props: PrTooltipProps) {
             <span class="font-semibold">PR #{props.pr.number}</span>
           )}
           <span
-            class="rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none"
+            class="px-1.5 py-0.5 text-base font-medium leading-none"
             style={{
               'background-color': stateColor(props.pr.state, props.pr.isDraft),
               color: '#1a1b26',
@@ -173,18 +173,18 @@ export function PrTooltip(props: PrTooltipProps) {
           >
             {stateLabel(props.pr.state, props.pr.isDraft)}
           </span>
-          <span class="ml-auto text-muted">{diffStats() ?? '\u2014'}</span>
+          <span class="ml-auto text-muted-foreground">{diffStats() ?? '\u2014'}</span>
         </div>
 
         {/* Title */}
-        <p class="line-clamp-2 leading-snug text-foreground">{props.pr.title}</p>
+        <p class="line-clamp-2 leading-snug">{props.pr.title}</p>
 
         {/* Reviews section */}
         <div>
-          <h4 class="mb-1 font-semibold text-text-dim">Reviews</h4>
+          <h4 class="mb-1 text-base font-semibold text-muted-foreground">Reviews</h4>
           {props.pr.reviewDecision && (
             <span
-              class="mb-1 inline-block px-1.5 py-0.5 text-[10px] font-medium leading-none"
+              class="mb-1 inline-block px-1.5 py-0.5 text-base font-medium leading-none"
               style={{
                 'background-color': reviewColor(props.pr.reviewDecision),
                 color: '#1a1b26',
@@ -194,7 +194,7 @@ export function PrTooltip(props: PrTooltipProps) {
             </span>
           )}
           {props.pr.reviews.length === 0 ? (
-            <p class="text-text-dim">No reviews</p>
+            <p class="text-muted-foreground">No reviews</p>
           ) : (
             <ul class="space-y-0.5">
               {(() => {
@@ -211,11 +211,11 @@ export function PrTooltip(props: PrTooltipProps) {
                 return [...grouped.values()].map((entry) => (
                   <li class="flex items-center gap-1.5">
                     <span
-                      class="inline-block h-2 w-2 rounded-full shrink-0"
+                      class="inline-block h-2 w-2 shrink-0"
                       style={{ 'background-color': reviewColor(entry.state) }}
                     />
-                    <span class="text-text-main">{entry.user}</span>
-                    <span class="text-text-dim">
+                    <span>{entry.user}</span>
+                    <span class="text-muted-foreground">
                       {reviewLabel(entry.state)}
                       {entry.count > 1 ? ` \u00d7${entry.count}` : ''}
                     </span>
@@ -228,14 +228,14 @@ export function PrTooltip(props: PrTooltipProps) {
 
         {/* Checks section */}
         <div>
-          <h4 class="mb-1 font-semibold text-muted">Checks</h4>
+          <h4 class="mb-1 text-base font-semibold text-muted-foreground">Checks</h4>
           {props.pr.checks.length === 0 ? (
-            <p class="text-muted">No checks</p>
+            <p class="text-muted-foreground">No checks</p>
           ) : (
             <>
               <button
                 type="button"
-                class="cursor-pointer text-muted hover:text-foreground"
+                class="cursor-pointer text-muted-foreground hover:text-foreground"
                 onClick={() => setChecksExpanded((v) => !v)}
               >
                 {passedChecks()}/{activeChecks().length} checks passed{' '}
@@ -251,13 +251,13 @@ export function PrTooltip(props: PrTooltipProps) {
                         {check.detailsUrl ? (
                           <button
                             type="button"
-                            class="cursor-pointer text-blue-400 hover:underline"
+                            class="cursor-pointer text-primary hover:underline"
                             onClick={() => openUrl(check.detailsUrl as string)}
                           >
                             {check.name}
                           </button>
                         ) : (
-                          <span class="text-foreground">{check.name}</span>
+                          <span>{check.name}</span>
                         )}
                       </li>
                     );
@@ -270,10 +270,10 @@ export function PrTooltip(props: PrTooltipProps) {
 
         {/* Footer */}
         {props.pr.url && (
-          <div class="border-t border-border-subtle pt-2">
+          <div class="border-t border-border pt-2">
             <button
               type="button"
-              class="cursor-pointer text-blue-400 hover:underline"
+              class="cursor-pointer text-primary hover:underline"
               onClick={() => openUrl(props.pr.url)}
             >
               View on GitHub

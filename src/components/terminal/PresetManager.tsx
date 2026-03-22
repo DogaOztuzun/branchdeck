@@ -1,7 +1,8 @@
-import { Dialog } from '@kobalte/core';
 import { createEffect, createSignal, For, Show } from 'solid-js';
 import type { Preset } from '../../lib/commands/workspace';
 import { getPresets, savePresets } from '../../lib/commands/workspace';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/Dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
 
 type PresetManagerProps = {
   open: boolean;
@@ -122,189 +123,198 @@ export function PresetManager(props: PresetManagerProps) {
   }
 
   return (
-    <Dialog.Root
+    <Dialog
       open={props.open}
       onOpenChange={(open) => {
         if (!open) props.onClose();
       }}
     >
-      <Dialog.Portal>
-        <Dialog.Overlay class="fixed inset-0 z-40 bg-black/50" />
-        <Dialog.Content class="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 bg-bg-sidebar border border-border-subtle shadow-lg p-4 max-h-[80vh] overflow-y-auto">
-          <Dialog.Title class="text-sm font-semibold text-text-main mb-3">
-            Manage Presets
-          </Dialog.Title>
+      <DialogContent class="max-w-sm max-h-[80vh] overflow-y-auto" showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>Manage Presets</DialogTitle>
+        </DialogHeader>
 
-          <div class="space-y-0">
-            <For each={presets()}>
-              {(preset, i) => (
-                <Show
-                  when={editingIndex() === i()}
-                  fallback={
-                    <div class="flex items-center justify-between px-3 py-2 text-xs border-b border-border-subtle">
-                      <div>
-                        <span class="text-text-main">{preset.name}</span>
-                        <span class="ml-2 text-text-dim text-[10px]">{preset.tabType}</span>
-                      </div>
-                      <div class="flex gap-2">
-                        <button
-                          type="button"
-                          class="text-text-dim hover:text-text-main cursor-pointer"
-                          onClick={() => startEdit(i())}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          class="text-text-dim hover:text-accent-error cursor-pointer"
-                          disabled={saving()}
-                          onClick={() => handleDelete(i())}
-                        >
-                          Delete
-                        </button>
-                      </div>
+        <div class="space-y-0">
+          <For each={presets()}>
+            {(preset, i) => (
+              <Show
+                when={editingIndex() === i()}
+                fallback={
+                  <div class="flex items-center justify-between px-3 py-2 text-base border-b border-border-subtle">
+                    <div>
+                      <span class="text-text-main">{preset.name}</span>
+                      <span class="ml-2 text-text-dim text-base">{preset.tabType}</span>
                     </div>
-                  }
-                >
-                  <div class="px-3 py-2 border-b border-border-subtle space-y-2">
-                    <input
-                      type="text"
-                      placeholder="Preset name"
-                      value={form().name}
-                      onInput={(e) => setForm((f) => ({ ...f, name: e.currentTarget.value }))}
-                      class="w-full bg-bg-main border border-border-subtle text-text-main text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Command"
-                      value={form().command}
-                      onInput={(e) => setForm((f) => ({ ...f, command: e.currentTarget.value }))}
-                      class="w-full bg-bg-main border border-border-subtle text-text-main text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary"
-                    />
-                    <select
-                      value={form().tabType}
-                      onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          tabType: e.currentTarget.value as 'shell' | 'claude',
-                        }))
-                      }
-                      style={{
-                        'background-color': 'var(--color-bg-main)',
-                        color: 'var(--color-text-main)',
-                      }}
-                      class="w-full border border-border-subtle text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary appearance-none [&>option]:bg-bg-main [&>option]:text-text-main"
-                    >
-                      <option value="shell">Shell</option>
-                      <option value="claude">Claude</option>
-                    </select>
-                    <div class="flex justify-end gap-2">
+                    <div class="flex gap-2">
                       <button
                         type="button"
-                        class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
-                        onClick={() => resetForm()}
+                        class="text-text-dim hover:text-text-main cursor-pointer"
+                        onClick={() => startEdit(i())}
                       >
-                        Cancel
+                        Edit
                       </button>
                       <button
                         type="button"
-                        disabled={saving() || !form().name.trim()}
-                        class="px-3 py-1.5 text-xs bg-accent-primary text-bg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
-                        onClick={() => handleSaveEdit(i())}
+                        class="text-text-dim hover:text-accent-error cursor-pointer"
+                        disabled={saving()}
+                        onClick={() => handleDelete(i())}
                       >
-                        {saving() ? 'Saving...' : 'Save'}
+                        Delete
                       </button>
                     </div>
                   </div>
-                </Show>
-              )}
-            </For>
-          </div>
-
-          <Show when={presets().length === 0 && !adding()}>
-            <p class="text-xs text-text-dim py-4 text-center">No presets yet</p>
-          </Show>
-
-          <Show when={error()}>
-            <p class="mt-2 text-xs text-accent-error">{error()}</p>
-          </Show>
-
-          <Show
-            when={adding()}
-            fallback={
-              <button
-                type="button"
-                class="mt-3 w-full px-3 py-1.5 text-xs border border-border-subtle text-text-dim hover:text-text-main hover:border-accent-primary cursor-pointer"
-                onClick={() => startAdd()}
-              >
-                + Add Preset
-              </button>
-            }
-          >
-            <div class="mt-3 space-y-2">
-              <input
-                type="text"
-                placeholder="Preset name"
-                value={form().name}
-                onInput={(e) => setForm((f) => ({ ...f, name: e.currentTarget.value }))}
-                autofocus
-                class="w-full bg-bg-main border border-border-subtle text-text-main text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary"
-              />
-              <input
-                type="text"
-                placeholder="Command"
-                value={form().command}
-                onInput={(e) => setForm((f) => ({ ...f, command: e.currentTarget.value }))}
-                class="w-full bg-bg-main border border-border-subtle text-text-main text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary"
-              />
-              <select
-                value={form().tabType}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    tabType: e.currentTarget.value as 'shell' | 'claude',
-                  }))
                 }
-                style={{
-                  'background-color': 'var(--color-bg-main)',
-                  color: 'var(--color-text-main)',
-                }}
-                class="w-full border border-border-subtle text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary appearance-none [&>option]:bg-bg-main [&>option]:text-text-main"
               >
-                <option value="shell">Shell</option>
-                <option value="claude">Claude</option>
-              </select>
-              <div class="flex justify-end gap-2">
-                <button
-                  type="button"
-                  class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
-                  onClick={() => resetForm()}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={saving() || !form().name.trim()}
-                  class="px-3 py-1.5 text-xs bg-accent-primary text-bg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
-                  onClick={() => handleSaveNew()}
-                >
-                  {saving() ? 'Saving...' : 'Add Preset'}
-                </button>
-              </div>
-            </div>
-          </Show>
+                <div class="px-3 py-2 border-b border-border-subtle space-y-2">
+                  <input
+                    type="text"
+                    placeholder="Preset name"
+                    value={form().name}
+                    onInput={(e) => setForm((f) => ({ ...f, name: e.currentTarget.value }))}
+                    class="z-input w-full"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Command"
+                    value={form().command}
+                    onInput={(e) => setForm((f) => ({ ...f, command: e.currentTarget.value }))}
+                    class="z-input w-full"
+                  />
+                  <Select
+                    options={['shell', 'claude']}
+                    value={form().tabType}
+                    onChange={(val) =>
+                      setForm((f) => ({
+                        ...f,
+                        tabType: (val ?? 'shell') as 'shell' | 'claude',
+                      }))
+                    }
+                    placeholder="Tab type"
+                    itemComponent={(props) => (
+                      <SelectItem item={props.item}>
+                        {props.item.rawValue === 'shell' ? 'Shell' : 'Claude'}
+                      </SelectItem>
+                    )}
+                  >
+                    <SelectTrigger>
+                      <SelectValue<string>>
+                        {(state) => (state.selectedOption() === 'shell' ? 'Shell' : 'Claude')}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent />
+                  </Select>
+                  <div class="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      class="px-3 py-1.5 text-base text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
+                      onClick={() => resetForm()}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={saving() || !form().name.trim()}
+                      class="px-3 py-1.5 text-base bg-accent-primary text-bg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+                      onClick={() => handleSaveEdit(i())}
+                    >
+                      {saving() ? 'Saving...' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+              </Show>
+            )}
+          </For>
+        </div>
 
-          <div class="mt-4 flex justify-end">
+        <Show when={presets().length === 0 && !adding()}>
+          <p class="text-base text-text-dim py-4 text-center">No presets yet</p>
+        </Show>
+
+        <Show when={error()}>
+          <p class="mt-2 text-base text-accent-error">{error()}</p>
+        </Show>
+
+        <Show
+          when={adding()}
+          fallback={
             <button
               type="button"
-              class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
-              onClick={() => props.onClose()}
+              class="mt-3 w-full px-3 py-1.5 text-base border border-border-subtle text-text-dim hover:text-text-main hover:border-accent-primary cursor-pointer"
+              onClick={() => startAdd()}
             >
-              Close
+              + Add Preset
             </button>
+          }
+        >
+          <div class="mt-3 space-y-2">
+            <input
+              type="text"
+              placeholder="Preset name"
+              value={form().name}
+              onInput={(e) => setForm((f) => ({ ...f, name: e.currentTarget.value }))}
+              autofocus
+              class="z-input w-full"
+            />
+            <input
+              type="text"
+              placeholder="Command"
+              value={form().command}
+              onInput={(e) => setForm((f) => ({ ...f, command: e.currentTarget.value }))}
+              class="z-input w-full"
+            />
+            <Select
+              options={['shell', 'claude']}
+              value={form().tabType}
+              onChange={(val) =>
+                setForm((f) => ({
+                  ...f,
+                  tabType: (val ?? 'shell') as 'shell' | 'claude',
+                }))
+              }
+              placeholder="Tab type"
+              itemComponent={(props) => (
+                <SelectItem item={props.item}>
+                  {props.item.rawValue === 'shell' ? 'Shell' : 'Claude'}
+                </SelectItem>
+              )}
+            >
+              <SelectTrigger>
+                <SelectValue<string>>
+                  {(state) => (state.selectedOption() === 'shell' ? 'Shell' : 'Claude')}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent />
+            </Select>
+            <div class="flex justify-end gap-2">
+              <button
+                type="button"
+                class="px-3 py-1.5 text-base text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
+                onClick={() => resetForm()}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={saving() || !form().name.trim()}
+                class="px-3 py-1.5 text-base bg-accent-primary text-bg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+                onClick={() => handleSaveNew()}
+              >
+                {saving() ? 'Saving...' : 'Add Preset'}
+              </button>
+            </div>
           </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+        </Show>
+
+        <div class="mt-4 flex justify-end">
+          <button
+            type="button"
+            class="px-3 py-1.5 text-base text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
+            onClick={() => props.onClose()}
+          >
+            Close
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

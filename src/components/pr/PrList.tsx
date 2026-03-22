@@ -5,6 +5,8 @@ import { getLayoutStore } from '../../lib/stores/layout';
 import { getRepoStore } from '../../lib/stores/repo';
 import type { PrSummary } from '../../types/github';
 import { Button } from '../ui/Button';
+import { Checkbox } from '../ui/Checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
 
 function ciSortWeight(ciStatus: string | null): number {
   if (ciStatus === 'failing') return 0;
@@ -27,16 +29,16 @@ function CiBadge(props: { status: string | null }) {
   return (
     <Switch>
       <Match when={props.status === 'failing'}>
-        <span class="text-[10px] font-medium text-red-400">failing</span>
+        <span class="text-base font-medium text-red-400">failing</span>
       </Match>
       <Match when={props.status === 'pending'}>
-        <span class="text-[10px] font-medium text-yellow-400">pending</span>
+        <span class="text-base font-medium text-yellow-400">pending</span>
       </Match>
       <Match when={props.status === 'passing'}>
-        <span class="text-[10px] font-medium text-green-400">passing</span>
+        <span class="text-base font-medium text-green-400">passing</span>
       </Match>
       <Match when={!props.status}>
-        <span class="text-[10px] text-text-dim">no CI</span>
+        <span class="text-base text-text-dim">no CI</span>
       </Match>
     </Switch>
   );
@@ -47,7 +49,7 @@ function ReviewBadge(props: { decision: string | null }) {
     <Show when={props.decision}>
       {(d) => (
         <span
-          class={`text-[10px] font-medium ${d() === 'changes_requested' ? 'text-orange-400' : d() === 'approved' ? 'text-green-400' : 'text-text-dim'}`}
+          class={`text-base font-medium ${d() === 'changes_requested' ? 'text-orange-400' : d() === 'approved' ? 'text-green-400' : 'text-text-dim'}`}
         >
           {d() === 'changes_requested' ? 'changes req.' : d()}
         </span>
@@ -258,24 +260,48 @@ export function PrList() {
 
       {/* Filters */}
       <div class="px-2 py-1.5 flex items-center gap-1.5 border-b border-border-subtle/50">
-        <select
-          class="text-[10px] bg-bg-main text-text-main px-1.5 py-0.5 border border-border-subtle/50 cursor-pointer [&>option]:bg-bg-main [&>option]:text-text-main"
+        <Select
+          options={['', ...authors()]}
           value={authorFilter()}
-          onChange={(e) => setAuthorFilter(e.currentTarget.value)}
+          onChange={(val) => setAuthorFilter(val ?? '')}
+          placeholder="All authors"
+          itemComponent={(props) => (
+            <SelectItem item={props.item}>
+              {props.item.rawValue === '' ? 'All authors' : props.item.rawValue}
+            </SelectItem>
+          )}
         >
-          <option value="">All authors</option>
-          <For each={authors()}>{(a) => <option value={a}>{a}</option>}</For>
-        </select>
-        <select
-          class="text-[10px] bg-bg-main text-text-main px-1.5 py-0.5 border border-border-subtle/50 cursor-pointer [&>option]:bg-bg-main [&>option]:text-text-main"
+          <SelectTrigger size="sm">
+            <SelectValue<string>>
+              {(state) => (state.selectedOption() === '' ? 'All authors' : state.selectedOption())}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent />
+        </Select>
+        <Select
+          options={['', 'failing', 'pending', 'passing']}
           value={ciFilter()}
-          onChange={(e) => setCiFilter(e.currentTarget.value)}
+          onChange={(val) => setCiFilter(val ?? '')}
+          placeholder="CI: All"
+          itemComponent={(props) => (
+            <SelectItem item={props.item}>
+              {props.item.rawValue === ''
+                ? 'CI: All'
+                : `CI: ${props.item.rawValue.charAt(0).toUpperCase()}${props.item.rawValue.slice(1)}`}
+            </SelectItem>
+          )}
         >
-          <option value="">CI: All</option>
-          <option value="failing">CI: Failing</option>
-          <option value="pending">CI: Pending</option>
-          <option value="passing">CI: Passing</option>
-        </select>
+          <SelectTrigger size="sm">
+            <SelectValue<string>>
+              {(state) =>
+                state.selectedOption() === ''
+                  ? 'CI: All'
+                  : `CI: ${state.selectedOption()?.charAt(0).toUpperCase()}${state.selectedOption()?.slice(1)}`
+              }
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent />
+        </Select>
       </div>
 
       {/* PR List */}
@@ -288,9 +314,9 @@ export function PrList() {
             </div>
           </Match>
           <Match when={filteredPrs().length === 0}>
-            <div class="text-xs text-text-dim text-center px-3 py-6">
+            <div class="text-base text-text-dim text-center px-3 py-6">
               <p>No open PRs found</p>
-              <p class="mt-2 text-[10px] opacity-70">
+              <p class="mt-2 text-base opacity-70">
                 Add a repository with open pull requests to get started
               </p>
             </div>
@@ -299,11 +325,10 @@ export function PrList() {
             <div class="divide-y divide-border-subtle/30">
               <For each={filteredPrs()}>
                 {(pr) => (
-                  <div class="px-3 py-2 text-xs hover:bg-bg-main/30 transition-colors duration-150">
+                  <div class="px-3 py-2 text-base hover:bg-bg-main/30 transition-colors duration-150">
                     <div class="flex items-start gap-1.5">
-                      <input
-                        type="checkbox"
-                        class="shrink-0 mt-0.5 accent-accent-primary cursor-pointer"
+                      <Checkbox
+                        class="shrink-0 mt-0.5"
                         checked={selectedPrs().has(prKey(pr))}
                         onChange={() => togglePrSelection(pr)}
                       />
@@ -314,13 +339,11 @@ export function PrList() {
                         class="min-w-0 hover:underline"
                         title={pr.title}
                       >
-                        <span class="text-[11px] font-medium text-accent-primary">
-                          #{pr.number}
-                        </span>{' '}
-                        <span class="text-[11px] text-text-main">{pr.title}</span>
+                        <span class="text-base font-medium text-accent-primary">#{pr.number}</span>{' '}
+                        <span class="text-base text-text-main">{pr.title}</span>
                       </a>
                     </div>
-                    <div class="flex items-center gap-2 mt-1 text-[10px] text-text-dim pl-5">
+                    <div class="flex items-center gap-2 mt-1 text-base text-text-dim pl-5">
                       <span class="truncate">{pr.repoName}</span>
                       <CiBadge status={pr.ciStatus} />
                       <ReviewBadge decision={pr.reviewDecision} />
@@ -335,10 +358,10 @@ export function PrList() {
                       </Show>
                     </div>
                     <div class="flex items-center justify-between mt-1 pl-5">
-                      <span class="text-[10px] text-text-dim">{pr.author}</span>
+                      <span class="text-base text-text-dim">{pr.author}</span>
                       <button
                         type="button"
-                        class={`text-[10px] font-medium px-2 py-0.5 border cursor-pointer transition-colors duration-150 ${
+                        class={`text-base font-medium px-2 py-0.5 border cursor-pointer transition-colors duration-150 ${
                           shepherding() === pr.number
                             ? 'border-accent-primary/30 text-accent-primary/50 bg-accent-primary/5'
                             : 'border-border-subtle text-text-dim hover:text-accent-primary hover:border-accent-primary/50 hover:bg-accent-primary/5'
@@ -360,7 +383,7 @@ export function PrList() {
 
       {/* Error display */}
       <Show when={error()}>
-        <div class="px-3 py-1.5 text-[10px] text-accent-error border-t border-border-subtle/50">
+        <div class="px-3 py-1.5 text-base text-accent-error border-t border-border-subtle/50">
           {error()}
         </div>
       </Show>
