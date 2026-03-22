@@ -42,7 +42,7 @@ function dotBg(status: TaskStatus): string {
 export function TaskBadge(props: TaskBadgeProps) {
   return (
     <span
-      class={`inline-flex items-center gap-1 shrink-0 text-xs font-medium ${badgeClasses(props.status)}`}
+      class={`inline-flex items-center gap-1 shrink-0 text-[10px] font-medium ${badgeClasses(props.status)}`}
     >
       <span class="relative flex h-1.5 w-1.5">
         <Show when={props.status === 'running'}>

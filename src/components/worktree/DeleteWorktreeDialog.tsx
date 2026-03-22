@@ -1,4 +1,6 @@
 import { createEffect, createSignal, Show } from 'solid-js';
+import { Button } from '../ui/Button';
+import { Checkbox, CheckboxLabel } from '../ui/Checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/Dialog';
 
 type DeleteWorktreeDialogProps = {
@@ -35,31 +37,20 @@ export function DeleteWorktreeDialog(props: DeleteWorktreeDialogProps) {
           Deleting will permanently remove the worktree directory from disk.
         </p>
 
-        <label class="flex items-center gap-2 mt-4 text-xs text-text-main cursor-pointer">
-          <input
-            type="checkbox"
-            checked={deleteBranch()}
-            onChange={(e) => setDeleteBranch(e.currentTarget.checked)}
-            class="accent-primary"
-          />
-          Also delete local branch
-        </label>
+        <div class="flex items-center gap-2 mt-4">
+          <Checkbox checked={deleteBranch()} onChange={(checked) => setDeleteBranch(checked)} />
+          <CheckboxLabel class="text-xs text-text-main cursor-pointer">
+            Also delete local branch
+          </CheckboxLabel>
+        </div>
 
         <div class="mt-5 flex justify-end gap-2">
-          <button
-            type="button"
-            class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
-            onClick={() => props.onClose()}
-          >
+          <Button variant="ghost" size="compact" onClick={() => props.onClose()}>
             Cancel
-          </button>
-          <button
-            type="button"
-            class="px-3 py-1.5 text-xs bg-accent-error/90 text-white cursor-pointer hover:bg-accent-error"
-            onClick={() => props.onConfirm(deleteBranch())}
-          >
+          </Button>
+          <Button variant="danger" size="compact" onClick={() => props.onConfirm(deleteBranch())}>
             Delete
-          </button>
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

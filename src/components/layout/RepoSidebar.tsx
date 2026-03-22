@@ -68,7 +68,7 @@ function PrBadge(props: {
     <Show when={pr()}>
       {/* biome-ignore lint/a11y/noStaticElementInteractions: tooltip hover trigger */}
       <span
-        class="ml-1 flex items-center gap-0.5 text-xs shrink-0"
+        class="ml-1 flex items-center gap-0.5 text-[10px] shrink-0"
         onMouseEnter={(e) => {
           const p = pr();
           if (p) props.onHoverStart(p, e.currentTarget as HTMLElement);

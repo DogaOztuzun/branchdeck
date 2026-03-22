@@ -5,6 +5,7 @@ import { getLayoutStore } from '../../lib/stores/layout';
 import { getRepoStore } from '../../lib/stores/repo';
 import type { PrSummary } from '../../types/github';
 import { Button } from '../ui/Button';
+import { Checkbox } from '../ui/Checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
 
 function ciSortWeight(ciStatus: string | null): number {
@@ -326,9 +327,8 @@ export function PrList() {
                 {(pr) => (
                   <div class="px-3 py-2 text-xs hover:bg-bg-main/30 transition-colors duration-150">
                     <div class="flex items-start gap-1.5">
-                      <input
-                        type="checkbox"
-                        class="shrink-0 mt-0.5 accent-accent-primary cursor-pointer"
+                      <Checkbox
+                        class="shrink-0 mt-0.5"
                         checked={selectedPrs().has(prKey(pr))}
                         onChange={() => togglePrSelection(pr)}
                       />

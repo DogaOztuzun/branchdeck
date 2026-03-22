@@ -171,14 +171,14 @@ export function PresetManager(props: PresetManagerProps) {
                     placeholder="Preset name"
                     value={form().name}
                     onInput={(e) => setForm((f) => ({ ...f, name: e.currentTarget.value }))}
-                    class="w-full bg-bg-main border border-border-subtle text-text-main text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary"
+                    class="z-input w-full"
                   />
                   <input
                     type="text"
                     placeholder="Command"
                     value={form().command}
                     onInput={(e) => setForm((f) => ({ ...f, command: e.currentTarget.value }))}
-                    class="w-full bg-bg-main border border-border-subtle text-text-main text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary"
+                    class="z-input w-full"
                   />
                   <Select
                     options={['shell', 'claude']}
@@ -253,14 +253,14 @@ export function PresetManager(props: PresetManagerProps) {
               value={form().name}
               onInput={(e) => setForm((f) => ({ ...f, name: e.currentTarget.value }))}
               autofocus
-              class="w-full bg-bg-main border border-border-subtle text-text-main text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary"
+              class="z-input w-full"
             />
             <input
               type="text"
               placeholder="Command"
               value={form().command}
               onInput={(e) => setForm((f) => ({ ...f, command: e.currentTarget.value }))}
-              class="w-full bg-bg-main border border-border-subtle text-text-main text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary"
+              class="z-input w-full"
             />
             <Select
               options={['shell', 'claude']}

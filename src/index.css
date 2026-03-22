@@ -218,7 +218,8 @@ body,
 }
 
 /* Checkbox */
-.z-checkbox-control {
+.z-checkbox-control,
+.z-checkbox {
   @apply border-input data-checked:bg-primary data-checked:text-primary-foreground data-checked:border-primary focus-visible:ring-ring/50 size-4 shrink-0 rounded-none border shadow-xs transition-shadow focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-50;
 }
 
