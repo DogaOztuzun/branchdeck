@@ -649,6 +649,56 @@ fn create_orchestrator_task(
     task_path
 }
 
+/// Check if worktree exists with the correct branch. Returns true if a new worktree
+/// needs to be created (either doesn't exist, wrong branch, or invalid repo).
+fn worktree_needs_create(worktree_path: &str, expected_branch: &str) -> bool {
+    let wt_path = std::path::Path::new(worktree_path);
+    if !wt_path.exists() {
+        return true;
+    }
+
+    let Ok(repo) = git2::Repository::open(wt_path) else {
+        info!("Invalid git worktree at {worktree_path}, removing");
+        let _ = std::fs::remove_dir_all(wt_path);
+        return true;
+    };
+
+    let current_branch = repo
+        .head()
+        .ok()
+        .and_then(|h| h.shorthand().map(String::from))
+        .unwrap_or_default();
+
+    if current_branch == expected_branch {
+        debug!("Worktree at {worktree_path} already on correct branch");
+        return false;
+    }
+
+    info!(
+        "Worktree at {worktree_path} is on branch '{current_branch}', \
+         need '{expected_branch}' — removing stale worktree"
+    );
+
+    // Remove stale worktree so we can recreate on the right branch
+    if let Some(repo_base) = worktree_path
+        .find("/.worktrees/")
+        .map(|idx| &worktree_path[..idx])
+    {
+        let name = wt_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown");
+        if let Err(e) =
+            crate::services::git::remove_worktree(std::path::Path::new(repo_base), name, false)
+        {
+            error!("Failed to remove stale worktree: {e}");
+            let _ = std::fs::remove_dir_all(wt_path);
+        }
+    }
+
+    true
+}
+
 /// Execute the `DispatchSession` effect: create worktree, deploy files, enqueue run.
 async fn execute_dispatch<R: tauri::Runtime>(
     key: &str,
@@ -661,8 +711,8 @@ async fn execute_dispatch<R: tauri::Runtime>(
 ) {
     use crate::models::agent::now_ms;
 
-    // Create worktree if it doesn't exist
-    if !std::path::Path::new(worktree_path).exists() {
+    // Ensure worktree exists and is on the correct branch
+    if worktree_needs_create(worktree_path, &pr_context.branch) {
         if let Some(repo_base) = worktree_path
             .find("/.worktrees/")
             .map(|idx| &worktree_path[..idx])
