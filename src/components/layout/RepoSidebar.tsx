@@ -423,7 +423,9 @@ export function RepoSidebar() {
                   variant: 'danger',
                   onClick: () => {
                     const target = { repoPath: menu().repoPath, wt: menu().wt };
-                    setTimeout(() => setDeleteTarget(target), 50);
+                    // Delay to let context menu Portal unmount before Dialog Portal mounts.
+                    // Without this, SolidJS Portal unmount interferes with Dialog rendering.
+                    requestAnimationFrame(() => setDeleteTarget(target));
                   },
                 },
               ]}

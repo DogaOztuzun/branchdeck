@@ -19,21 +19,6 @@ import { Button } from '../ui/Button';
 
 type RunCardStatus = 'running' | 'succeeded' | 'failed' | 'queued' | 'cancelled';
 
-function _statusVariant(status: RunCardStatus) {
-  switch (status) {
-    case 'succeeded':
-      return 'success' as const;
-    case 'running':
-      return 'warning' as const;
-    case 'failed':
-      return 'error' as const;
-    case 'queued':
-      return 'info' as const;
-    case 'cancelled':
-      return 'neutral' as const;
-  }
-}
-
 function taskStatusToCardStatus(status: TaskStatus): RunCardStatus {
   switch (status) {
     case 'running':
@@ -62,7 +47,7 @@ function TaskCard(props: {
   onOpenWorkspace: () => void;
 }) {
   const taskStore = getTaskStore();
-  const _status = () => taskStatusToCardStatus(props.task.frontmatter.status);
+
   const isActiveRun = () => taskStore.state.activeRun?.taskPath === props.task.path;
   const hasPending = () => taskStore.state.pendingPermissions.length > 0 && isActiveRun();
 
