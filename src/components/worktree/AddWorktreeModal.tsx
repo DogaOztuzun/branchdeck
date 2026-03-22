@@ -1,8 +1,9 @@
 import { Dialog } from '@kobalte/core';
-import { createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, onCleanup, Show } from 'solid-js';
 import { listBranches, previewWorktree } from '../../lib/commands/git';
 import { getRepoStore } from '../../lib/stores/repo';
 import type { BranchInfo, WorktreeInfo, WorktreePreview } from '../../types/git';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
 
 type AddWorktreeModalProps = {
   open: boolean;
@@ -137,19 +138,23 @@ export function AddWorktreeModal(props: AddWorktreeModalProps) {
 
             <Show when={localBranches().length > 0}>
               <div class="mt-2">
-                <label class="text-xs text-text-dim" for="base-branch-select">
-                  Base branch
-                </label>
-                <select
-                  id="base-branch-select"
-                  value={baseBranch()}
-                  onChange={(e) => setBaseBranch(e.currentTarget.value)}
-                  class="w-full mt-1 px-3 py-1.5 text-xs bg-bg-main text-text-main border border-border-subtle focus:outline-none focus:border-accent-primary"
-                >
-                  <For each={localBranches()}>
-                    {(branch) => <option value={branch.name}>{branch.name}</option>}
-                  </For>
-                </select>
+                <span class="text-xs text-text-dim">Base branch</span>
+                <div class="mt-1">
+                  <Select
+                    options={localBranches().map((b) => b.name)}
+                    value={baseBranch()}
+                    onChange={(val) => setBaseBranch(val ?? '')}
+                    placeholder="Select base branch"
+                    itemComponent={(props) => (
+                      <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
+                    )}
+                  >
+                    <SelectTrigger>
+                      <SelectValue<string>>{(state) => state.selectedOption()}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent />
+                  </Select>
+                </div>
               </div>
             </Show>
 

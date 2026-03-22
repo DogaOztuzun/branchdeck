@@ -1,5 +1,5 @@
 import { listen } from '@tauri-apps/api/event';
-import { ArrowLeft, Clock, ExternalLink, GitBranch, Square } from 'lucide-solid';
+import { ArrowLeft, Clock, ExternalLink, Square } from 'lucide-solid';
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import {
   cancelQueue,
@@ -11,16 +11,15 @@ import { listTasks } from '../../lib/commands/task';
 import { getLayoutStore } from '../../lib/stores/layout';
 import { getRepoStore } from '../../lib/stores/repo';
 import { getTaskStore, worktreePathFromTaskPath } from '../../lib/stores/task';
-import type { QueuedRun, QueueStatus } from '../../types/github';
-import type { RunInfo, RunStatusEvent, RunStepEvent } from '../../types/run';
+import type { QueueStatus } from '../../types/github';
+import type { RunInfo, RunStepEvent } from '../../types/run';
 import type { TaskInfo, TaskStatus } from '../../types/task';
 import { TaskBadge } from '../task/TaskBadge';
-import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 
 type RunCardStatus = 'running' | 'succeeded' | 'failed' | 'queued' | 'cancelled';
 
-function statusVariant(status: RunCardStatus) {
+function _statusVariant(status: RunCardStatus) {
   switch (status) {
     case 'succeeded':
       return 'success' as const;
@@ -63,7 +62,7 @@ function TaskCard(props: {
   onOpenWorkspace: () => void;
 }) {
   const taskStore = getTaskStore();
-  const status = () => taskStatusToCardStatus(props.task.frontmatter.status);
+  const _status = () => taskStatusToCardStatus(props.task.frontmatter.status);
   const isActiveRun = () => taskStore.state.activeRun?.taskPath === props.task.path;
   const hasPending = () => taskStore.state.pendingPermissions.length > 0 && isActiveRun();
 
@@ -105,7 +104,7 @@ function TaskCard(props: {
           <Show when={props.activeRun}>
             <div class="flex items-center gap-1 font-mono">
               <Clock size={10} />
-              {formatElapsed(props.activeRun!.elapsedSecs)}
+              {formatElapsed(props.activeRun?.elapsedSecs)}
             </div>
           </Show>
           <Show when={props.task.frontmatter['run-count'] > 0}>
@@ -256,7 +255,7 @@ const STATUS_ORDER: Record<TaskStatus, number> = {
 export function OrchestrationView() {
   const layout = getLayoutStore();
   const repoStore = getRepoStore();
-  const taskStore = getTaskStore();
+  const _taskStore = getTaskStore();
   const [queue, setQueue] = createSignal<QueueStatus | null>(null);
   const [activeRun, setActiveRun] = createSignal<RunInfo | null>(null);
   const [lastSteps, setLastSteps] = createSignal<Record<string, string>>({});

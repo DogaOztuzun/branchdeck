@@ -2,6 +2,7 @@ import { Dialog } from '@kobalte/core';
 import { createEffect, createSignal, For, Show } from 'solid-js';
 import type { Preset } from '../../lib/commands/workspace';
 import { getPresets, savePresets } from '../../lib/commands/workspace';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
 
 type PresetManagerProps = {
   open: boolean;
@@ -181,23 +182,29 @@ export function PresetManager(props: PresetManagerProps) {
                       onInput={(e) => setForm((f) => ({ ...f, command: e.currentTarget.value }))}
                       class="w-full bg-bg-main border border-border-subtle text-text-main text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary"
                     />
-                    <select
+                    <Select
+                      options={['shell', 'claude']}
                       value={form().tabType}
-                      onChange={(e) =>
+                      onChange={(val) =>
                         setForm((f) => ({
                           ...f,
-                          tabType: e.currentTarget.value as 'shell' | 'claude',
+                          tabType: (val ?? 'shell') as 'shell' | 'claude',
                         }))
                       }
-                      style={{
-                        'background-color': 'var(--color-bg-main)',
-                        color: 'var(--color-text-main)',
-                      }}
-                      class="w-full border border-border-subtle text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary appearance-none [&>option]:bg-bg-main [&>option]:text-text-main"
+                      placeholder="Tab type"
+                      itemComponent={(props) => (
+                        <SelectItem item={props.item}>
+                          {props.item.rawValue === 'shell' ? 'Shell' : 'Claude'}
+                        </SelectItem>
+                      )}
                     >
-                      <option value="shell">Shell</option>
-                      <option value="claude">Claude</option>
-                    </select>
+                      <SelectTrigger>
+                        <SelectValue<string>>
+                          {(state) => (state.selectedOption() === 'shell' ? 'Shell' : 'Claude')}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent />
+                    </Select>
                     <div class="flex justify-end gap-2">
                       <button
                         type="button"
@@ -257,23 +264,29 @@ export function PresetManager(props: PresetManagerProps) {
                 onInput={(e) => setForm((f) => ({ ...f, command: e.currentTarget.value }))}
                 class="w-full bg-bg-main border border-border-subtle text-text-main text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary"
               />
-              <select
+              <Select
+                options={['shell', 'claude']}
                 value={form().tabType}
-                onChange={(e) =>
+                onChange={(val) =>
                   setForm((f) => ({
                     ...f,
-                    tabType: e.currentTarget.value as 'shell' | 'claude',
+                    tabType: (val ?? 'shell') as 'shell' | 'claude',
                   }))
                 }
-                style={{
-                  'background-color': 'var(--color-bg-main)',
-                  color: 'var(--color-text-main)',
-                }}
-                class="w-full border border-border-subtle text-xs px-3 py-1.5 focus:outline-none focus:border-accent-primary appearance-none [&>option]:bg-bg-main [&>option]:text-text-main"
+                placeholder="Tab type"
+                itemComponent={(props) => (
+                  <SelectItem item={props.item}>
+                    {props.item.rawValue === 'shell' ? 'Shell' : 'Claude'}
+                  </SelectItem>
+                )}
               >
-                <option value="shell">Shell</option>
-                <option value="claude">Claude</option>
-              </select>
+                <SelectTrigger>
+                  <SelectValue<string>>
+                    {(state) => (state.selectedOption() === 'shell' ? 'Shell' : 'Claude')}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent />
+              </Select>
               <div class="flex justify-end gap-2">
                 <button
                   type="button"

@@ -5,6 +5,7 @@ import { getLayoutStore } from '../../lib/stores/layout';
 import { getRepoStore } from '../../lib/stores/repo';
 import type { PrSummary } from '../../types/github';
 import { Button } from '../ui/Button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
 
 function ciSortWeight(ciStatus: string | null): number {
   if (ciStatus === 'failing') return 0;
@@ -258,24 +259,48 @@ export function PrList() {
 
       {/* Filters */}
       <div class="px-2 py-1.5 flex items-center gap-1.5 border-b border-border-subtle/50">
-        <select
-          class="text-[10px] bg-bg-main text-text-main px-1.5 py-0.5 border border-border-subtle/50 cursor-pointer [&>option]:bg-bg-main [&>option]:text-text-main"
+        <Select
+          options={['', ...authors()]}
           value={authorFilter()}
-          onChange={(e) => setAuthorFilter(e.currentTarget.value)}
+          onChange={(val) => setAuthorFilter(val ?? '')}
+          placeholder="All authors"
+          itemComponent={(props) => (
+            <SelectItem item={props.item}>
+              {props.item.rawValue === '' ? 'All authors' : props.item.rawValue}
+            </SelectItem>
+          )}
         >
-          <option value="">All authors</option>
-          <For each={authors()}>{(a) => <option value={a}>{a}</option>}</For>
-        </select>
-        <select
-          class="text-[10px] bg-bg-main text-text-main px-1.5 py-0.5 border border-border-subtle/50 cursor-pointer [&>option]:bg-bg-main [&>option]:text-text-main"
+          <SelectTrigger size="sm">
+            <SelectValue<string>>
+              {(state) => (state.selectedOption() === '' ? 'All authors' : state.selectedOption())}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent />
+        </Select>
+        <Select
+          options={['', 'failing', 'pending', 'passing']}
           value={ciFilter()}
-          onChange={(e) => setCiFilter(e.currentTarget.value)}
+          onChange={(val) => setCiFilter(val ?? '')}
+          placeholder="CI: All"
+          itemComponent={(props) => (
+            <SelectItem item={props.item}>
+              {props.item.rawValue === ''
+                ? 'CI: All'
+                : `CI: ${props.item.rawValue.charAt(0).toUpperCase()}${props.item.rawValue.slice(1)}`}
+            </SelectItem>
+          )}
         >
-          <option value="">CI: All</option>
-          <option value="failing">CI: Failing</option>
-          <option value="pending">CI: Pending</option>
-          <option value="passing">CI: Passing</option>
-        </select>
+          <SelectTrigger size="sm">
+            <SelectValue<string>>
+              {(state) =>
+                state.selectedOption() === ''
+                  ? 'CI: All'
+                  : `CI: ${state.selectedOption()?.charAt(0).toUpperCase()}${state.selectedOption()?.slice(1)}`
+              }
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent />
+        </Select>
       </div>
 
       {/* PR List */}

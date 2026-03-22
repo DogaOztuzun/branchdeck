@@ -2,6 +2,7 @@ import { Dialog } from '@kobalte/core';
 import { createEffect, createMemo, createSignal, Show } from 'solid-js';
 import { createTask, watchTaskPath } from '../../lib/commands/task';
 import type { TaskType } from '../../types/task';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
 
 type CreateTaskModalProps = {
   open: boolean;
@@ -95,22 +96,29 @@ export function CreateTaskModal(props: CreateTaskModalProps) {
 
           <form onSubmit={handleCreate}>
             <div>
-              <label class="text-xs text-text-dim" for="task-type-select">
-                Task type
-              </label>
-              <select
-                id="task-type-select"
-                value={taskType()}
-                onChange={(e) => handleTypeChange(e.currentTarget.value as TaskType)}
-                style={{
-                  'background-color': 'var(--color-bg-main)',
-                  color: 'var(--color-text-main)',
-                }}
-                class="w-full mt-1 px-3 py-1.5 text-xs border border-border-subtle focus:outline-none focus:border-accent-primary appearance-none [&>option]:bg-bg-main [&>option]:text-text-main"
-              >
-                <option value="issue-fix">Issue Fix</option>
-                <option value="pr-shepherd">PR Shepherd</option>
-              </select>
+              <span class="text-xs text-text-dim">Task type</span>
+              <div class="mt-1">
+                <Select
+                  options={['issue-fix', 'pr-shepherd'] as TaskType[]}
+                  value={taskType()}
+                  onChange={(val) => handleTypeChange((val ?? 'issue-fix') as TaskType)}
+                  placeholder="Select task type"
+                  itemComponent={(props) => (
+                    <SelectItem item={props.item}>
+                      {props.item.rawValue === 'issue-fix' ? 'Issue Fix' : 'PR Shepherd'}
+                    </SelectItem>
+                  )}
+                >
+                  <SelectTrigger>
+                    <SelectValue<string>>
+                      {(state) =>
+                        state.selectedOption() === 'issue-fix' ? 'Issue Fix' : 'PR Shepherd'
+                      }
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent />
+                </Select>
+              </div>
             </div>
 
             <Show when={isPrShepherd()}>
