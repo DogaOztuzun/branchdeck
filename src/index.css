@@ -120,11 +120,11 @@ body,
 }
 
 .z-dialog-content {
-  @apply bg-background fixed top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2 gap-4 rounded-none border p-4 shadow-lg duration-100;
+  @apply bg-background fixed top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2 flex flex-col gap-3 rounded-none border p-4 shadow-lg duration-100;
 }
 
 .z-dialog-header {
-  @apply flex flex-col gap-1;
+  @apply flex flex-col gap-1 mb-1;
 }
 
 .z-dialog-footer {
@@ -140,7 +140,7 @@ body,
 }
 
 .z-dialog-close-button {
-  @apply ring-offset-background focus:ring-ring data-expanded:bg-accent data-expanded:text-muted-foreground absolute top-3 right-3 cursor-pointer rounded-none opacity-70 transition-opacity hover:opacity-100 focus:ring-1 focus:outline-none disabled:pointer-events-none [&>svg]:size-4;
+  @apply absolute top-3 right-3 cursor-pointer rounded-none text-muted-foreground opacity-70 transition-opacity hover:opacity-100 hover:text-foreground focus:outline-none [&>svg]:size-4;
 }
 
 /* Button */
