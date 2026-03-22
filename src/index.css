@@ -9,6 +9,16 @@
   --font-mono:
     "JetBrains Mono", "Fira Code", "Cascadia Code", ui-monospace, SFMono-Regular, monospace;
 
+  /* ── Font scale (aligned to DESIGN.md) ── */
+  --font-size-xs: 13px;
+  --font-size-xs--line-height: 1.6;
+  --font-size-sm: 16px;
+  --font-size-sm--line-height: 1.5;
+  --font-size-base: 16px;
+  --font-size-base--line-height: 1.5;
+  --font-size-lg: 20px;
+  --font-size-lg--line-height: 1.4;
+
   /* ── Branchdeck palette (Tokyo Night — aligned to VS Code theme) ── */
   --color-bg-main: #1a1b26;
   --color-bg-sidebar: #16161e;
