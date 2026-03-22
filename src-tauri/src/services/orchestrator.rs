@@ -479,15 +479,25 @@ fn write_pr_context(worktree_path: &str, pr_context: &crate::models::orchestrato
 }
 
 /// Create a minimal task.md for the orchestrator session.
-fn create_orchestrator_task(worktree_path: &str, pr_key: &str) -> String {
+fn create_orchestrator_task(
+    worktree_path: &str,
+    pr_key: &str,
+    pr_context: &crate::models::orchestrator::PrContext,
+) -> String {
     let dir = format!("{worktree_path}/.branchdeck");
     let _ = std::fs::create_dir_all(&dir);
     let task_path = format!("{dir}/task.md");
+    let now = chrono::Utc::now().to_rfc3339();
 
     let content = format!(
-        "---\ntitle: 'PR Shepherd: {pr_key}'\nstatus: created\nrun_count: 0\n---\n\n\
+        "---\ntype: pr-shepherd\nscope: worktree\nstatus: created\n\
+         repo: {repo}\nbranch: {branch}\npr: {number}\n\
+         created: {now}\nrun-count: 0\n---\n\n\
          Shepherd PR {pr_key} using the pr-shepherd skill.\n\
-         Read .branchdeck/pr-context.json for PR details.\n"
+         Read .branchdeck/pr-context.json for PR details.\n",
+        repo = pr_context.repo,
+        branch = pr_context.branch,
+        number = pr_context.number,
     );
 
     if let Err(e) = std::fs::write(&task_path, &content) {
@@ -516,7 +526,7 @@ pub async fn execute_effects<R: tauri::Runtime>(
                 // Prepare worktree files
                 write_pr_context(&worktree_path, &pr_context);
                 deploy_skill_file(&worktree_path);
-                let task_path = create_orchestrator_task(&worktree_path, &key);
+                let task_path = create_orchestrator_task(&worktree_path, &key, &pr_context);
 
                 // Enqueue via RunManager
                 match crate::services::run_manager::enqueue_run(
