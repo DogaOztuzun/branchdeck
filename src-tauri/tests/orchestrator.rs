@@ -40,7 +40,10 @@ fn make_pr(number: u64, branch: &str, ci_status: Option<&str>) -> PrSummary {
 }
 
 fn make_orchestrator(enabled: bool, max_concurrent: u32) -> Orchestrator {
-    Orchestrator::new(make_config(enabled, max_concurrent))
+    let mut orch = Orchestrator::new(make_config(enabled, max_concurrent));
+    orch.repo_paths
+        .insert("test/repo".to_string(), "/tmp/repos/test-repo".to_string());
+    orch
 }
 
 // --- apply_pr_event tests ---
@@ -134,6 +137,8 @@ fn session_end_analysis_written_emits_review_ready() {
             tab_id: "tab-1".to_string(),
             started_at: 1000,
             attempt: 1,
+            branch: "fix/bug".to_string(),
+            base_branch: "main".to_string(),
         },
     );
 
@@ -164,6 +169,8 @@ fn session_end_fix_completed_marks_done() {
             tab_id: "tab-1".to_string(),
             started_at: 1000,
             attempt: 1,
+            branch: "fix/bug".to_string(),
+            base_branch: "main".to_string(),
         },
     );
 
@@ -194,6 +201,8 @@ fn session_end_fix_incomplete_schedules_retry() {
             tab_id: "tab-1".to_string(),
             started_at: 1000,
             attempt: 1,
+            branch: "fix/bug".to_string(),
+            base_branch: "main".to_string(),
         },
     );
 
@@ -221,6 +230,8 @@ fn session_end_no_output_schedules_backoff_retry() {
             tab_id: "tab-1".to_string(),
             started_at: 1000,
             attempt: 1,
+            branch: "fix/bug".to_string(),
+            base_branch: "main".to_string(),
         },
     );
 
@@ -266,6 +277,8 @@ fn relaunch_cancels_pending_retry() {
             due_at_ms: 5000,
             error: None,
             worktree_path: "/tmp/wt".to_string(),
+            branch: "fix/bug".to_string(),
+            base_branch: "main".to_string(),
         },
     );
 
@@ -292,11 +305,13 @@ fn reconciliation_stops_merged_pr() {
             tab_id: "tab-1".to_string(),
             started_at: 1000,
             attempt: 1,
+            branch: "fix/bug".to_string(),
+            base_branch: "main".to_string(),
         },
     );
 
     // Empty PR list = PR was merged/closed
-    let effects = apply_reconciliation(&mut state, &[]);
+    let effects = apply_reconciliation(&mut state, "test/repo", &[]);
 
     assert!(effects.iter().any(|e| matches!(
         e,
@@ -322,6 +337,8 @@ fn retry_due_redispatches() {
             due_at_ms: 5000,
             error: None,
             worktree_path: "/tmp/wt".to_string(),
+            branch: "fix/bug".to_string(),
+            base_branch: "main".to_string(),
         },
     );
 
@@ -348,6 +365,8 @@ fn skip_removes_from_all_tracking() {
             tab_id: "tab-1".to_string(),
             started_at: 1000,
             attempt: 1,
+            branch: "fix/bug".to_string(),
+            base_branch: "main".to_string(),
         },
     );
 
@@ -402,6 +421,8 @@ fn interleaved_prs_are_independent() {
                 tab_id: format!("tab-{i}"),
                 started_at: 1000,
                 attempt: 1,
+                branch: format!("fix/{i}"),
+                base_branch: "main".to_string(),
             },
         );
     }

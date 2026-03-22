@@ -230,6 +230,7 @@ const LIFECYCLE_STATUS_LABELS: Record<LifecycleStatus, string> = {
   completed: 'Completed',
   retrying: 'Retrying',
   stale: 'Stale — CI now passing',
+  failed: 'Failed — retries exhausted',
 };
 
 const LIFECYCLE_STATUS_COLORS: Record<LifecycleStatus, string> = {
@@ -240,6 +241,7 @@ const LIFECYCLE_STATUS_COLORS: Record<LifecycleStatus, string> = {
   completed: 'text-[var(--color-success)]',
   retrying: 'text-[var(--color-error)]',
   stale: 'text-[var(--color-muted)]',
+  failed: 'text-[var(--color-error)]',
 };
 
 const LIFECYCLE_STATUS_ORDER: Record<LifecycleStatus, number> = {
@@ -248,8 +250,9 @@ const LIFECYCLE_STATUS_ORDER: Record<LifecycleStatus, number> = {
   running: 2,
   fixing: 3,
   retrying: 4,
-  approved: 5,
-  completed: 6,
+  failed: 5,
+  approved: 6,
+  completed: 7,
 };
 
 export function OrchestrationView() {

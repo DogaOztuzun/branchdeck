@@ -13,6 +13,8 @@ pub struct RunningEntry {
     pub tab_id: String,
     pub started_at: EpochMs,
     pub attempt: u32,
+    pub branch: String,
+    pub base_branch: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,6 +25,8 @@ pub struct RetryEntry {
     pub due_at_ms: EpochMs,
     pub error: Option<String>,
     pub worktree_path: String,
+    pub branch: String,
+    pub base_branch: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -35,6 +39,7 @@ pub enum LifecycleStatus {
     Completed,
     Retrying,
     Stale,
+    Failed,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -118,6 +123,8 @@ pub struct ReviewReadyEntry {
     pub attempt: u32,
     pub started_at: EpochMs,
     pub stale: bool,
+    pub branch: String,
+    pub base_branch: String,
 }
 
 // --- Internal types (orchestrator state machine) ---

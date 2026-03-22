@@ -71,6 +71,8 @@ pub fn make_running_entry(pr_key: &str) -> branchdeck_lib::models::orchestrator:
         tab_id: format!("tab-{pr_key}"),
         started_at: 1000,
         attempt: 1,
+        branch: "fix/test".to_string(),
+        base_branch: "main".to_string(),
     }
 }
 

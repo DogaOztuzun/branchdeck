@@ -91,11 +91,14 @@ fn publish_changes(
 
     for repo in &removed {
         debug!("PR poller: no more open PRs for {repo}");
-        let _ = event_bus.publish(Event::PrStatusChanged {
+        let receivers = event_bus.publish(Event::PrStatusChanged {
             repo: repo.clone(),
             prs: Vec::new(),
             ts: now_ms(),
         });
+        if receivers == 0 {
+            error!("PR poller: no subscribers received removed-repo event for {repo}");
+        }
     }
 
     // Update last known state
