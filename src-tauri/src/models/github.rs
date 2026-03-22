@@ -6,6 +6,8 @@ pub struct PrSummary {
     pub number: u64,
     pub title: String,
     pub branch: String,
+    #[serde(default)]
+    pub base_branch: String,
     pub url: String,
     pub ci_status: Option<String>,
     pub review_decision: Option<String>,
@@ -15,6 +17,8 @@ pub struct PrSummary {
     pub deletions: Option<u64>,
     pub changed_files: Option<u64>,
     pub created_at: Option<String>,
+    #[serde(default)]
+    pub head_sha: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]

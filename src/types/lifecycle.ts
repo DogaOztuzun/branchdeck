@@ -6,7 +6,8 @@ export type LifecycleStatus =
   | 'approved'
   | 'fixing'
   | 'completed'
-  | 'retrying';
+  | 'retrying'
+  | 'stale';
 
 export type LifecycleEvent = {
   prKey: string;

@@ -16,6 +16,8 @@ const CONTINUATION_DELAY_MS: u64 = 1_000;
 const FAILURE_BASE_MS: u64 = 10_000;
 /// Maximum retry delay cap.
 const FAILURE_MAX_MS: u64 = 300_000;
+/// Maximum retry attempts before giving up.
+const MAX_RETRIES: u32 = 5;
 
 // --- Pure state machine functions ---
 // All take &mut Orchestrator + inputs, return Vec<OrchestratorEffect>.
@@ -69,7 +71,25 @@ pub fn apply_pr_event(
         // Claim and dispatch
         state.claimed.insert(key.clone());
 
-        let worktree_path = format!(".worktrees/{repo}/{}", pr.branch);
+        // Build absolute worktree path using repo_paths mapping
+        let repo_base = state
+            .repo_paths
+            .get(&pr.repo_name)
+            .cloned()
+            .unwrap_or_else(|| {
+                // Fallback: try using repo from the event
+                error!(
+                    "No repo_path mapping for {}; worktree path will be relative",
+                    pr.repo_name
+                );
+                String::new()
+            });
+        let sanitized_branch = pr.branch.replace("..", "").replace('/', "-");
+        let worktree_path = if repo_base.is_empty() {
+            format!(".worktrees/{repo}/{sanitized_branch}")
+        } else {
+            format!("{repo_base}/.worktrees/{repo}/{sanitized_branch}")
+        };
 
         effects.push(OrchestratorEffect::DispatchSession {
             pr_key: key.clone(),
@@ -78,8 +98,13 @@ pub fn apply_pr_event(
                 repo: pr.repo_name.clone(),
                 number: pr.number,
                 branch: pr.branch.clone(),
-                base_branch: "main".to_string(),
+                base_branch: if pr.base_branch.is_empty() {
+                    "main".to_string()
+                } else {
+                    pr.base_branch.clone()
+                },
             },
+            attempt: 1,
         });
 
         effects.push(OrchestratorEffect::EmitLifecycleEvent {
@@ -118,6 +143,17 @@ pub fn apply_session_end(
 
     match outcome {
         SessionOutcome::AnalysisWritten => {
+            state.review_ready.insert(
+                pr_key.to_string(),
+                crate::models::orchestrator::ReviewReadyEntry {
+                    pr_key: pr_key.to_string(),
+                    worktree_path: entry.worktree_path.clone(),
+                    attempt: entry.attempt,
+                    started_at: entry.started_at,
+                    stale: false,
+                },
+            );
+
             effects.push(OrchestratorEffect::EmitLifecycleEvent {
                 event: LifecycleEvent {
                     pr_key: pr_key.to_string(),
@@ -142,63 +178,61 @@ pub fn apply_session_end(
                 },
             });
         }
-        SessionOutcome::FixIncomplete => {
-            effects.push(OrchestratorEffect::ScheduleRetry {
-                pr_key: pr_key.to_string(),
-                attempt: entry.attempt + 1,
-                delay_ms: CONTINUATION_DELAY_MS,
-                error: None,
-            });
+        SessionOutcome::FixIncomplete | SessionOutcome::NoOutput => {
+            if entry.attempt >= MAX_RETRIES {
+                // Max retries exceeded — mark as completed (failed)
+                state.claimed.remove(pr_key);
+                state.completed.insert(pr_key.to_string());
+                error!("PR {pr_key} exceeded max retries ({MAX_RETRIES}), giving up");
 
-            state.retry_queue.insert(
-                pr_key.to_string(),
-                RetryEntry {
+                effects.push(OrchestratorEffect::EmitLifecycleEvent {
+                    event: LifecycleEvent {
+                        pr_key: pr_key.to_string(),
+                        worktree_path: entry.worktree_path,
+                        status: LifecycleStatus::Completed,
+                        attempt: entry.attempt,
+                        started_at: entry.started_at,
+                    },
+                });
+            } else {
+                let (delay_ms, error_msg) = match outcome {
+                    SessionOutcome::FixIncomplete => (CONTINUATION_DELAY_MS, None),
+                    _ => (
+                        retry_backoff(entry.attempt),
+                        Some("No output from agent session".to_string()),
+                    ),
+                };
+                let worktree_path = entry.worktree_path.clone();
+
+                effects.push(OrchestratorEffect::ScheduleRetry {
                     pr_key: pr_key.to_string(),
+                    worktree_path: worktree_path.clone(),
                     attempt: entry.attempt + 1,
-                    due_at_ms: now + CONTINUATION_DELAY_MS,
-                    error: None,
-                },
-            );
+                    delay_ms,
+                    error: error_msg.clone(),
+                });
 
-            effects.push(OrchestratorEffect::EmitLifecycleEvent {
-                event: LifecycleEvent {
-                    pr_key: pr_key.to_string(),
-                    worktree_path: entry.worktree_path,
-                    status: LifecycleStatus::Retrying,
-                    attempt: entry.attempt + 1,
-                    started_at: entry.started_at,
-                },
-            });
-        }
-        SessionOutcome::NoOutput => {
-            let delay = retry_backoff(entry.attempt);
+                state.retry_queue.insert(
+                    pr_key.to_string(),
+                    RetryEntry {
+                        pr_key: pr_key.to_string(),
+                        attempt: entry.attempt + 1,
+                        due_at_ms: now + delay_ms,
+                        error: error_msg,
+                        worktree_path: worktree_path.clone(),
+                    },
+                );
 
-            effects.push(OrchestratorEffect::ScheduleRetry {
-                pr_key: pr_key.to_string(),
-                attempt: entry.attempt + 1,
-                delay_ms: delay,
-                error: Some("No output from agent session".to_string()),
-            });
-
-            state.retry_queue.insert(
-                pr_key.to_string(),
-                RetryEntry {
-                    pr_key: pr_key.to_string(),
-                    attempt: entry.attempt + 1,
-                    due_at_ms: now + delay,
-                    error: Some("No output from agent session".to_string()),
-                },
-            );
-
-            effects.push(OrchestratorEffect::EmitLifecycleEvent {
-                event: LifecycleEvent {
-                    pr_key: pr_key.to_string(),
-                    worktree_path: entry.worktree_path,
-                    status: LifecycleStatus::Retrying,
-                    attempt: entry.attempt + 1,
-                    started_at: entry.started_at,
-                },
-            });
+                effects.push(OrchestratorEffect::EmitLifecycleEvent {
+                    event: LifecycleEvent {
+                        pr_key: pr_key.to_string(),
+                        worktree_path: entry.worktree_path,
+                        status: LifecycleStatus::Retrying,
+                        attempt: entry.attempt + 1,
+                        started_at: entry.started_at,
+                    },
+                });
+            }
         }
     }
 
@@ -215,12 +249,21 @@ pub fn apply_relaunch(
 ) -> Vec<OrchestratorEffect> {
     let mut effects = Vec::new();
 
+    // Guard: skip if already running (prevent duplicate sessions)
+    if state.running.contains_key(pr_key) {
+        debug!("Orchestrator: relaunch skipped, {pr_key} already running");
+        return effects;
+    }
+
     // Cancel any pending retry to prevent duplicate dispatch
     if state.retry_queue.remove(pr_key).is_some() {
         effects.push(OrchestratorEffect::CancelRetry {
             pr_key: pr_key.to_string(),
         });
     }
+
+    // Remove from review_ready (user approved)
+    state.review_ready.remove(pr_key);
 
     // Ensure claimed
     state.claimed.insert(pr_key.to_string());
@@ -232,6 +275,7 @@ pub fn apply_relaunch(
         pr_key: pr_key.to_string(),
         worktree_path: worktree_path.to_string(),
         pr_context,
+        attempt: 1,
     });
 
     effects.push(OrchestratorEffect::EmitLifecycleEvent {
@@ -281,6 +325,7 @@ pub fn apply_reconciliation(
         }
         state.claimed.remove(key);
         state.retry_queue.remove(key);
+        state.review_ready.remove(key);
     }
 
     // Clean up retries for closed PRs
@@ -299,6 +344,26 @@ pub fn apply_reconciliation(
         });
     }
 
+    // Detect CI-now-passing for review_ready PRs (AC10: stale detection)
+    for pr in current_prs {
+        let key = pr_key(&pr.repo_name, pr.number);
+        if let Some(entry) = state.review_ready.get_mut(&key) {
+            let ci_passing = matches!(pr.ci_status.as_deref(), Some("SUCCESS" | "NEUTRAL") | None);
+            if ci_passing && !entry.stale {
+                entry.stale = true;
+                effects.push(OrchestratorEffect::EmitLifecycleEvent {
+                    event: LifecycleEvent {
+                        pr_key: key,
+                        worktree_path: entry.worktree_path.clone(),
+                        status: LifecycleStatus::Stale,
+                        attempt: entry.attempt,
+                        started_at: entry.started_at,
+                    },
+                });
+            }
+        }
+    }
+
     effects
 }
 
@@ -313,6 +378,15 @@ pub fn apply_retry_due(
         return Vec::new();
     };
 
+    // Guard: respect concurrency limit
+    let running_count = u32::try_from(state.running.len()).unwrap_or(u32::MAX);
+    if running_count >= state.config.max_concurrent {
+        // Put it back — will be retried next time
+        state.retry_queue.insert(pr_key.to_string(), retry);
+        debug!("Orchestrator: retry for {pr_key} deferred, at concurrency limit");
+        return Vec::new();
+    }
+
     let mut effects = Vec::new();
     let pr_context = parse_pr_key(pr_key);
 
@@ -320,6 +394,7 @@ pub fn apply_retry_due(
         pr_key: pr_key.to_string(),
         worktree_path: worktree_path.to_string(),
         pr_context,
+        attempt: retry.attempt,
     });
 
     effects.push(OrchestratorEffect::EmitLifecycleEvent {
@@ -369,6 +444,7 @@ pub fn apply_skip(state: &mut Orchestrator, pr_key: &str) -> Vec<OrchestratorEff
 
     state.claimed.remove(pr_key);
     state.retry_queue.remove(pr_key);
+    state.review_ready.remove(pr_key);
 
     effects
 }
@@ -383,14 +459,26 @@ pub fn retry_backoff(attempt: u32) -> u64 {
 }
 
 /// Parse a `pr_key` ("owner/repo#42") into a minimal `PrContext`.
+/// Logs an error and returns a best-effort result for malformed keys.
 fn parse_pr_key(key: &str) -> crate::models::orchestrator::PrContext {
-    let (repo, number_str) = key.rsplit_once('#').unwrap_or((key, "0"));
-    let number = number_str.parse().unwrap_or(0);
+    let Some((repo, number_str)) = key.rsplit_once('#') else {
+        error!("Malformed pr_key (no # separator): {key}");
+        return crate::models::orchestrator::PrContext {
+            repo: key.to_string(),
+            number: 0,
+            branch: String::new(),
+            base_branch: String::new(),
+        };
+    };
+    let number = number_str.parse().unwrap_or_else(|_| {
+        error!("Malformed PR number in pr_key: {key}");
+        0
+    });
     crate::models::orchestrator::PrContext {
         repo: repo.to_string(),
         number,
         branch: String::new(),
-        base_branch: "main".to_string(),
+        base_branch: String::new(),
     }
 }
 
@@ -513,73 +601,152 @@ fn create_orchestrator_task(
     task_path
 }
 
-/// Execute orchestrator effects. Thin executor — dispatches to services.
-pub async fn execute_effects<R: tauri::Runtime>(
-    effects: Vec<OrchestratorEffect>,
+/// Execute the `DispatchSession` effect: create worktree, deploy files, enqueue run.
+async fn execute_dispatch<R: tauri::Runtime>(
+    key: &str,
+    worktree_path: &str,
+    pr_context: &crate::models::orchestrator::PrContext,
+    attempt: u32,
     orchestrator: &OrchestratorState,
     run_manager: &crate::services::run_manager::RunManagerState,
     app_handle: &tauri::AppHandle<R>,
 ) {
     use crate::models::agent::now_ms;
 
+    // Create worktree if it doesn't exist
+    if !std::path::Path::new(worktree_path).exists() {
+        if let Some(repo_base) = worktree_path
+            .find("/.worktrees/")
+            .map(|idx| &worktree_path[..idx])
+        {
+            let base = if pr_context.base_branch.is_empty() {
+                None
+            } else {
+                Some(pr_context.base_branch.as_str())
+            };
+            match crate::services::git::create_worktree(
+                std::path::Path::new(repo_base),
+                &pr_context.branch,
+                Some(&pr_context.branch),
+                base,
+            ) {
+                Ok(wt) => info!("Created worktree at {}", wt.path.display()),
+                Err(e) => {
+                    error!("Failed to create worktree for {key}: {e}");
+                    orchestrator.lock().await.claimed.remove(key);
+                    return;
+                }
+            }
+        } else {
+            error!("Cannot derive repo path from worktree_path: {worktree_path}");
+            orchestrator.lock().await.claimed.remove(key);
+            return;
+        }
+    }
+
+    write_pr_context(worktree_path, pr_context);
+    deploy_skill_file(worktree_path);
+    let task_path = create_orchestrator_task(worktree_path, key, pr_context);
+
+    let launch_options = crate::models::run::LaunchOptions {
+        max_turns: None,
+        max_budget_usd: None,
+        permission_mode: Some("bypassPermissions".to_string()),
+    };
+    match crate::services::run_manager::enqueue_run(
+        std::sync::Arc::clone(run_manager),
+        app_handle.clone(),
+        &task_path,
+        worktree_path,
+        launch_options,
+    )
+    .await
+    {
+        Ok(_status) => {
+            let tab_id = {
+                let rm = run_manager.lock().await;
+                rm.get_status()
+                    .and_then(|r| r.tab_id)
+                    .unwrap_or_else(|| uuid::Uuid::new_v4().to_string())
+            };
+            let mut orch = orchestrator.lock().await;
+            record_running(&mut orch, key, worktree_path, &tab_id, now_ms(), attempt);
+            info!("Dispatched orchestrator session for {key} (tab={tab_id})");
+        }
+        Err(e) => {
+            error!("Failed to dispatch session for {key}: {e}");
+            orchestrator.lock().await.claimed.remove(key);
+        }
+    }
+}
+
+/// Execute orchestrator effects. Thin executor — dispatches to services.
+#[allow(clippy::too_many_lines)]
+pub async fn execute_effects<R: tauri::Runtime>(
+    effects: Vec<OrchestratorEffect>,
+    orchestrator: &OrchestratorState,
+    run_manager: &crate::services::run_manager::RunManagerState,
+    app_handle: &tauri::AppHandle<R>,
+) {
     for effect in effects {
         match effect {
             OrchestratorEffect::DispatchSession {
                 pr_key: key,
                 worktree_path,
                 pr_context,
+                attempt,
             } => {
-                // Prepare worktree files
-                write_pr_context(&worktree_path, &pr_context);
-                deploy_skill_file(&worktree_path);
-                let task_path = create_orchestrator_task(&worktree_path, &key, &pr_context);
-
-                // Enqueue via RunManager with bypassPermissions for autonomous operation
-                let launch_options = crate::models::run::LaunchOptions {
-                    max_turns: None,
-                    max_budget_usd: None,
-                    permission_mode: Some("bypassPermissions".to_string()),
-                };
-                match crate::services::run_manager::enqueue_run(
-                    std::sync::Arc::clone(run_manager),
-                    app_handle.clone(),
-                    &task_path,
+                execute_dispatch(
+                    &key,
                     &worktree_path,
-                    launch_options,
+                    &pr_context,
+                    attempt,
+                    orchestrator,
+                    run_manager,
+                    app_handle,
                 )
-                .await
-                {
-                    Ok(_status) => {
-                        // Read the actual tab_id from the RunManager's active run
-                        let tab_id = {
-                            let rm = run_manager.lock().await;
-                            rm.get_status()
-                                .and_then(|r| r.tab_id)
-                                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string())
-                        };
-                        let mut orch = orchestrator.lock().await;
-                        record_running(&mut orch, &key, &worktree_path, &tab_id, now_ms(), 1);
-                        info!("Dispatched orchestrator session for {key} (tab={tab_id})");
-                    }
-                    Err(e) => {
-                        error!("Failed to dispatch session for {key}: {e}");
-                        // Release claim on failure
-                        let mut orch = orchestrator.lock().await;
-                        orch.claimed.remove(&key);
+                .await;
+            }
+            OrchestratorEffect::StopSession {
+                pr_key: key,
+                tab_id,
+            } => {
+                info!("Stopping session for {key} (tab={tab_id})");
+                let mut rm = run_manager.lock().await;
+                // Cancel if the active run matches this tab_id
+                if let Some(active) = rm.get_status() {
+                    if active.tab_id.as_deref() == Some(&tab_id) {
+                        if let Err(e) = rm.cancel_run().await {
+                            error!("Failed to cancel run for {key}: {e}");
+                        }
                     }
                 }
             }
-            OrchestratorEffect::StopSession { pr_key: key, .. } => {
-                info!("Stopping session for {key}");
-                // RunManager handles run termination via its own lifecycle
-            }
             OrchestratorEffect::ScheduleRetry {
                 pr_key: key,
+                worktree_path: wt_path,
                 delay_ms,
                 ..
             } => {
-                debug!("Scheduled retry for {key} in {delay_ms}ms");
-                // Retry timers handled by the event loop
+                debug!("Scheduling retry for {key} in {delay_ms}ms");
+                // Get EventBus from orchestrator state for the timer
+                let bus = {
+                    let orch = orchestrator.lock().await;
+                    orch.event_bus.clone()
+                };
+                if let Some(bus) = bus {
+                    // Spawn a timer that publishes RetryDue to EventBus after delay
+                    tokio::spawn(async move {
+                        tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
+                        let _ = bus.publish(crate::models::agent::Event::RetryDue {
+                            pr_key: key.clone(),
+                            worktree_path: wt_path,
+                        });
+                        debug!("Retry timer fired for {key}");
+                    });
+                } else {
+                    error!("No EventBus available for retry timer for {key}");
+                }
             }
             OrchestratorEffect::CancelRetry { pr_key: key } => {
                 debug!("Cancelled retry for {key}");
@@ -653,11 +820,9 @@ async fn handle_event<R: tauri::Runtime>(
         Event::PrStatusChanged { repo, prs, .. } => {
             let effects = {
                 let mut orch = orchestrator.lock().await;
-                if !orch.config.enabled {
-                    return;
-                }
+                // apply_pr_event has its own enabled/auto_analyze guard
                 let mut effects = apply_pr_event(&mut orch, repo, prs, now_ms());
-                // Also reconcile on every PR update
+                // Reconciliation always runs (cleans up merged/closed PRs)
                 effects.extend(apply_reconciliation(&mut orch, prs));
                 effects
             };
@@ -683,6 +848,16 @@ async fn handle_event<R: tauri::Runtime>(
             let effects = {
                 let mut orch = orchestrator.lock().await;
                 apply_session_end(&mut orch, &key, outcome, now_ms())
+            };
+            execute_effects(effects, orchestrator, run_manager, app_handle).await;
+        }
+        Event::RetryDue {
+            pr_key: key,
+            worktree_path,
+        } => {
+            let effects = {
+                let mut orch = orchestrator.lock().await;
+                apply_retry_due(&mut orch, key, worktree_path, now_ms())
             };
             execute_effects(effects, orchestrator, run_manager, app_handle).await;
         }

@@ -23,6 +23,7 @@ pub fn start_pr_poller(event_bus: Arc<EventBus>, repo_paths: Vec<String>) {
 
 async fn poll_loop(event_bus: &EventBus, repo_paths: &[String]) {
     let mut ticker = interval(Duration::from_secs(POLL_INTERVAL_SECS));
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     let mut last_state: HashMap<String, Vec<PrSummary>> = HashMap::new();
 
     loop {
@@ -69,11 +70,14 @@ fn publish_changes(
 
         if changed {
             debug!("PR poller: changes detected for {repo} ({} PRs)", prs.len());
-            let _ = event_bus.publish(Event::PrStatusChanged {
+            let receivers = event_bus.publish(Event::PrStatusChanged {
                 repo: repo.clone(),
                 prs: prs.clone(),
                 ts: now_ms(),
             });
+            if receivers == 0 {
+                error!("PR poller: no subscribers received event for {repo}");
+            }
         }
     }
 
@@ -108,7 +112,9 @@ fn has_changes(prev: &[PrSummary], current: &[PrSummary]) -> bool {
         match prev_pr {
             None => return true,
             Some(p) => {
-                if p.ci_status != curr_pr.ci_status || p.review_decision != curr_pr.review_decision
+                if p.ci_status != curr_pr.ci_status
+                    || p.review_decision != curr_pr.review_decision
+                    || p.head_sha != curr_pr.head_sha
                 {
                     return true;
                 }

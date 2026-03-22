@@ -240,9 +240,9 @@ impl ActivityStore {
                     agent.last_activity = ts;
                 }
             }
-            Event::RunComplete { .. } | Event::PrStatusChanged { .. } => {
+            Event::RunComplete { .. } | Event::PrStatusChanged { .. } | Event::RetryDue { .. } => {
                 // RunComplete handled by KnowledgeService
-                // PrStatusChanged handled by Orchestrator
+                // PrStatusChanged and RetryDue handled by Orchestrator
             }
         }
     }

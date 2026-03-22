@@ -25,7 +25,7 @@ function createLifecycleStore() {
         }),
       );
 
-      if (event.status === 'reviewReady' && event.worktreePath) {
+      if ((event.status === 'reviewReady' || event.status === 'stale') && event.worktreePath) {
         loadAnalysis(event.prKey, event.worktreePath);
       }
     });

@@ -20,24 +20,6 @@ import { AnalysisCard } from '../pr/AnalysisCard';
 import { TaskBadge } from '../task/TaskBadge';
 import { Button } from '../ui/Button';
 
-type RunCardStatus = 'running' | 'succeeded' | 'failed' | 'queued' | 'cancelled';
-
-function _taskStatusToCardStatus(status: TaskStatus): RunCardStatus {
-  switch (status) {
-    case 'running':
-    case 'blocked':
-      return 'running';
-    case 'succeeded':
-      return 'succeeded';
-    case 'failed':
-      return 'failed';
-    case 'cancelled':
-      return 'cancelled';
-    case 'created':
-      return 'queued';
-  }
-}
-
 function TaskCard(props: {
   task: TaskInfo;
   worktreePath: string;
@@ -247,6 +229,7 @@ const LIFECYCLE_STATUS_LABELS: Record<LifecycleStatus, string> = {
   fixing: 'Fixing',
   completed: 'Completed',
   retrying: 'Retrying',
+  stale: 'Stale — CI now passing',
 };
 
 const LIFECYCLE_STATUS_COLORS: Record<LifecycleStatus, string> = {
@@ -256,6 +239,7 @@ const LIFECYCLE_STATUS_COLORS: Record<LifecycleStatus, string> = {
   fixing: 'text-[var(--color-warning)]',
   completed: 'text-[var(--color-success)]',
   retrying: 'text-[var(--color-error)]',
+  stale: 'text-[var(--color-muted)]',
 };
 
 const LIFECYCLE_STATUS_ORDER: Record<LifecycleStatus, number> = {

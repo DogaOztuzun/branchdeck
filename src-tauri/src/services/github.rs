@@ -409,6 +409,7 @@ pub async fn list_open_prs(
                 number: pr.number,
                 title: pr.title.clone().unwrap_or_default(),
                 branch: pr.head.ref_field.clone(),
+                base_branch: pr.base.ref_field.clone(),
                 url: pr
                     .html_url
                     .as_ref()
@@ -421,6 +422,7 @@ pub async fn list_open_prs(
                 deletions: pr.deletions,
                 changed_files: pr.changed_files,
                 created_at: pr.created_at.map(|t| t.to_rfc3339()),
+                head_sha: Some(pr.head.sha.clone()),
             })
         })
         .collect();

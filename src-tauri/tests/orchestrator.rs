@@ -25,6 +25,7 @@ fn make_pr(number: u64, branch: &str, ci_status: Option<&str>) -> PrSummary {
         number,
         title: format!("PR #{number}"),
         branch: branch.to_string(),
+        base_branch: "main".to_string(),
         url: format!("https://github.com/test/repo/pull/{number}"),
         ci_status: ci_status.map(String::from),
         review_decision: None,
@@ -34,6 +35,7 @@ fn make_pr(number: u64, branch: &str, ci_status: Option<&str>) -> PrSummary {
         deletions: None,
         changed_files: None,
         created_at: None,
+        head_sha: None,
     }
 }
 
@@ -263,6 +265,7 @@ fn relaunch_cancels_pending_retry() {
             attempt: 2,
             due_at_ms: 5000,
             error: None,
+            worktree_path: "/tmp/wt".to_string(),
         },
     );
 
@@ -318,6 +321,7 @@ fn retry_due_redispatches() {
             attempt: 2,
             due_at_ms: 5000,
             error: None,
+            worktree_path: "/tmp/wt".to_string(),
         },
     );
 

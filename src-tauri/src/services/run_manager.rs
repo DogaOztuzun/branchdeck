@@ -956,29 +956,29 @@ pub async fn enqueue_run<R: tauri::Runtime>(
     worktree_path: &str,
     options: LaunchOptions,
 ) -> Result<QueueStatus, AppError> {
-    let should_launch = {
+    // Single lock acquisition: push to queue and dequeue if no active run
+    let next_to_launch = {
         let mut manager = state.lock().await;
         manager.run_queue.push_back(QueuedRun {
             task_path: task_path.to_string(),
             worktree_path: worktree_path.to_string(),
         });
-        manager.active_run.is_none()
+        if manager.active_run.is_none() {
+            manager.dequeue_next()
+        } else {
+            None
+        }
     };
 
-    if should_launch {
-        if let Some(next) = {
-            let mut manager = state.lock().await;
-            manager.dequeue_next()
-        } {
-            launch_run(
-                Arc::clone(&state),
-                app_handle,
-                &next.task_path,
-                &next.worktree_path,
-                options,
-            )
-            .await?;
-        }
+    if let Some(next) = next_to_launch {
+        launch_run(
+            Arc::clone(&state),
+            app_handle,
+            &next.task_path,
+            &next.worktree_path,
+            options,
+        )
+        .await?;
     }
 
     let manager = state.lock().await;

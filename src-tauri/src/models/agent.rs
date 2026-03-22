@@ -87,6 +87,11 @@ pub enum Event {
         prs: Vec<PrSummary>,
         ts: EpochMs,
     },
+    #[serde(rename_all = "camelCase")]
+    RetryDue {
+        pr_key: String,
+        worktree_path: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

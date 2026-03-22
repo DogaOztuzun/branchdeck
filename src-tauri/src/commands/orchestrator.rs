@@ -37,10 +37,19 @@ pub async fn relaunch_pr_cmd(
 #[allow(clippy::needless_pass_by_value)]
 pub async fn skip_pr_cmd(
     orchestrator: State<'_, OrchestratorState>,
+    run_manager: State<'_, RunManagerState>,
+    app_handle: tauri::AppHandle,
     pr_key: String,
 ) -> Result<(), AppError> {
-    let mut orch = orchestrator.lock().await;
-    let _effects = orch_service::apply_skip(&mut orch, &pr_key);
+    let effects = {
+        let mut orch = orchestrator.lock().await;
+        orch_service::apply_skip(&mut orch, &pr_key)
+    };
+
+    let orch_state = Arc::clone(&orchestrator);
+    let rm_state = Arc::clone(&run_manager);
+    orch_service::execute_effects(effects, &orch_state, &rm_state, &app_handle).await;
+
     info!("Skipped PR {pr_key}");
     Ok(())
 }
@@ -66,10 +75,20 @@ pub async fn get_lifecycles_cmd(
     for entry in orch.retry_queue.values() {
         events.push(LifecycleEvent {
             pr_key: entry.pr_key.clone(),
-            worktree_path: String::new(),
+            worktree_path: entry.worktree_path.clone(),
             status: LifecycleStatus::Retrying,
             attempt: entry.attempt,
             started_at: entry.due_at_ms,
+        });
+    }
+
+    for entry in orch.review_ready.values() {
+        events.push(LifecycleEvent {
+            pr_key: entry.pr_key.clone(),
+            worktree_path: entry.worktree_path.clone(),
+            status: LifecycleStatus::ReviewReady,
+            attempt: entry.attempt,
+            started_at: entry.started_at,
         });
     }
 
@@ -143,6 +162,7 @@ pub async fn orchestrator_shepherd_pr_cmd(
                 pr_key: key.clone(),
                 worktree_path: worktree_path.clone(),
                 pr_context,
+                attempt: 1,
             },
             crate::models::orchestrator::OrchestratorEffect::EmitLifecycleEvent {
                 event: LifecycleEvent {

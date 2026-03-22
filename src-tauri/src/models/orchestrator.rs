@@ -22,6 +22,7 @@ pub struct RetryEntry {
     pub attempt: u32,
     pub due_at_ms: EpochMs,
     pub error: Option<String>,
+    pub worktree_path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -33,6 +34,7 @@ pub enum LifecycleStatus {
     Fixing,
     Completed,
     Retrying,
+    Stale,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -108,6 +110,16 @@ pub struct AnalysisPlan {
     pub resolved: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewReadyEntry {
+    pub pr_key: String,
+    pub worktree_path: String,
+    pub attempt: u32,
+    pub started_at: EpochMs,
+    pub stale: bool,
+}
+
 // --- Internal types (orchestrator state machine) ---
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -124,6 +136,7 @@ pub enum OrchestratorEffect {
         pr_key: String,
         worktree_path: String,
         pr_context: PrContext,
+        attempt: u32,
     },
     StopSession {
         pr_key: String,
@@ -131,6 +144,7 @@ pub enum OrchestratorEffect {
     },
     ScheduleRetry {
         pr_key: String,
+        worktree_path: String,
         attempt: u32,
         delay_ms: u64,
         error: Option<String>,
@@ -173,13 +187,32 @@ impl Default for OrchestratorConfig {
 
 // --- Orchestrator state ---
 
-#[derive(Debug)]
 pub struct Orchestrator {
     pub config: OrchestratorConfig,
     pub running: std::collections::HashMap<String, RunningEntry>,
     pub claimed: std::collections::HashSet<String>,
     pub retry_queue: std::collections::HashMap<String, RetryEntry>,
     pub completed: std::collections::HashSet<String>,
+    /// PRs awaiting human review (analysis written, not yet approved)
+    pub review_ready: std::collections::HashMap<String, ReviewReadyEntry>,
+    /// Maps "owner/repo" → filesystem path (e.g. "/home/user/projects/repo")
+    pub repo_paths: std::collections::HashMap<String, String>,
+    /// `EventBus` reference for spawning retry timers
+    pub event_bus: Option<std::sync::Arc<crate::services::event_bus::EventBus>>,
+}
+
+impl std::fmt::Debug for Orchestrator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Orchestrator")
+            .field("config", &self.config)
+            .field("running", &self.running.len())
+            .field("claimed", &self.claimed.len())
+            .field("retry_queue", &self.retry_queue.len())
+            .field("completed", &self.completed.len())
+            .field("review_ready", &self.review_ready.len())
+            .field("repo_paths", &self.repo_paths.len())
+            .finish_non_exhaustive()
+    }
 }
 
 impl Orchestrator {
@@ -191,6 +224,9 @@ impl Orchestrator {
             claimed: std::collections::HashSet::new(),
             retry_queue: std::collections::HashMap::new(),
             completed: std::collections::HashSet::new(),
+            review_ready: std::collections::HashMap::new(),
+            repo_paths: std::collections::HashMap::new(),
+            event_bus: None,
         }
     }
 }

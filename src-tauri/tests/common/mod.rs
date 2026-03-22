@@ -49,6 +49,7 @@ pub fn make_pr_status(number: u64, failing: bool) -> branchdeck_lib::models::git
         number,
         title: format!("PR #{number}"),
         branch: format!("fix/pr-{number}"),
+        base_branch: "main".to_string(),
         url: format!("https://github.com/test/repo/pull/{number}"),
         ci_status: Some(if failing { "FAILURE" } else { "SUCCESS" }.to_string()),
         review_decision: None,
@@ -58,6 +59,7 @@ pub fn make_pr_status(number: u64, failing: bool) -> branchdeck_lib::models::git
         deletions: None,
         changed_files: None,
         created_at: None,
+        head_sha: None,
     }
 }
 
