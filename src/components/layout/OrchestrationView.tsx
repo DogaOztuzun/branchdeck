@@ -95,7 +95,7 @@ function TaskCard(props: {
           </div>
           <TaskBadge status={props.task.frontmatter.status} />
         </div>
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-text-dim">
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-dim">
           <span>{props.repoName}</span>
           <span>{props.task.frontmatter.type === 'pr-shepherd' ? 'PR Shepherd' : 'Issue Fix'}</span>
           <Show when={props.task.frontmatter.pr}>
@@ -112,7 +112,7 @@ function TaskCard(props: {
           </Show>
         </div>
         <Show when={props.lastStep && props.task.frontmatter.status === 'running'}>
-          <div class="mt-2 p-1.5 bg-bg-sidebar border border-border-subtle text-[10px] text-text-dim leading-relaxed truncate">
+          <div class="mt-2 p-1.5 bg-bg-sidebar border border-border-subtle text-xs text-text-dim leading-relaxed truncate">
             {props.lastStep}
           </div>
         </Show>
@@ -123,7 +123,7 @@ function TaskCard(props: {
         <div class="border-t border-border-subtle px-3 py-2 space-y-2">
           {/* PR context */}
           <Show when={props.task.frontmatter.pr}>
-            <div class="text-[10px] space-y-1">
+            <div class="text-xs space-y-1">
               <div class="flex items-center gap-2">
                 <span class="text-text-dim w-14 shrink-0">Checks</span>
                 <Show
@@ -161,7 +161,7 @@ function TaskCard(props: {
                   .filter((l) => l.startsWith('- ')).length ?? 0;
               return (
                 <Show when={count > 0}>
-                  <div class="text-[10px] text-accent-info">
+                  <div class="text-xs text-accent-info">
                     {count} knowledge pattern{count === 1 ? '' : 's'} recalled
                   </div>
                 </Show>
@@ -173,21 +173,21 @@ function TaskCard(props: {
           <For each={taskStore.state.pendingPermissions}>
             {(perm) => (
               <div class="border border-accent-warning/30 bg-accent-warning/5 p-2 mt-1">
-                <div class="flex items-center gap-2 text-[10px] mb-1.5">
+                <div class="flex items-center gap-2 text-xs mb-1.5">
                   <span class="text-accent-warning font-medium uppercase tracking-wider">
                     Permission
                   </span>
                   <span class="font-mono text-accent-info">{perm.tool ?? 'unknown'}</span>
                 </div>
                 <Show when={perm.command}>
-                  <div class="text-[10px] text-text-dim font-mono bg-bg-main/50 px-1.5 py-1 mb-1.5 break-all max-h-16 overflow-y-auto">
+                  <div class="text-xs text-text-dim font-mono bg-bg-main/50 px-1.5 py-1 mb-1.5 break-all max-h-16 overflow-y-auto">
                     {perm.command}
                   </div>
                 </Show>
                 <div class="flex gap-1.5">
                   <button
                     type="button"
-                    class="flex-1 px-2 py-1 text-[10px] font-medium text-green-400 border border-green-400/30 hover:bg-green-400/10 cursor-pointer"
+                    class="flex-1 px-2 py-1 text-xs font-medium text-green-400 border border-green-400/30 hover:bg-green-400/10 cursor-pointer"
                     onClick={(e) => {
                       e.stopPropagation();
                       taskStore.removePermission(perm.toolUseId);
@@ -198,7 +198,7 @@ function TaskCard(props: {
                   </button>
                   <button
                     type="button"
-                    class="flex-1 px-2 py-1 text-[10px] font-medium text-red-400 border border-red-400/30 hover:bg-red-400/10 cursor-pointer"
+                    class="flex-1 px-2 py-1 text-xs font-medium text-red-400 border border-red-400/30 hover:bg-red-400/10 cursor-pointer"
                     onClick={(e) => {
                       e.stopPropagation();
                       taskStore.removePermission(perm.toolUseId);
@@ -215,7 +215,7 @@ function TaskCard(props: {
           {/* Open in workspace */}
           <button
             type="button"
-            class="flex items-center gap-1 text-[10px] text-accent-primary hover:text-accent-primary/80 cursor-pointer mt-1"
+            class="flex items-center gap-1 text-xs text-accent-primary hover:text-accent-primary/80 cursor-pointer mt-1"
             onClick={(e) => {
               e.stopPropagation();
               props.onOpenWorkspace();
@@ -388,7 +388,7 @@ export function OrchestrationView() {
           </button>
           <div>
             <h2 class="text-sm font-bold">Orchestrations</h2>
-            <p class="text-[10px] text-text-dim mt-1">
+            <p class="text-xs text-text-dim mt-1">
               {sortedTasks().length} task{sortedTasks().length === 1 ? '' : 's'}
               {runningCount() > 0 ? ` · ${runningCount()} running` : ''}
               {totalQueued() > 0 ? ` · ${totalQueued()} queued` : ''}
@@ -400,7 +400,7 @@ export function OrchestrationView() {
         <div class="flex items-center gap-2">
           <button
             type="button"
-            class="text-[10px] text-text-dim hover:text-text-main cursor-pointer"
+            class="text-xs text-text-dim hover:text-text-main cursor-pointer"
             onClick={loadAllTasks}
             title="Refresh tasks"
           >
@@ -436,12 +436,12 @@ export function OrchestrationView() {
             <div class="flex-1 flex items-center justify-center h-full">
               <div class="text-center">
                 <div class="text-sm text-text-dim mb-2">No tasks yet</div>
-                <div class="text-[10px] text-text-dim">
+                <div class="text-xs text-text-dim">
                   Use the PRs panel to shepherd PRs or create tasks from a worktree.
                 </div>
                 <button
                   type="button"
-                  class="mt-3 text-[10px] text-accent-primary hover:text-accent-primary/80 cursor-pointer"
+                  class="mt-3 text-xs text-accent-primary hover:text-accent-primary/80 cursor-pointer"
                   onClick={() => {
                     layout.setActiveView('workspace');
                     layout.showRightPanel({ kind: 'prs' });

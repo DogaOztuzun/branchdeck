@@ -28,10 +28,10 @@ function CiBadge(props: { status: string | null }) {
   return (
     <Switch>
       <Match when={props.status === 'failing'}>
-        <span class="text-[10px] font-medium text-red-400">failing</span>
+        <span class="text-xs font-medium text-red-400">failing</span>
       </Match>
       <Match when={props.status === 'pending'}>
-        <span class="text-[10px] font-medium text-yellow-400">pending</span>
+        <span class="text-xs font-medium text-yellow-400">pending</span>
       </Match>
       <Match when={props.status === 'passing'}>
         <span class="text-[10px] font-medium text-green-400">passing</span>

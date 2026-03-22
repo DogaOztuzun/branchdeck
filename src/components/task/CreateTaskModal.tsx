@@ -133,7 +133,7 @@ export function CreateTaskModal(props: CreateTaskModalProps) {
                 placeholder="#123"
                 value={prNumber()}
                 onInput={(e) => setPrNumber(e.currentTarget.value)}
-                class="w-full mt-1 px-3 py-1.5 text-xs bg-bg-main border border-border-subtle text-text-main placeholder:text-text-dim focus:outline-none focus:border-accent-primary"
+                class="z-input w-full mt-1"
               />
             </div>
           </Show>
@@ -148,7 +148,7 @@ export function CreateTaskModal(props: CreateTaskModalProps) {
               value={description()}
               onInput={(e) => setDescription(e.currentTarget.value)}
               rows={3}
-              class="w-full mt-1 px-3 py-1.5 text-xs bg-bg-main border border-border-subtle text-text-main placeholder:text-text-dim focus:outline-none focus:border-accent-primary resize-y"
+              class="z-input w-full mt-1 resize-y"
             />
           </div>
 

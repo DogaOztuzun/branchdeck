@@ -116,7 +116,7 @@ export function BranchWorktreeModal(props: BranchWorktreeModalProps) {
           value={search()}
           onInput={(e) => setSearch(e.currentTarget.value)}
           autofocus
-          class="w-full px-3 py-1.5 text-xs bg-bg-main border border-border-subtle text-text-main placeholder:text-text-dim focus:outline-none focus:border-accent-primary"
+          class="z-input w-full"
         />
 
         <Show when={loading()}>

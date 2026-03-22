@@ -231,7 +231,7 @@ export function RepoSidebar() {
                     class={cn(isActive() ? 'text-accent-primary' : 'text-text-dim', 'shrink-0')}
                   />
                   <span class="truncate font-medium">{repo.name}</span>
-                  <span class="ml-auto text-[10px] text-accent-info shrink-0">
+                  <span class="ml-auto text-[10px] text-accent-info shrink-0 max-w-[50%] truncate text-right">
                     {repo.currentBranch}
                   </span>
                 </button>
