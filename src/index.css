@@ -9,6 +9,7 @@
   --font-mono:
     "JetBrains Mono", "Fira Code", "Cascadia Code", ui-monospace, SFMono-Regular, monospace;
 
+  /* ── Branchdeck palette (Tokyo Night) ── */
   --color-bg-main: #1a1b26;
   --color-bg-sidebar: #24283b;
   --color-bg-panel: #24283b;
@@ -21,6 +22,48 @@
   --color-accent-info: #7dcfff;
   --color-text-main: #c0caf5;
   --color-text-dim: #565f89;
+
+  /* ── shadcn/Lyra semantic tokens → Tokyo Night mapping ── */
+  --color-background: #1a1b26;
+  --color-foreground: #c0caf5;
+  --color-card: #24283b;
+  --color-card-foreground: #c0caf5;
+  --color-popover: #24283b;
+  --color-popover-foreground: #c0caf5;
+  --color-primary: #7aa2f7;
+  --color-primary-foreground: #1a1b26;
+  --color-secondary: #292e42;
+  --color-secondary-foreground: #c0caf5;
+  --color-muted: #292e42;
+  --color-muted-foreground: #565f89;
+  --color-accent: #292e42;
+  --color-accent-foreground: #c0caf5;
+  --color-destructive: #f7768e;
+  --color-destructive-foreground: #1a1b26;
+  --color-border: #414868;
+  --color-input: #414868;
+  --color-ring: #7aa2f7;
+
+  /* ── Animations for Lyra components ── */
+  --animate-accordion-down: accordion-down 0.15s ease-out;
+  --animate-accordion-up: accordion-up 0.15s ease-out;
+}
+
+@keyframes accordion-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--kb-accordion-content-height);
+  }
+}
+@keyframes accordion-up {
+  from {
+    height: var(--kb-accordion-content-height);
+  }
+  to {
+    height: 0;
+  }
 }
 
 html,
@@ -40,7 +83,191 @@ body,
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Override solid-resizable-panels handle defaults (higher specificity) */
+/* ── Lyra component styles (from Zaidan, adapted for Tokyo Night) ── */
+
+/* Select */
+.z-select-trigger {
+  @apply border-input focus-visible:ring-ring/50 focus-visible:border-ring flex h-7 w-full items-center justify-between gap-2 rounded-none border bg-transparent px-2 py-1 text-xs shadow-xs transition-colors focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-50 *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:truncate [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-muted-foreground;
+}
+
+.z-select-content {
+  @apply bg-popover text-popover-foreground z-50 min-w-[8rem] overflow-hidden rounded-none border p-0.5 shadow-md;
+}
+
+.z-select-viewport {
+  @apply p-0;
+}
+
+.z-select-item {
+  @apply focus:bg-accent focus:text-accent-foreground data-highlighted:bg-accent data-highlighted:text-accent-foreground relative flex w-full cursor-default items-center gap-2 rounded-none py-1 pl-7 pr-2 text-xs outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&>svg]:size-3.5 [&>svg]:shrink-0;
+}
+
+.z-select-item-indicator {
+  @apply absolute left-1.5 flex size-4 items-center justify-center [&>svg]:size-3.5;
+}
+
+.z-select-separator {
+  @apply bg-border -mx-0.5 my-0.5 h-px;
+}
+
+.z-select-label {
+  @apply text-muted-foreground px-2 py-1 text-xs font-medium;
+}
+
+/* Dialog */
+.z-dialog-overlay {
+  @apply fixed inset-0 z-50 bg-black/60 duration-100;
+}
+
+.z-dialog-content {
+  @apply bg-background fixed top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2 gap-4 rounded-none border p-4 shadow-lg duration-100;
+}
+
+.z-dialog-header {
+  @apply flex flex-col gap-1;
+}
+
+.z-dialog-footer {
+  @apply flex flex-col-reverse gap-2 sm:flex-row sm:justify-end;
+}
+
+.z-dialog-title {
+  @apply text-sm font-semibold leading-none;
+}
+
+.z-dialog-description {
+  @apply text-muted-foreground text-xs;
+}
+
+.z-dialog-close-button {
+  @apply ring-offset-background focus:ring-ring data-expanded:bg-accent data-expanded:text-muted-foreground absolute top-3 right-3 cursor-pointer rounded-none opacity-70 transition-opacity hover:opacity-100 focus:ring-1 focus:outline-none disabled:pointer-events-none [&>svg]:size-4;
+}
+
+/* Button */
+.z-button {
+  @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-none text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0;
+}
+
+.z-button-variant-default {
+  @apply bg-primary text-primary-foreground shadow-xs hover:bg-primary/90;
+}
+
+.z-button-variant-destructive {
+  @apply bg-destructive text-destructive-foreground shadow-xs hover:bg-destructive/90;
+}
+
+.z-button-variant-outline {
+  @apply border border-input bg-background shadow-xs hover:bg-accent hover:text-accent-foreground;
+}
+
+.z-button-variant-secondary {
+  @apply bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80;
+}
+
+.z-button-variant-ghost {
+  @apply hover:bg-accent hover:text-accent-foreground;
+}
+
+.z-button-variant-link {
+  @apply text-primary underline-offset-4 hover:underline;
+}
+
+.z-button-size-default {
+  @apply h-8 px-3 py-1.5;
+}
+
+.z-button-size-sm {
+  @apply h-7 px-2.5;
+}
+
+.z-button-size-lg {
+  @apply h-9 px-4;
+}
+
+.z-button-size-icon {
+  @apply size-8;
+}
+
+/* Badge */
+.z-badge {
+  @apply h-5 gap-1 rounded-none border border-transparent px-2 py-0.5 text-xs font-medium transition-all [&>svg]:size-3;
+}
+
+.z-badge-variant-default {
+  @apply bg-primary text-primary-foreground;
+}
+
+.z-badge-variant-secondary {
+  @apply bg-secondary text-secondary-foreground;
+}
+
+.z-badge-variant-outline {
+  @apply border-border text-foreground;
+}
+
+.z-badge-variant-destructive {
+  @apply bg-destructive/10 text-destructive;
+}
+
+.z-badge-variant-success {
+  @apply bg-accent-success/10 text-accent-success;
+}
+
+.z-badge-variant-warning {
+  @apply bg-accent-warning/10 text-accent-warning;
+}
+
+/* Checkbox */
+.z-checkbox-control {
+  @apply border-input data-checked:bg-primary data-checked:text-primary-foreground data-checked:border-primary focus-visible:ring-ring/50 size-4 shrink-0 rounded-none border shadow-xs transition-shadow focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+.z-checkbox-indicator {
+  @apply flex items-center justify-center text-current [&>svg]:size-3.5;
+}
+
+/* Tabs */
+.z-tabs-list {
+  @apply bg-transparent flex h-auto gap-0 border-b border-border p-0;
+}
+
+.z-tabs-trigger {
+  @apply data-selected:bg-bg-main data-selected:text-foreground rounded-none border-x border-t border-transparent px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground data-selected:border-border cursor-pointer;
+}
+
+.z-tabs-content {
+  @apply mt-0 focus-visible:ring-ring/50 focus-visible:ring-1 focus-visible:outline-none;
+}
+
+/* Tooltip */
+.z-tooltip-content {
+  @apply bg-popover text-popover-foreground z-50 overflow-hidden rounded-none border px-2 py-1.5 text-xs shadow-md;
+}
+
+/* Input */
+.z-input {
+  @apply border-input focus-visible:ring-ring/50 focus-visible:border-ring flex h-7 w-full min-w-0 rounded-none border bg-transparent px-2 py-1 text-xs shadow-xs transition-colors outline-none focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+/* Separator */
+.z-separator {
+  @apply bg-border shrink-0;
+}
+
+.z-separator-horizontal {
+  @apply h-px w-full;
+}
+
+.z-separator-vertical {
+  @apply h-full w-px;
+}
+
+/* Label */
+.z-label {
+  @apply text-xs font-medium leading-none;
+}
+
+/* ── Override solid-resizable-panels handle defaults ── */
 .ResizeablePanelGroup .ResizeablePanelGroup-ResizeHandle {
   background-color: transparent;
   border-radius: 0;
@@ -78,11 +305,6 @@ body,
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-dim);
-}
-
-/* Sharp corners utility */
-.sharp {
-  border-radius: 0 !important;
 }
 
 /* Terminal cursor blink */
