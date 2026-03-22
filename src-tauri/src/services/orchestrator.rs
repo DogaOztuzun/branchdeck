@@ -481,7 +481,7 @@ fn write_pr_context(worktree_path: &str, pr_context: &crate::models::orchestrato
 /// Create a minimal task.md for the orchestrator session.
 fn create_orchestrator_task(
     worktree_path: &str,
-    pr_key: &str,
+    _pr_key: &str,
     pr_context: &crate::models::orchestrator::PrContext,
 ) -> String {
     let dir = format!("{worktree_path}/.branchdeck");
@@ -493,8 +493,14 @@ fn create_orchestrator_task(
         "---\ntype: pr-shepherd\nscope: worktree\nstatus: created\n\
          repo: {repo}\nbranch: {branch}\npr: {number}\n\
          created: {now}\nrun-count: 0\n---\n\n\
-         Shepherd PR {pr_key} using the pr-shepherd skill.\n\
-         Read .branchdeck/pr-context.json for PR details.\n",
+         You are shepherding GitHub PR #{number} in {repo} (branch: {branch}).\n\n\
+         Follow the pr-shepherd skill at .claude/skills/pr-shepherd/SKILL.md exactly.\n\
+         Read .branchdeck/pr-context.json for PR details (repo, number, branch, base_branch).\n\n\
+         CRITICAL: You MUST write .branchdeck/analysis.json with your findings.\n\
+         Check if .branchdeck/analysis.json already exists to determine your phase:\n\
+         - No file → Analyze the PR (check CI, reviews, codebase) and write analysis.json\n\
+         - File with approved: true → Execute the approved fix plan\n\
+         - File with approved: false → Do nothing, end session\n",
         repo = pr_context.repo,
         branch = pr_context.branch,
         number = pr_context.number,
