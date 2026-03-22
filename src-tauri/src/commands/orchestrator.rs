@@ -1,7 +1,5 @@
 use crate::error::AppError;
-use crate::models::orchestrator::{
-    AnalysisPlan, ApprovedPlan, LifecycleEvent, LifecycleStatus,
-};
+use crate::models::orchestrator::{AnalysisPlan, ApprovedPlan, LifecycleEvent, LifecycleStatus};
 use crate::services::orchestrator::{self as orch_service, OrchestratorState};
 use crate::services::run_manager::RunManagerState;
 use log::{error, info};
@@ -86,7 +84,10 @@ pub async fn toggle_orchestrator_cmd(
 ) -> Result<(), AppError> {
     let mut orch = orchestrator.lock().await;
     orch.config.enabled = enabled;
-    info!("Orchestrator {}", if enabled { "enabled" } else { "disabled" });
+    info!(
+        "Orchestrator {}",
+        if enabled { "enabled" } else { "disabled" }
+    );
     Ok(())
 }
 
@@ -122,7 +123,7 @@ pub async fn orchestrator_shepherd_pr_cmd(
     let branch = pr.head.ref_field.clone();
     let base_branch = pr.base.ref_field.clone();
 
-    let worktree_path = format!("{}/.worktrees/{}/{}", repo_path, repo, branch);
+    let worktree_path = format!("{repo_path}/.worktrees/{repo}/{branch}");
 
     let pr_context = crate::models::orchestrator::PrContext {
         repo: full_repo,

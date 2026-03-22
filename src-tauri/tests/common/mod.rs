@@ -62,9 +62,7 @@ pub fn make_pr_status(number: u64, failing: bool) -> branchdeck_lib::models::git
 }
 
 /// Build a `RunningEntry` for orchestrator tests.
-pub fn make_running_entry(
-    pr_key: &str,
-) -> branchdeck_lib::models::orchestrator::RunningEntry {
+pub fn make_running_entry(pr_key: &str) -> branchdeck_lib::models::orchestrator::RunningEntry {
     branchdeck_lib::models::orchestrator::RunningEntry {
         pr_key: pr_key.to_string(),
         worktree_path: format!("/tmp/wt/{pr_key}"),

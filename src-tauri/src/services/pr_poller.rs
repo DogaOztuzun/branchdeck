@@ -18,7 +18,7 @@ pub fn start_pr_poller(event_bus: Arc<EventBus>, repo_paths: Vec<String>) {
     tauri::async_runtime::spawn(async move {
         poll_loop(&event_bus, &repo_paths).await;
     });
-    info!("PR poller started (interval={}s)", POLL_INTERVAL_SECS);
+    info!("PR poller started (interval={POLL_INTERVAL_SECS}s)");
 }
 
 async fn poll_loop(event_bus: &EventBus, repo_paths: &[String]) {
@@ -95,7 +95,7 @@ fn publish_changes(
     }
 
     // Update last known state
-    *last_state = current.clone();
+    last_state.clone_from(current);
 }
 
 fn has_changes(prev: &[PrSummary], current: &[PrSummary]) -> bool {
@@ -108,8 +108,7 @@ fn has_changes(prev: &[PrSummary], current: &[PrSummary]) -> bool {
         match prev_pr {
             None => return true,
             Some(p) => {
-                if p.ci_status != curr_pr.ci_status
-                    || p.review_decision != curr_pr.review_decision
+                if p.ci_status != curr_pr.ci_status || p.review_decision != curr_pr.review_decision
                 {
                     return true;
                 }

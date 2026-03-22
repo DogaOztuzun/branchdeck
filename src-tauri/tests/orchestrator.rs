@@ -103,7 +103,10 @@ fn pr_event_concurrency_gate() {
         .iter()
         .filter(|e| matches!(e, OrchestratorEffect::DispatchSession { .. }))
         .count();
-    assert_eq!(dispatch_count, 1, "should only dispatch 1 with max_concurrent=1");
+    assert_eq!(
+        dispatch_count, 1,
+        "should only dispatch 1 with max_concurrent=1"
+    );
 }
 
 #[test]
@@ -199,10 +202,9 @@ fn session_end_fix_incomplete_schedules_retry() {
         2000,
     );
 
-    assert!(effects.iter().any(|e| matches!(
-        e,
-        OrchestratorEffect::ScheduleRetry { delay_ms: 1000, .. }
-    )));
+    assert!(effects
+        .iter()
+        .any(|e| matches!(e, OrchestratorEffect::ScheduleRetry { delay_ms: 1000, .. })));
     assert!(state.retry_queue.contains_key("test/repo#1"));
 }
 
@@ -220,16 +222,14 @@ fn session_end_no_output_schedules_backoff_retry() {
         },
     );
 
-    let effects = apply_session_end(
-        &mut state,
-        "test/repo#1",
-        SessionOutcome::NoOutput,
-        2000,
-    );
+    let effects = apply_session_end(&mut state, "test/repo#1", SessionOutcome::NoOutput, 2000);
 
     assert!(effects.iter().any(|e| matches!(
         e,
-        OrchestratorEffect::ScheduleRetry { delay_ms: 10000, .. }
+        OrchestratorEffect::ScheduleRetry {
+            delay_ms: 10000,
+            ..
+        }
     )));
 }
 
@@ -299,10 +299,9 @@ fn reconciliation_stops_merged_pr() {
         e,
         OrchestratorEffect::StopSession { pr_key, .. } if pr_key == "test/repo#1"
     )));
-    assert!(effects.iter().any(|e| matches!(
-        e,
-        OrchestratorEffect::CleanupMetadata { .. }
-    )));
+    assert!(effects
+        .iter()
+        .any(|e| matches!(e, OrchestratorEffect::CleanupMetadata { .. })));
     assert!(!state.running.contains_key("test/repo#1"));
     assert!(!state.claimed.contains("test/repo#1"));
 }
@@ -350,10 +349,9 @@ fn skip_removes_from_all_tracking() {
 
     let effects = apply_skip(&mut state, "test/repo#1");
 
-    assert!(effects.iter().any(|e| matches!(
-        e,
-        OrchestratorEffect::StopSession { .. }
-    )));
+    assert!(effects
+        .iter()
+        .any(|e| matches!(e, OrchestratorEffect::StopSession { .. })));
     assert!(!state.claimed.contains("test/repo#1"));
     assert!(!state.running.contains_key("test/repo#1"));
 }
@@ -417,12 +415,7 @@ fn interleaved_prs_are_independent() {
     assert!(!effects.is_empty());
 
     // Fail PR#2 with retry
-    let effects = apply_session_end(
-        &mut state,
-        "test/repo#2",
-        SessionOutcome::NoOutput,
-        3000,
-    );
+    let effects = apply_session_end(&mut state, "test/repo#2", SessionOutcome::NoOutput, 3000);
     assert!(state.retry_queue.contains_key("test/repo#2"));
     assert!(state.running.contains_key("test/repo#3"));
     assert!(!effects.is_empty());

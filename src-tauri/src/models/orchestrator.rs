@@ -109,7 +109,7 @@ pub struct AnalysisPlan {
 
 // --- Internal types (orchestrator state machine) ---
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionOutcome {
     AnalysisWritten,
     FixCompleted,
@@ -219,12 +219,10 @@ pub fn is_pr_eligible(pr: &PrSummary, config: &OrchestratorConfig) -> bool {
     }
 
     // Skip non-matching authors if filter is set
-    if !config.filter_authors.is_empty()
-        && !config.filter_authors.iter().any(|a| a == &pr.author)
-    {
+    if !config.filter_authors.is_empty() && !config.filter_authors.iter().any(|a| a == &pr.author) {
         return false;
     }
 
     // Only consider PRs with failing CI
-    matches!(pr.ci_status.as_deref(), Some("FAILURE") | Some("ERROR"))
+    matches!(pr.ci_status.as_deref(), Some("FAILURE" | "ERROR"))
 }

@@ -37,7 +37,7 @@ pub fn apply_pr_event(
     let available_slots = state
         .config
         .max_concurrent
-        .saturating_sub(state.running.len() as u32);
+        .saturating_sub(u32::try_from(state.running.len()).unwrap_or(u32::MAX));
 
     if available_slots == 0 {
         debug!("Orchestrator: no available slots, skipping PR event");
@@ -99,7 +99,7 @@ pub fn apply_pr_event(
 }
 
 /// Handle session end. Route based on outcome:
-/// - `AnalysisWritten` → emit review_ready
+/// - `AnalysisWritten` → emit `review_ready`
 /// - `FixCompleted` → mark completed, release claim
 /// - `FixIncomplete` → schedule continuation retry
 /// - `NoOutput` → schedule failure retry with backoff
@@ -109,12 +109,9 @@ pub fn apply_session_end(
     outcome: SessionOutcome,
     now: EpochMs,
 ) -> Vec<OrchestratorEffect> {
-    let entry = match state.running.remove(pr_key) {
-        Some(e) => e,
-        None => {
-            debug!("Orchestrator: session end for unknown PR {pr_key}");
-            return Vec::new();
-        }
+    let Some(entry) = state.running.remove(pr_key) else {
+        debug!("Orchestrator: session end for unknown PR {pr_key}");
+        return Vec::new();
     };
 
     let mut effects = Vec::new();
@@ -312,9 +309,8 @@ pub fn apply_retry_due(
     worktree_path: &str,
     now: EpochMs,
 ) -> Vec<OrchestratorEffect> {
-    let retry = match state.retry_queue.remove(pr_key) {
-        Some(r) => r,
-        None => return Vec::new(),
+    let Some(retry) = state.retry_queue.remove(pr_key) else {
+        return Vec::new();
     };
 
     let mut effects = Vec::new();
@@ -379,14 +375,14 @@ pub fn apply_skip(state: &mut Orchestrator, pr_key: &str) -> Vec<OrchestratorEff
 
 // --- Helpers ---
 
-/// Calculate retry backoff: min(FAILURE_BASE_MS * 2^(attempt-1), FAILURE_MAX_MS)
+/// Calculate retry backoff: `min(FAILURE_BASE_MS` * 2^(attempt-1), `FAILURE_MAX_MS`)
 #[must_use]
 pub fn retry_backoff(attempt: u32) -> u64 {
     let delay = FAILURE_BASE_MS.saturating_mul(1u64 << attempt.saturating_sub(1));
     delay.min(FAILURE_MAX_MS)
 }
 
-/// Parse a pr_key ("owner/repo#42") into a minimal PrContext.
+/// Parse a `pr_key` ("owner/repo#42") into a minimal `PrContext`.
 fn parse_pr_key(key: &str) -> crate::models::orchestrator::PrContext {
     let (repo, number_str) = key.rsplit_once('#').unwrap_or((key, "0"));
     let number = number_str.parse().unwrap_or(0);
@@ -398,7 +394,7 @@ fn parse_pr_key(key: &str) -> crate::models::orchestrator::PrContext {
     }
 }
 
-/// Look up running entry by tab_id (for session end matching).
+/// Look up running entry by `tab_id` (for session end matching).
 #[must_use]
 pub fn find_pr_key_by_tab_id(state: &Orchestrator, tab_id: &str) -> Option<String> {
     state
@@ -411,21 +407,20 @@ pub fn find_pr_key_by_tab_id(state: &Orchestrator, tab_id: &str) -> Option<Strin
 // --- Impure functions (file I/O, Tauri interaction) ---
 
 /// Determine session outcome by reading analysis.json from the worktree.
+#[derive(serde::Deserialize)]
+struct AnalysisCheck {
+    #[serde(default)]
+    approved: bool,
+    #[serde(default)]
+    resolved: bool,
+}
+
 #[must_use]
 pub fn determine_session_outcome(worktree_path: &str) -> SessionOutcome {
     let analysis_path = format!("{worktree_path}/.branchdeck/analysis.json");
-    let content = match std::fs::read_to_string(&analysis_path) {
-        Ok(c) => c,
-        Err(_) => return SessionOutcome::NoOutput,
+    let Ok(content) = std::fs::read_to_string(&analysis_path) else {
+        return SessionOutcome::NoOutput;
     };
-
-    #[derive(serde::Deserialize)]
-    struct AnalysisCheck {
-        #[serde(default)]
-        approved: bool,
-        #[serde(default)]
-        resolved: bool,
-    }
 
     match serde_json::from_str::<AnalysisCheck>(&content) {
         Ok(a) if a.resolved => SessionOutcome::FixCompleted,
@@ -465,10 +460,7 @@ fn deploy_skill_file(worktree_path: &str) {
 }
 
 /// Write pr-context.json into the worktree's .branchdeck directory.
-fn write_pr_context(
-    worktree_path: &str,
-    pr_context: &crate::models::orchestrator::PrContext,
-) {
+fn write_pr_context(worktree_path: &str, pr_context: &crate::models::orchestrator::PrContext) {
     let dir = format!("{worktree_path}/.branchdeck");
     if let Err(e) = std::fs::create_dir_all(&dir) {
         error!("Failed to create .branchdeck dir: {e}");
@@ -539,14 +531,7 @@ pub async fn execute_effects<R: tauri::Runtime>(
                         // Record the running entry with a generated tab_id
                         let tab_id = uuid::Uuid::new_v4().to_string();
                         let mut orch = orchestrator.lock().await;
-                        record_running(
-                            &mut orch,
-                            &key,
-                            &worktree_path,
-                            &tab_id,
-                            now_ms(),
-                            1,
-                        );
+                        record_running(&mut orch, &key, &worktree_path, &tab_id, now_ms(), 1);
                         info!("Dispatched orchestrator session for {key}");
                     }
                     Err(e) => {
@@ -600,7 +585,7 @@ pub fn create_orchestrator_state(
 }
 
 /// Start the orchestrator event loop as a background tokio task.
-/// Subscribes to EventBus and routes events to pure state machine functions.
+/// Subscribes to `EventBus` and routes events to pure state machine functions.
 pub fn start_orchestrator<R: tauri::Runtime + 'static>(
     orchestrator: OrchestratorState,
     event_bus: std::sync::Arc<crate::services::event_bus::EventBus>,
@@ -614,13 +599,7 @@ pub fn start_orchestrator<R: tauri::Runtime + 'static>(
         loop {
             match rx.recv().await {
                 Ok(event) => {
-                    handle_event(
-                        &event,
-                        &orchestrator,
-                        &run_manager,
-                        &app_handle,
-                    )
-                    .await;
+                    handle_event(&event, &orchestrator, &run_manager, &app_handle).await;
                 }
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
                     error!("Orchestrator event loop lagged by {n} events");
