@@ -30,13 +30,14 @@
 
 ## Color
 - **Approach:** Restrained -- one accent + semantic colors. Color is rare and meaningful.
-- **Background:** `#1a1b26` (--color-bg) -- deep navy-black, Tokyo Night "Night" variant
-- **Surface:** `#24283b` (--color-surface) -- raised surfaces, sidebars, toolbars
-- **Surface Raised:** `#292e42` -- hover states, elevated surfaces (use sparingly)
-- **Border:** `#414868` (--color-border) -- panel dividers, card borders
+- **Background:** `#1a1b26` (--color-bg) -- editor background, Tokyo Night "Night" variant
+- **Surface:** `#16161e` (--color-surface) -- sidebars, panels, tabs. Matches VS Code sideBar.background.
+- **Surface Raised:** `#1e202e` -- hover states, elevated surfaces (use sparingly)
+- **Border:** `#101014` (--color-border) -- panel dividers, card borders. Subtle, not prominent.
+- **Input:** `#14141b` -- input field backgrounds
 - **Primary:** `#7aa2f7` (--color-primary) -- interactive elements, active states, brand color. Cool blue.
-- **Text:** `#c0caf5` (--color-text) -- primary text on dark backgrounds
-- **Text Muted:** `#787c99` (--color-text-muted) -- secondary text, labels, metadata. Matches Tokyo Night VS Code sidebar foreground for readability on dark surfaces.
+- **Text:** `#a9b1d6` (--color-text) -- primary text. Matches VS Code editor.foreground.
+- **Text Muted:** `#787c99` (--color-text-muted) -- secondary text, labels, metadata. Matches VS Code sideBar.foreground.
 - **Semantic:**
   - Success: `#9ece6a` (--color-success) -- completed, passing, green
   - Warning: `#e0af68` (--color-warning) -- running, pending, amber

@@ -9,39 +9,39 @@
   --font-mono:
     "JetBrains Mono", "Fira Code", "Cascadia Code", ui-monospace, SFMono-Regular, monospace;
 
-  /* ── Branchdeck palette (Tokyo Night) ── */
+  /* ── Branchdeck palette (Tokyo Night — aligned to VS Code theme) ── */
   --color-bg-main: #1a1b26;
-  --color-bg-sidebar: #24283b;
-  --color-bg-panel: #24283b;
-  --color-surface-raised: #292e42;
-  --color-border-subtle: #414868;
+  --color-bg-sidebar: #16161e;
+  --color-bg-panel: #16161e;
+  --color-surface-raised: #1e202e;
+  --color-border-subtle: #101014;
   --color-accent-primary: #7aa2f7;
   --color-accent-success: #9ece6a;
   --color-accent-warning: #e0af68;
   --color-accent-error: #f7768e;
   --color-accent-info: #7dcfff;
-  --color-text-main: #c0caf5;
+  --color-text-main: #a9b1d6;
   --color-text-dim: #787c99;
 
   /* ── shadcn/Lyra semantic tokens → Tokyo Night mapping ── */
   --color-background: #1a1b26;
-  --color-foreground: #c0caf5;
-  --color-card: #24283b;
-  --color-card-foreground: #c0caf5;
-  --color-popover: #24283b;
-  --color-popover-foreground: #c0caf5;
+  --color-foreground: #a9b1d6;
+  --color-card: #16161e;
+  --color-card-foreground: #a9b1d6;
+  --color-popover: #16161e;
+  --color-popover-foreground: #a9b1d6;
   --color-primary: #7aa2f7;
   --color-primary-foreground: #1a1b26;
-  --color-secondary: #292e42;
-  --color-secondary-foreground: #c0caf5;
-  --color-muted: #292e42;
+  --color-secondary: #1e202e;
+  --color-secondary-foreground: #a9b1d6;
+  --color-muted: #1e202e;
   --color-muted-foreground: #787c99;
-  --color-accent: #292e42;
-  --color-accent-foreground: #c0caf5;
+  --color-accent: #1e202e;
+  --color-accent-foreground: #a9b1d6;
   --color-destructive: #f7768e;
   --color-destructive-foreground: #1a1b26;
-  --color-border: #414868;
-  --color-input: #414868;
+  --color-border: #101014;
+  --color-input: #14141b;
   --color-ring: #7aa2f7;
 
   /* ── Animations for Lyra components ── */
