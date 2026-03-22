@@ -159,9 +159,9 @@ pub async fn orchestrator_shepherd_pr_cmd(
 
     let branch = pr.head.ref_field.clone();
     let base_branch = pr.base.ref_field.clone();
-    let sanitized_branch = branch.replace("..", "").replace('/', "-");
 
-    let worktree_path = format!("{repo_path}/.worktrees/{repo}/{sanitized_branch}");
+    let worktree_path =
+        crate::services::orchestrator::build_worktree_path(&repo_path, &branch);
 
     let pr_context = crate::models::orchestrator::PrContext {
         repo: full_repo,

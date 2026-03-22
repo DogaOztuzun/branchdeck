@@ -27,7 +27,7 @@ const MAX_RETRIES: u32 = 5;
 /// concurrency gate, dispatch sessions for available slots.
 pub fn apply_pr_event(
     state: &mut Orchestrator,
-    repo: &str,
+    _repo: &str,
     prs: &[PrSummary],
     now: EpochMs,
 ) -> Vec<OrchestratorEffect> {
@@ -80,16 +80,15 @@ pub fn apply_pr_event(
             state.claimed.remove(&key);
             continue;
         };
-        let sanitized_branch = pr.branch.replace("..", "").replace('/', "-");
-        if sanitized_branch.is_empty() {
+        let worktree_path = build_worktree_path(&repo_base, &pr.branch);
+        if worktree_path.is_empty() {
             error!(
-                "Branch sanitized to empty for PR {key} (original: {})",
+                "Cannot build worktree path for PR {key} (branch: {})",
                 pr.branch
             );
             state.claimed.remove(&key);
             continue;
         }
-        let worktree_path = format!("{repo_base}/.worktrees/{repo}/{sanitized_branch}");
 
         effects.push(OrchestratorEffect::DispatchSession {
             pr_key: key.clone(),
@@ -499,6 +498,19 @@ pub fn apply_skip(state: &mut Orchestrator, pr_key: &str) -> Vec<OrchestratorEff
 
 // --- Helpers ---
 
+/// Build the worktree path for a branch, matching `git::create_worktree`'s logic.
+/// Returns `repo_path.parent()/worktrees/{sanitized_branch}`.
+#[must_use]
+pub fn build_worktree_path(repo_path: &str, branch: &str) -> String {
+    let sanitized = crate::services::git::sanitize_worktree_name(branch);
+    if sanitized.is_empty() {
+        return String::new();
+    }
+    let repo = std::path::Path::new(repo_path);
+    let parent = repo.parent().unwrap_or(repo);
+    parent.join("worktrees").join(&sanitized).display().to_string()
+}
+
 /// Calculate retry backoff: `min(FAILURE_BASE_MS` * 2^(attempt-1), `FAILURE_MAX_MS`)
 #[must_use]
 pub fn retry_backoff(attempt: u32) -> u64 {
@@ -681,7 +693,7 @@ fn worktree_needs_create(worktree_path: &str, expected_branch: &str) -> bool {
 
     // Remove stale worktree so we can recreate on the right branch
     if let Some(repo_base) = worktree_path
-        .find("/.worktrees/")
+        .find("/worktrees/")
         .map(|idx| &worktree_path[..idx])
     {
         let name = wt_path
@@ -713,32 +725,33 @@ async fn execute_dispatch<R: tauri::Runtime>(
 
     // Ensure worktree exists and is on the correct branch
     if worktree_needs_create(worktree_path, &pr_context.branch) {
-        if let Some(repo_base) = worktree_path
-            .find("/.worktrees/")
-            .map(|idx| &worktree_path[..idx])
-        {
-            let base = if pr_context.base_branch.is_empty() {
-                None
-            } else {
-                Some(pr_context.base_branch.as_str())
-            };
-            match crate::services::git::create_worktree(
-                std::path::Path::new(repo_base),
-                &pr_context.branch,
-                Some(&pr_context.branch),
-                base,
-            ) {
-                Ok(wt) => info!("Created worktree at {}", wt.path.display()),
-                Err(e) => {
-                    error!("Failed to create worktree for {key}: {e}");
-                    orchestrator.lock().await.claimed.remove(key);
-                    return;
-                }
-            }
-        } else {
-            error!("Cannot derive repo path from worktree_path: {worktree_path}");
+        // Look up repo filesystem path from orchestrator state
+        let repo_fs_path = {
+            let orch = orchestrator.lock().await;
+            orch.repo_paths.get(&pr_context.repo).cloned()
+        };
+        let Some(repo_fs_path) = repo_fs_path else {
+            error!("No repo_path mapping for {} — cannot create worktree", pr_context.repo);
             orchestrator.lock().await.claimed.remove(key);
             return;
+        };
+        let base = if pr_context.base_branch.is_empty() {
+            None
+        } else {
+            Some(pr_context.base_branch.as_str())
+        };
+        match crate::services::git::create_worktree(
+            std::path::Path::new(&repo_fs_path),
+            &pr_context.branch,
+            Some(&pr_context.branch),
+            base,
+        ) {
+            Ok(wt) => info!("Created worktree at {}", wt.path.display()),
+            Err(e) => {
+                error!("Failed to create worktree for {key}: {e}");
+                orchestrator.lock().await.claimed.remove(key);
+                return;
+            }
         }
     }
 
