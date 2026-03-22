@@ -36,7 +36,7 @@
 - **Border:** `#414868` (--color-border) -- panel dividers, card borders
 - **Primary:** `#7aa2f7` (--color-primary) -- interactive elements, active states, brand color. Cool blue.
 - **Text:** `#c0caf5` (--color-text) -- primary text on dark backgrounds
-- **Text Muted:** `#565f89` (--color-text-muted) -- secondary text, labels, metadata
+- **Text Muted:** `#787c99` (--color-text-muted) -- secondary text, labels, metadata. Matches Tokyo Night VS Code sidebar foreground for readability on dark surfaces.
 - **Semantic:**
   - Success: `#9ece6a` (--color-success) -- completed, passing, green
   - Warning: `#e0af68` (--color-warning) -- running, pending, amber

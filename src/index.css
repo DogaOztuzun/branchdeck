@@ -21,7 +21,7 @@
   --color-accent-error: #f7768e;
   --color-accent-info: #7dcfff;
   --color-text-main: #c0caf5;
-  --color-text-dim: #565f89;
+  --color-text-dim: #787c99;
 
   /* ── shadcn/Lyra semantic tokens → Tokyo Night mapping ── */
   --color-background: #1a1b26;
@@ -35,7 +35,7 @@
   --color-secondary: #292e42;
   --color-secondary-foreground: #c0caf5;
   --color-muted: #292e42;
-  --color-muted-foreground: #565f89;
+  --color-muted-foreground: #787c99;
   --color-accent: #292e42;
   --color-accent-foreground: #c0caf5;
   --color-destructive: #f7768e;
