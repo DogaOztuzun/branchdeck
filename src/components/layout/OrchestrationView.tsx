@@ -125,7 +125,7 @@ function TaskCard(props: {
           <Show when={props.task.frontmatter.pr}>
             <div class="text-base space-y-1">
               <div class="flex items-center gap-2">
-                <span class="text-text-dim w-14 shrink-0">Checks</span>
+                <span class="text-text-dim w-16 shrink-0">Checks</span>
                 <Show
                   when={props.task.body.includes('Failing checks:')}
                   fallback={<span class="text-accent-success">passing</span>}
@@ -134,8 +134,8 @@ function TaskCard(props: {
                 </Show>
               </div>
               <div class="flex items-center gap-2">
-                <span class="text-text-dim w-14 shrink-0">Reviews</span>
-                <span class="text-text-main">
+                <span class="text-text-dim w-16 shrink-0">Reviews</span>
+                <span class="text-text-main truncate">
                   {props.task.body
                     .split('\n')
                     .find((l) => l.includes('Reviews:'))
