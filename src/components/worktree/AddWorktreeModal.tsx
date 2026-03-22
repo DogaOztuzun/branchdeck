@@ -1,8 +1,8 @@
-import { Dialog } from '@kobalte/core';
 import { createEffect, createMemo, createSignal, onCleanup, Show } from 'solid-js';
 import { listBranches, previewWorktree } from '../../lib/commands/git';
 import { getRepoStore } from '../../lib/stores/repo';
 import type { BranchInfo, WorktreeInfo, WorktreePreview } from '../../types/git';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/Dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
 
 type AddWorktreeModalProps = {
@@ -113,101 +113,98 @@ export function AddWorktreeModal(props: AddWorktreeModalProps) {
   }
 
   return (
-    <Dialog.Root
+    <Dialog
       open={props.open}
       onOpenChange={(open) => {
         if (!open) props.onClose();
       }}
     >
-      <Dialog.Portal>
-        <Dialog.Overlay class="fixed inset-0 z-40 bg-black/50" />
-        <Dialog.Content class="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 bg-bg-sidebar border border-border-subtle shadow-lg p-4">
-          <Dialog.Title class="text-sm font-semibold text-text-main mb-3">
-            New Worktree
-          </Dialog.Title>
+      <DialogContent class="max-w-sm" showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>New Worktree</DialogTitle>
+        </DialogHeader>
 
-          <form onSubmit={handleCreate}>
-            <input
-              type="text"
-              placeholder="Worktree name"
-              value={name()}
-              onInput={(e) => handleNameInput(e.currentTarget.value)}
-              autofocus
-              class="w-full px-3 py-1.5 text-xs bg-bg-main border border-border-subtle text-text-main placeholder:text-text-dim focus:outline-none focus:border-accent-primary"
-            />
+        <form onSubmit={handleCreate}>
+          <input
+            type="text"
+            placeholder="Worktree name"
+            value={name()}
+            onInput={(e) => handleNameInput(e.currentTarget.value)}
+            autofocus
+            class="w-full px-3 py-1.5 text-xs bg-bg-main border border-border-subtle text-text-main placeholder:text-text-dim focus:outline-none focus:border-accent-primary"
+          />
 
-            <Show when={localBranches().length > 0}>
-              <div class="mt-2">
-                <span class="text-xs text-text-dim">Base branch</span>
-                <div class="mt-1">
-                  <Select
-                    options={localBranches().map((b) => b.name)}
-                    value={baseBranch()}
-                    onChange={(val) => setBaseBranch(val ?? '')}
-                    placeholder="Select base branch"
-                    itemComponent={(props) => (
-                      <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
-                    )}
-                  >
-                    <SelectTrigger>
-                      <SelectValue<string>>{(state) => state.selectedOption()}</SelectValue>
-                    </SelectTrigger>
-                    <SelectContent />
-                  </Select>
-                </div>
+          <Show when={localBranches().length > 0}>
+            <div class="mt-2">
+              <span class="text-xs text-text-dim">Base branch</span>
+              <div class="mt-1">
+                <Select
+                  options={localBranches().map((b) => b.name)}
+                  value={baseBranch()}
+                  onChange={(val) => setBaseBranch(val ?? '')}
+                  placeholder="Select base branch"
+                  itemComponent={(props) => (
+                    <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
+                  )}
+                >
+                  <SelectTrigger>
+                    <SelectValue<string>>{(state) => state.selectedOption()}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent />
+                </Select>
               </div>
-            </Show>
-
-            <div class="mt-3 space-y-1.5 text-xs">
-              <div class="flex gap-2">
-                <span class="text-text-dim">Base:</span>
-                <span class="text-text-main">{baseBranch() || preview()?.baseBranch || '—'}</span>
-              </div>
-              <div class="flex gap-2">
-                <span class="text-text-dim">Branch:</span>
-                <span class="text-text-main">{preview()?.branchName ?? '—'}</span>
-              </div>
-              <div class="flex gap-2">
-                <span class="text-text-dim">Path:</span>
-                <span class="text-text-main truncate">{preview()?.worktreePath ?? '—'}</span>
-              </div>
-              <Show when={preview()?.sanitizedName === ''}>
-                <p class="text-accent-error">Name must contain at least one letter or number</p>
-              </Show>
-              <Show when={preview()?.branchExists}>
-                <p class="text-accent-info">Will use existing branch</p>
-              </Show>
-              <Show when={preview()?.pathExists}>
-                <p class="text-accent-error">Directory already exists</p>
-              </Show>
-              <Show when={preview()?.worktreeExists}>
-                <p class="text-accent-error">Worktree with this name already exists</p>
-              </Show>
             </div>
+          </Show>
 
-            <Show when={error()}>
-              <p class="mt-2 text-xs text-accent-error">{error()}</p>
-            </Show>
-
-            <div class="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
-                onClick={() => props.onClose()}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isCreateDisabled()}
-                class="px-3 py-1.5 text-xs bg-accent-primary text-bg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
-              >
-                {creating() ? 'Creating...' : 'Create Worktree'}
-              </button>
+          <div class="mt-3 space-y-1.5 text-xs">
+            <div class="flex gap-2">
+              <span class="text-text-dim">Base:</span>
+              <span class="text-text-main">{baseBranch() || preview()?.baseBranch || '—'}</span>
             </div>
-          </form>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+            <div class="flex gap-2">
+              <span class="text-text-dim">Branch:</span>
+              <span class="text-text-main">{preview()?.branchName ?? '—'}</span>
+            </div>
+            <div class="flex gap-2">
+              <span class="text-text-dim">Path:</span>
+              <span class="text-text-main truncate">{preview()?.worktreePath ?? '—'}</span>
+            </div>
+            <Show when={preview()?.sanitizedName === ''}>
+              <p class="text-accent-error">Name must contain at least one letter or number</p>
+            </Show>
+            <Show when={preview()?.branchExists}>
+              <p class="text-accent-info">Will use existing branch</p>
+            </Show>
+            <Show when={preview()?.pathExists}>
+              <p class="text-accent-error">Directory already exists</p>
+            </Show>
+            <Show when={preview()?.worktreeExists}>
+              <p class="text-accent-error">Worktree with this name already exists</p>
+            </Show>
+          </div>
+
+          <Show when={error()}>
+            <p class="mt-2 text-xs text-accent-error">{error()}</p>
+          </Show>
+
+          <div class="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
+              onClick={() => props.onClose()}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isCreateDisabled()}
+              class="px-3 py-1.5 text-xs bg-accent-primary text-bg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+            >
+              {creating() ? 'Creating...' : 'Create Worktree'}
+            </button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
