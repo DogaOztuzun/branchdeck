@@ -256,11 +256,18 @@ pub fn apply_relaunch(
     }
 
     // Cancel any pending retry to prevent duplicate dispatch
-    if state.retry_queue.remove(pr_key).is_some() {
+    let retry_attempt = state.retry_queue.remove(pr_key).map(|r| r.attempt);
+    if retry_attempt.is_some() {
         effects.push(OrchestratorEffect::CancelRetry {
             pr_key: pr_key.to_string(),
         });
     }
+
+    // Preserve attempt from review_ready or retry (don't reset to 1)
+    let prev_attempt = retry_attempt
+        .or_else(|| state.review_ready.get(pr_key).map(|r| r.attempt))
+        .unwrap_or(0);
+    let next_attempt = prev_attempt + 1;
 
     // Remove from review_ready (user approved)
     state.review_ready.remove(pr_key);
@@ -275,7 +282,7 @@ pub fn apply_relaunch(
         pr_key: pr_key.to_string(),
         worktree_path: worktree_path.to_string(),
         pr_context,
-        attempt: 1,
+        attempt: next_attempt,
     });
 
     effects.push(OrchestratorEffect::EmitLifecycleEvent {
@@ -283,7 +290,7 @@ pub fn apply_relaunch(
             pr_key: pr_key.to_string(),
             worktree_path: worktree_path.to_string(),
             status: LifecycleStatus::Fixing,
-            attempt: 1,
+            attempt: next_attempt,
             started_at: now,
         },
     });
@@ -318,6 +325,7 @@ pub fn apply_reconciliation(
             effects.push(OrchestratorEffect::StopSession {
                 pr_key: key.clone(),
                 tab_id: entry.tab_id.clone(),
+                worktree_path: entry.worktree_path.clone(),
             });
             effects.push(OrchestratorEffect::CleanupMetadata {
                 worktree_path: entry.worktree_path,
@@ -439,6 +447,7 @@ pub fn apply_skip(state: &mut Orchestrator, pr_key: &str) -> Vec<OrchestratorEff
         effects.push(OrchestratorEffect::StopSession {
             pr_key: pr_key.to_string(),
             tab_id: entry.tab_id,
+            worktree_path: entry.worktree_path,
         });
     }
 
@@ -687,6 +696,7 @@ pub async fn execute_effects<R: tauri::Runtime>(
     orchestrator: &OrchestratorState,
     run_manager: &crate::services::run_manager::RunManagerState,
     app_handle: &tauri::AppHandle<R>,
+    event_bus: Option<&std::sync::Arc<crate::services::event_bus::EventBus>>,
 ) {
     for effect in effects {
         match effect {
@@ -710,6 +720,7 @@ pub async fn execute_effects<R: tauri::Runtime>(
             OrchestratorEffect::StopSession {
                 pr_key: key,
                 tab_id,
+                worktree_path: wt_path,
             } => {
                 info!("Stopping session for {key} (tab={tab_id})");
                 let mut rm = run_manager.lock().await;
@@ -721,6 +732,8 @@ pub async fn execute_effects<R: tauri::Runtime>(
                         }
                     }
                 }
+                // Also remove from queue if not yet active
+                rm.remove_queued_by_worktree(&wt_path);
             }
             OrchestratorEffect::ScheduleRetry {
                 pr_key: key,
@@ -729,14 +742,9 @@ pub async fn execute_effects<R: tauri::Runtime>(
                 ..
             } => {
                 debug!("Scheduling retry for {key} in {delay_ms}ms");
-                // Get EventBus from orchestrator state for the timer
-                let bus = {
-                    let orch = orchestrator.lock().await;
-                    orch.event_bus.clone()
-                };
-                if let Some(bus) = bus {
-                    // Spawn a timer that publishes RetryDue to EventBus after delay
-                    tokio::spawn(async move {
+                if let Some(bus) = event_bus.cloned() {
+                    let timer_key = key.clone();
+                    let handle = tokio::spawn(async move {
                         tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
                         let _ = bus.publish(crate::models::agent::Event::RetryDue {
                             pr_key: key.clone(),
@@ -744,12 +752,21 @@ pub async fn execute_effects<R: tauri::Runtime>(
                         });
                         debug!("Retry timer fired for {key}");
                     });
+                    // Store handle so CancelRetry can abort it
+                    let mut orch = orchestrator.lock().await;
+                    orch.retry_timers.insert(timer_key, handle);
                 } else {
                     error!("No EventBus available for retry timer for {key}");
                 }
             }
             OrchestratorEffect::CancelRetry { pr_key: key } => {
-                debug!("Cancelled retry for {key}");
+                let mut orch = orchestrator.lock().await;
+                if let Some(handle) = orch.retry_timers.remove(&key) {
+                    handle.abort();
+                    debug!("Aborted retry timer for {key}");
+                } else {
+                    debug!("Cancelled retry for {key} (no active timer)");
+                }
             }
             OrchestratorEffect::EmitLifecycleEvent { event } => {
                 if let Err(e) = app_handle.emit("lifecycle:updated", &event) {
@@ -793,7 +810,8 @@ pub fn start_orchestrator<R: tauri::Runtime + 'static>(
         loop {
             match rx.recv().await {
                 Ok(event) => {
-                    handle_event(&event, &orchestrator, &run_manager, &app_handle).await;
+                    handle_event(&event, &orchestrator, &run_manager, &app_handle, &event_bus)
+                        .await;
                 }
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
                     error!("Orchestrator event loop lagged by {n} events");
@@ -813,6 +831,7 @@ async fn handle_event<R: tauri::Runtime>(
     orchestrator: &OrchestratorState,
     run_manager: &crate::services::run_manager::RunManagerState,
     app_handle: &tauri::AppHandle<R>,
+    event_bus: &std::sync::Arc<crate::services::event_bus::EventBus>,
 ) {
     use crate::models::agent::{now_ms, Event};
 
@@ -826,7 +845,14 @@ async fn handle_event<R: tauri::Runtime>(
                 effects.extend(apply_reconciliation(&mut orch, prs));
                 effects
             };
-            execute_effects(effects, orchestrator, run_manager, app_handle).await;
+            execute_effects(
+                effects,
+                orchestrator,
+                run_manager,
+                app_handle,
+                Some(event_bus),
+            )
+            .await;
         }
         Event::RunComplete { tab_id, .. } => {
             let (key, worktree) = {
@@ -849,7 +875,14 @@ async fn handle_event<R: tauri::Runtime>(
                 let mut orch = orchestrator.lock().await;
                 apply_session_end(&mut orch, &key, outcome, now_ms())
             };
-            execute_effects(effects, orchestrator, run_manager, app_handle).await;
+            execute_effects(
+                effects,
+                orchestrator,
+                run_manager,
+                app_handle,
+                Some(event_bus),
+            )
+            .await;
         }
         Event::RetryDue {
             pr_key: key,
@@ -859,7 +892,14 @@ async fn handle_event<R: tauri::Runtime>(
                 let mut orch = orchestrator.lock().await;
                 apply_retry_due(&mut orch, key, worktree_path, now_ms())
             };
-            execute_effects(effects, orchestrator, run_manager, app_handle).await;
+            execute_effects(
+                effects,
+                orchestrator,
+                run_manager,
+                app_handle,
+                Some(event_bus),
+            )
+            .await;
         }
         _ => {} // Other events not handled by orchestrator
     }

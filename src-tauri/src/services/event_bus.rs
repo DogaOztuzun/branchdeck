@@ -30,3 +30,6 @@ impl EventBus {
         self.tx.subscribe()
     }
 }
+
+/// Type alias for managed Tauri state.
+pub type EventBusState = std::sync::Arc<EventBus>;

@@ -243,18 +243,18 @@ const LIFECYCLE_STATUS_COLORS: Record<LifecycleStatus, string> = {
 };
 
 const LIFECYCLE_STATUS_ORDER: Record<LifecycleStatus, number> = {
-  reviewReady: 0,
-  running: 1,
-  fixing: 2,
-  retrying: 3,
-  approved: 4,
-  completed: 5,
+  stale: 0,
+  reviewReady: 1,
+  running: 2,
+  fixing: 3,
+  retrying: 4,
+  approved: 5,
+  completed: 6,
 };
 
 export function OrchestrationView() {
   const layout = getLayoutStore();
   const repoStore = getRepoStore();
-  const _taskStore = getTaskStore();
   const lifecycleStore = getLifecycleStore();
   const [queue, setQueue] = createSignal<QueueStatus | null>(null);
   const [activeRun, setActiveRun] = createSignal<RunInfo | null>(null);

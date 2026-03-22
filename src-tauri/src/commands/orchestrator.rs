@@ -1,5 +1,6 @@
 use crate::error::AppError;
 use crate::models::orchestrator::{AnalysisPlan, ApprovedPlan, LifecycleEvent, LifecycleStatus};
+use crate::services::event_bus::EventBusState;
 use crate::services::orchestrator::{self as orch_service, OrchestratorState};
 use crate::services::run_manager::RunManagerState;
 use log::{error, info};
@@ -11,6 +12,7 @@ use tauri::State;
 pub async fn relaunch_pr_cmd(
     orchestrator: State<'_, OrchestratorState>,
     run_manager: State<'_, RunManagerState>,
+    event_bus: State<'_, EventBusState>,
     app_handle: tauri::AppHandle,
     pr_key: String,
     worktree_path: String,
@@ -27,7 +29,14 @@ pub async fn relaunch_pr_cmd(
 
     let orch_state = Arc::clone(&orchestrator);
     let rm_state = Arc::clone(&run_manager);
-    orch_service::execute_effects(effects, &orch_state, &rm_state, &app_handle).await;
+    orch_service::execute_effects(
+        effects,
+        &orch_state,
+        &rm_state,
+        &app_handle,
+        Some(&event_bus),
+    )
+    .await;
 
     info!("Relaunched PR {pr_key}");
     Ok(())
@@ -38,6 +47,7 @@ pub async fn relaunch_pr_cmd(
 pub async fn skip_pr_cmd(
     orchestrator: State<'_, OrchestratorState>,
     run_manager: State<'_, RunManagerState>,
+    event_bus: State<'_, EventBusState>,
     app_handle: tauri::AppHandle,
     pr_key: String,
 ) -> Result<(), AppError> {
@@ -48,7 +58,14 @@ pub async fn skip_pr_cmd(
 
     let orch_state = Arc::clone(&orchestrator);
     let rm_state = Arc::clone(&run_manager);
-    orch_service::execute_effects(effects, &orch_state, &rm_state, &app_handle).await;
+    orch_service::execute_effects(
+        effects,
+        &orch_state,
+        &rm_state,
+        &app_handle,
+        Some(&event_bus),
+    )
+    .await;
 
     info!("Skipped PR {pr_key}");
     Ok(())
@@ -115,6 +132,7 @@ pub async fn toggle_orchestrator_cmd(
 pub async fn orchestrator_shepherd_pr_cmd(
     orchestrator: State<'_, OrchestratorState>,
     run_manager: State<'_, RunManagerState>,
+    event_bus: State<'_, EventBusState>,
     app_handle: tauri::AppHandle,
     repo_path: String,
     pr_number: u64,
@@ -141,8 +159,9 @@ pub async fn orchestrator_shepherd_pr_cmd(
 
     let branch = pr.head.ref_field.clone();
     let base_branch = pr.base.ref_field.clone();
+    let sanitized_branch = branch.replace("..", "").replace('/', "-");
 
-    let worktree_path = format!("{repo_path}/.worktrees/{repo}/{branch}");
+    let worktree_path = format!("{repo_path}/.worktrees/{repo}/{sanitized_branch}");
 
     let pr_context = crate::models::orchestrator::PrContext {
         repo: full_repo,
@@ -178,7 +197,14 @@ pub async fn orchestrator_shepherd_pr_cmd(
 
     let orch_state = Arc::clone(&orchestrator);
     let rm_state = Arc::clone(&run_manager);
-    orch_service::execute_effects(effects, &orch_state, &rm_state, &app_handle).await;
+    orch_service::execute_effects(
+        effects,
+        &orch_state,
+        &rm_state,
+        &app_handle,
+        Some(&event_bus),
+    )
+    .await;
 
     Ok(())
 }

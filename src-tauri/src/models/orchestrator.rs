@@ -141,6 +141,7 @@ pub enum OrchestratorEffect {
     StopSession {
         pr_key: String,
         tab_id: String,
+        worktree_path: String,
     },
     ScheduleRetry {
         pr_key: String,
@@ -197,8 +198,8 @@ pub struct Orchestrator {
     pub review_ready: std::collections::HashMap<String, ReviewReadyEntry>,
     /// Maps "owner/repo" → filesystem path (e.g. "/home/user/projects/repo")
     pub repo_paths: std::collections::HashMap<String, String>,
-    /// `EventBus` reference for spawning retry timers
-    pub event_bus: Option<std::sync::Arc<crate::services::event_bus::EventBus>>,
+    /// Active retry timer handles — abort on cancel to prevent stale `RetryDue` events
+    pub retry_timers: std::collections::HashMap<String, tokio::task::JoinHandle<()>>,
 }
 
 impl std::fmt::Debug for Orchestrator {
@@ -226,7 +227,7 @@ impl Orchestrator {
             completed: std::collections::HashSet::new(),
             review_ready: std::collections::HashMap::new(),
             repo_paths: std::collections::HashMap::new(),
-            event_bus: None,
+            retry_timers: std::collections::HashMap::new(),
         }
     }
 }

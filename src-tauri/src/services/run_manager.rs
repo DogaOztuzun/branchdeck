@@ -376,6 +376,17 @@ impl RunManager {
         info!("Cancelled queue: cleared {cleared} queued items");
     }
 
+    /// Remove a queued run by worktree path. Returns true if found and removed.
+    pub fn remove_queued_by_worktree(&mut self, worktree_path: &str) -> bool {
+        let before = self.run_queue.len();
+        self.run_queue.retain(|r| r.worktree_path != worktree_path);
+        let removed = before - self.run_queue.len();
+        if removed > 0 {
+            info!("Removed {removed} queued run(s) for worktree {worktree_path}");
+        }
+        removed > 0
+    }
+
     /// Check if there's a next item in the queue and return it.
     /// Called after a run completes or fails to trigger auto-advance.
     fn dequeue_next(&mut self) -> Option<QueuedRun> {

@@ -252,6 +252,7 @@ pub fn run() {
                 sidecar_path,
                 Arc::clone(&event_bus),
             ));
+            app.manage(Arc::clone(&event_bus));
 
             // Orchestrator state
             let orchestrator_state = services::orchestrator::create_orchestrator_state(
@@ -264,7 +265,6 @@ pub fn run() {
                 .unwrap_or_default();
             {
                 let mut orch = tauri::async_runtime::block_on(orchestrator_state.lock());
-                orch.event_bus = Some(Arc::clone(&event_bus));
                 for repo_path in &repo_paths {
                     if let Ok((owner, repo)) =
                         services::github::resolve_owner_repo(std::path::Path::new(repo_path))
