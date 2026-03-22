@@ -1,4 +1,5 @@
-use log::debug;
+use log::{debug, error, info};
+use tauri::Emitter;
 
 use crate::models::agent::EpochMs;
 use crate::models::github::PrSummary;
@@ -405,4 +406,280 @@ pub fn find_pr_key_by_tab_id(state: &Orchestrator, tab_id: &str) -> Option<Strin
         .values()
         .find(|e| e.tab_id == tab_id)
         .map(|e| e.pr_key.clone())
+}
+
+// --- Impure functions (file I/O, Tauri interaction) ---
+
+/// Determine session outcome by reading analysis.json from the worktree.
+#[must_use]
+pub fn determine_session_outcome(worktree_path: &str) -> SessionOutcome {
+    let analysis_path = format!("{worktree_path}/.branchdeck/analysis.json");
+    let content = match std::fs::read_to_string(&analysis_path) {
+        Ok(c) => c,
+        Err(_) => return SessionOutcome::NoOutput,
+    };
+
+    #[derive(serde::Deserialize)]
+    struct AnalysisCheck {
+        #[serde(default)]
+        approved: bool,
+        #[serde(default)]
+        resolved: bool,
+    }
+
+    match serde_json::from_str::<AnalysisCheck>(&content) {
+        Ok(a) if a.resolved => SessionOutcome::FixCompleted,
+        Ok(a) if a.approved => SessionOutcome::FixIncomplete,
+        Ok(_) => SessionOutcome::AnalysisWritten,
+        Err(e) => {
+            error!("Failed to parse analysis.json at {analysis_path}: {e}");
+            SessionOutcome::NoOutput
+        }
+    }
+}
+
+/// Default PR shepherd skill content.
+const DEFAULT_SKILL: &str = include_str!("../../../.claude/skills/pr-shepherd/SKILL.md");
+
+/// Deploy the PR shepherd skill file into a worktree if not already present.
+fn deploy_skill_file(worktree_path: &str) {
+    let skill_dir = format!("{worktree_path}/.claude/skills/pr-shepherd");
+    let skill_path = format!("{skill_dir}/SKILL.md");
+
+    if std::path::Path::new(&skill_path).exists() {
+        debug!("Skill file already exists at {skill_path}");
+        return;
+    }
+
+    if let Err(e) = std::fs::create_dir_all(&skill_dir) {
+        error!("Failed to create skill directory {skill_dir}: {e}");
+        return;
+    }
+
+    if let Err(e) = std::fs::write(&skill_path, DEFAULT_SKILL) {
+        error!("Failed to write skill file {skill_path}: {e}");
+        return;
+    }
+
+    info!("Deployed pr-shepherd skill to {skill_path}");
+}
+
+/// Write pr-context.json into the worktree's .branchdeck directory.
+fn write_pr_context(
+    worktree_path: &str,
+    pr_context: &crate::models::orchestrator::PrContext,
+) {
+    let dir = format!("{worktree_path}/.branchdeck");
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        error!("Failed to create .branchdeck dir: {e}");
+        return;
+    }
+
+    let path = format!("{dir}/pr-context.json");
+    match serde_json::to_string_pretty(pr_context) {
+        Ok(json) => {
+            if let Err(e) = std::fs::write(&path, json) {
+                error!("Failed to write pr-context.json: {e}");
+            }
+        }
+        Err(e) => error!("Failed to serialize pr-context: {e}"),
+    }
+}
+
+/// Create a minimal task.md for the orchestrator session.
+fn create_orchestrator_task(worktree_path: &str, pr_key: &str) -> String {
+    let dir = format!("{worktree_path}/.branchdeck");
+    let _ = std::fs::create_dir_all(&dir);
+    let task_path = format!("{dir}/task.md");
+
+    let content = format!(
+        "---\ntitle: 'PR Shepherd: {pr_key}'\nstatus: created\nrun_count: 0\n---\n\n\
+         Shepherd PR {pr_key} using the pr-shepherd skill.\n\
+         Read .branchdeck/pr-context.json for PR details.\n"
+    );
+
+    if let Err(e) = std::fs::write(&task_path, &content) {
+        error!("Failed to write orchestrator task: {e}");
+    }
+
+    task_path
+}
+
+/// Execute orchestrator effects. Thin executor — dispatches to services.
+pub async fn execute_effects<R: tauri::Runtime>(
+    effects: Vec<OrchestratorEffect>,
+    orchestrator: &OrchestratorState,
+    run_manager: &crate::services::run_manager::RunManagerState,
+    app_handle: &tauri::AppHandle<R>,
+) {
+    use crate::models::agent::now_ms;
+
+    for effect in effects {
+        match effect {
+            OrchestratorEffect::DispatchSession {
+                pr_key: key,
+                worktree_path,
+                pr_context,
+            } => {
+                // Prepare worktree files
+                write_pr_context(&worktree_path, &pr_context);
+                deploy_skill_file(&worktree_path);
+                let task_path = create_orchestrator_task(&worktree_path, &key);
+
+                // Enqueue via RunManager
+                match crate::services::run_manager::enqueue_run(
+                    std::sync::Arc::clone(run_manager),
+                    app_handle.clone(),
+                    &task_path,
+                    &worktree_path,
+                )
+                .await
+                {
+                    Ok(_status) => {
+                        // Record the running entry with a generated tab_id
+                        let tab_id = uuid::Uuid::new_v4().to_string();
+                        let mut orch = orchestrator.lock().await;
+                        record_running(
+                            &mut orch,
+                            &key,
+                            &worktree_path,
+                            &tab_id,
+                            now_ms(),
+                            1,
+                        );
+                        info!("Dispatched orchestrator session for {key}");
+                    }
+                    Err(e) => {
+                        error!("Failed to dispatch session for {key}: {e}");
+                        // Release claim on failure
+                        let mut orch = orchestrator.lock().await;
+                        orch.claimed.remove(&key);
+                    }
+                }
+            }
+            OrchestratorEffect::StopSession { pr_key: key, .. } => {
+                info!("Stopping session for {key}");
+                // RunManager handles run termination via its own lifecycle
+            }
+            OrchestratorEffect::ScheduleRetry {
+                pr_key: key,
+                delay_ms,
+                ..
+            } => {
+                debug!("Scheduled retry for {key} in {delay_ms}ms");
+                // Retry timers handled by the event loop
+            }
+            OrchestratorEffect::CancelRetry { pr_key: key } => {
+                debug!("Cancelled retry for {key}");
+            }
+            OrchestratorEffect::EmitLifecycleEvent { event } => {
+                if let Err(e) = app_handle.emit("lifecycle:updated", &event) {
+                    error!("Failed to emit lifecycle:updated: {e}");
+                }
+            }
+            OrchestratorEffect::CleanupMetadata { worktree_path } => {
+                let analysis = format!("{worktree_path}/.branchdeck/analysis.json");
+                let context = format!("{worktree_path}/.branchdeck/pr-context.json");
+                let _ = std::fs::remove_file(&analysis);
+                let _ = std::fs::remove_file(&context);
+                debug!("Cleaned up metadata at {worktree_path}");
+            }
+        }
+    }
+}
+
+/// Type alias for orchestrator managed state.
+pub type OrchestratorState = std::sync::Arc<tokio::sync::Mutex<Orchestrator>>;
+
+/// Create orchestrator managed state.
+#[must_use]
+pub fn create_orchestrator_state(
+    config: crate::models::orchestrator::OrchestratorConfig,
+) -> OrchestratorState {
+    std::sync::Arc::new(tokio::sync::Mutex::new(Orchestrator::new(config)))
+}
+
+/// Start the orchestrator event loop as a background tokio task.
+/// Subscribes to EventBus and routes events to pure state machine functions.
+pub fn start_orchestrator<R: tauri::Runtime + 'static>(
+    orchestrator: OrchestratorState,
+    event_bus: std::sync::Arc<crate::services::event_bus::EventBus>,
+    run_manager: crate::services::run_manager::RunManagerState,
+    app_handle: tauri::AppHandle<R>,
+) {
+    tauri::async_runtime::spawn(async move {
+        let mut rx = event_bus.subscribe();
+        info!("Orchestrator event loop started");
+
+        loop {
+            match rx.recv().await {
+                Ok(event) => {
+                    handle_event(
+                        &event,
+                        &orchestrator,
+                        &run_manager,
+                        &app_handle,
+                    )
+                    .await;
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                    error!("Orchestrator event loop lagged by {n} events");
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                    info!("Orchestrator event loop: EventBus closed, shutting down");
+                    break;
+                }
+            }
+        }
+    });
+}
+
+/// Route a single event to the appropriate pure function, then execute effects.
+async fn handle_event<R: tauri::Runtime>(
+    event: &crate::models::agent::Event,
+    orchestrator: &OrchestratorState,
+    run_manager: &crate::services::run_manager::RunManagerState,
+    app_handle: &tauri::AppHandle<R>,
+) {
+    use crate::models::agent::{now_ms, Event};
+
+    match event {
+        Event::PrStatusChanged { repo, prs, .. } => {
+            let effects = {
+                let mut orch = orchestrator.lock().await;
+                if !orch.config.enabled {
+                    return;
+                }
+                let mut effects = apply_pr_event(&mut orch, repo, prs, now_ms());
+                // Also reconcile on every PR update
+                effects.extend(apply_reconciliation(&mut orch, prs));
+                effects
+            };
+            execute_effects(effects, orchestrator, run_manager, app_handle).await;
+        }
+        Event::RunComplete { tab_id, .. } => {
+            let (key, worktree) = {
+                let orch = orchestrator.lock().await;
+                match find_pr_key_by_tab_id(&orch, tab_id) {
+                    Some(k) => {
+                        let wt = orch
+                            .running
+                            .get(&k)
+                            .map(|e| e.worktree_path.clone())
+                            .unwrap_or_default();
+                        (k, wt)
+                    }
+                    None => return, // Not an orchestrator-managed run
+                }
+            };
+
+            let outcome = determine_session_outcome(&worktree);
+            let effects = {
+                let mut orch = orchestrator.lock().await;
+                apply_session_end(&mut orch, &key, outcome, now_ms())
+            };
+            execute_effects(effects, orchestrator, run_manager, app_handle).await;
+        }
+        _ => {} // Other events not handled by orchestrator
+    }
 }

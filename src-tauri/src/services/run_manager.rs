@@ -938,6 +938,52 @@ pub async fn advance_queue<R: tauri::Runtime>(
     Ok(())
 }
 
+/// Enqueue a single run without clearing the existing queue.
+/// Unlike `batch_launch`, this appends non-destructively.
+/// If no run is active, starts immediately.
+///
+/// # Errors
+///
+/// Returns `AppError` if the first run cannot be launched.
+pub async fn enqueue_run<R: tauri::Runtime>(
+    state: RunManagerState,
+    app_handle: tauri::AppHandle<R>,
+    task_path: &str,
+    worktree_path: &str,
+) -> Result<QueueStatus, AppError> {
+    let should_launch = {
+        let mut manager = state.lock().await;
+        manager.run_queue.push_back(QueuedRun {
+            task_path: task_path.to_string(),
+            worktree_path: worktree_path.to_string(),
+        });
+        manager.active_run.is_none()
+    };
+
+    if should_launch {
+        if let Some(next) = {
+            let mut manager = state.lock().await;
+            manager.dequeue_next()
+        } {
+            let options = LaunchOptions {
+                max_turns: None,
+                max_budget_usd: None,
+            };
+            launch_run(
+                Arc::clone(&state),
+                app_handle,
+                &next.task_path,
+                &next.worktree_path,
+                options,
+            )
+            .await?;
+        }
+    }
+
+    let manager = state.lock().await;
+    Ok(manager.get_queue_status())
+}
+
 /// Type alias for the managed state.
 pub type RunManagerState = Arc<Mutex<RunManager>>;
 
