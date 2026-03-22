@@ -160,8 +160,7 @@ pub async fn orchestrator_shepherd_pr_cmd(
     let branch = pr.head.ref_field.clone();
     let base_branch = pr.base.ref_field.clone();
 
-    let worktree_path =
-        crate::services::orchestrator::build_worktree_path(&repo_path, &branch);
+    let worktree_path = crate::services::orchestrator::build_worktree_path(&repo_path, &branch);
 
     let pr_context = crate::models::orchestrator::PrContext {
         repo: full_repo,

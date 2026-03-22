@@ -493,6 +493,17 @@ pub fn apply_skip(state: &mut Orchestrator, pr_key: &str) -> Vec<OrchestratorEff
     state.retry_queue.remove(pr_key);
     state.review_ready.remove(pr_key);
 
+    // Emit terminal lifecycle event so frontend clears the card
+    effects.push(OrchestratorEffect::EmitLifecycleEvent {
+        event: LifecycleEvent {
+            pr_key: pr_key.to_string(),
+            worktree_path: String::new(),
+            status: LifecycleStatus::Completed,
+            attempt: 0,
+            started_at: 0,
+        },
+    });
+
     effects
 }
 
@@ -508,7 +519,11 @@ pub fn build_worktree_path(repo_path: &str, branch: &str) -> String {
     }
     let repo = std::path::Path::new(repo_path);
     let parent = repo.parent().unwrap_or(repo);
-    parent.join("worktrees").join(&sanitized).display().to_string()
+    parent
+        .join("worktrees")
+        .join(&sanitized)
+        .display()
+        .to_string()
 }
 
 /// Calculate retry backoff: `min(FAILURE_BASE_MS` * 2^(attempt-1), `FAILURE_MAX_MS`)
@@ -705,6 +720,23 @@ fn worktree_needs_create(worktree_path: &str, expected_branch: &str) -> bool {
         {
             error!("Failed to remove stale worktree: {e}");
             let _ = std::fs::remove_dir_all(wt_path);
+            // Prune orphaned git worktree registration after fallback removal
+            match std::process::Command::new("git")
+                .args(["worktree", "prune"])
+                .current_dir(repo_base)
+                .output()
+            {
+                Ok(out) if out.status.success() => {
+                    debug!("Pruned orphaned worktree registrations in {repo_base}");
+                }
+                Ok(out) => {
+                    error!(
+                        "git worktree prune failed: {}",
+                        String::from_utf8_lossy(&out.stderr)
+                    );
+                }
+                Err(e) => error!("Failed to run git worktree prune: {e}"),
+            }
         }
     }
 
@@ -731,7 +763,10 @@ async fn execute_dispatch<R: tauri::Runtime>(
             orch.repo_paths.get(&pr_context.repo).cloned()
         };
         let Some(repo_fs_path) = repo_fs_path else {
-            error!("No repo_path mapping for {} — cannot create worktree", pr_context.repo);
+            error!(
+                "No repo_path mapping for {} — cannot create worktree",
+                pr_context.repo
+            );
             orchestrator.lock().await.claimed.remove(key);
             return;
         };
@@ -774,15 +809,13 @@ async fn execute_dispatch<R: tauri::Runtime>(
     .await
     {
         Ok(_status) => {
-            // Read tab_id from active run. Phase A is sequential (one active run),
-            // so the active run is ours. Phase B (concurrent) will need RunManager
-            // to return tab_id from enqueue_run directly.
-            let rm = run_manager.lock().await;
-            let tab_id = rm
-                .get_status()
+            // Read tab_id from run.json saved by launch_run for THIS task
+            let tab_id = crate::services::run_state::load_run_state(worktree_path)
                 .and_then(|r| r.tab_id)
-                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-            drop(rm);
+                .unwrap_or_else(|| {
+                    error!("No tab_id in run.json for {key} — fallback to UUID");
+                    uuid::Uuid::new_v4().to_string()
+                });
             let mut orch = orchestrator.lock().await;
             record_running(
                 &mut orch,
