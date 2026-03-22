@@ -421,7 +421,10 @@ export function RepoSidebar() {
                 {
                   label: 'Delete Worktree',
                   variant: 'danger',
-                  onClick: () => setDeleteTarget({ repoPath: menu().repoPath, wt: menu().wt }),
+                  onClick: () => {
+                    const target = { repoPath: menu().repoPath, wt: menu().wt };
+                    setTimeout(() => setDeleteTarget(target), 50);
+                  },
                 },
               ]}
               onClose={() => setWtContextMenu(null)}
