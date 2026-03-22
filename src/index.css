@@ -169,7 +169,7 @@ body,
 }
 
 .z-button-variant-outline {
-  @apply border border-input bg-background shadow-xs hover:bg-accent hover:text-accent-foreground;
+  @apply border border-muted-foreground/30 bg-background shadow-xs hover:bg-accent hover:text-accent-foreground;
 }
 
 .z-button-variant-secondary {
