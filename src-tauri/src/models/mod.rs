@@ -10,5 +10,6 @@ pub use session::{PtyEvent, PtySession, SessionId};
 pub mod agent;
 pub mod github;
 pub mod knowledge;
+pub mod orchestrator;
 pub mod run;
 pub mod task;
