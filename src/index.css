@@ -267,6 +267,143 @@ body,
   @apply text-xs font-medium leading-none;
 }
 
+/* Accordion */
+.z-accordion-item {
+  @apply not-last:border-b;
+}
+
+.z-accordion-trigger {
+  @apply focus-visible:ring-ring/50 focus-visible:border-ring **:data-[slot=accordion-trigger-icon]:text-muted-foreground rounded-none py-2.5 text-left text-xs font-medium hover:underline focus-visible:ring-1 **:data-[slot=accordion-trigger-icon]:ml-auto **:data-[slot=accordion-trigger-icon]:size-4;
+}
+
+.z-accordion-content {
+  @apply text-xs overflow-hidden;
+}
+
+.z-accordion-content-inner {
+  @apply pt-0 pb-2.5;
+}
+
+/* Breadcrumb */
+.z-breadcrumb-list {
+  @apply text-muted-foreground gap-1.5 text-xs;
+}
+
+.z-breadcrumb-item {
+  @apply gap-1;
+}
+
+.z-breadcrumb-link {
+  @apply hover:text-foreground transition-colors;
+}
+
+.z-breadcrumb-page {
+  @apply text-foreground font-normal;
+}
+
+.z-breadcrumb-separator {
+  @apply [&>svg]:size-3.5;
+}
+
+.z-breadcrumb-ellipsis {
+  @apply size-5 [&>svg]:size-4;
+}
+
+/* Context Menu */
+.z-context-menu-content {
+  @apply ring-foreground/10 bg-popover text-popover-foreground min-w-36 rounded-none shadow-md ring-1 duration-100;
+}
+
+.z-context-menu-item {
+  @apply focus:bg-accent focus:text-accent-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 gap-2 rounded-none px-2 py-2 text-xs [&_svg:not([class*='size-'])]:size-4;
+}
+
+.z-context-menu-checkbox-item {
+  @apply focus:bg-accent focus:text-accent-foreground gap-2 rounded-none py-2 pr-8 pl-2 text-xs [&_svg:not([class*='size-'])]:size-4;
+}
+
+.z-context-menu-radio-item {
+  @apply focus:bg-accent focus:text-accent-foreground gap-2 rounded-none py-2 pr-8 pl-2 text-xs [&_svg:not([class*='size-'])]:size-4;
+}
+
+.z-context-menu-item-indicator {
+  @apply absolute right-2;
+}
+
+.z-context-menu-label {
+  @apply text-muted-foreground px-2 py-2 text-xs;
+}
+
+.z-context-menu-separator {
+  @apply bg-border -mx-1 h-px;
+}
+
+.z-context-menu-shortcut {
+  @apply text-muted-foreground ml-auto text-xs tracking-widest;
+}
+
+/* Command */
+.z-command {
+  @apply bg-popover text-popover-foreground rounded-none;
+}
+
+.z-command-input-wrapper {
+  @apply border-b pb-0;
+}
+
+.z-command-input-group {
+  @apply bg-input/30 border-input/30 h-8 border-none shadow-none;
+}
+
+.z-command-input-icon {
+  @apply size-4 shrink-0 opacity-50;
+}
+
+.z-command-input {
+  @apply w-full text-xs;
+}
+
+.z-command-list {
+  @apply max-h-72 scroll-py-0 outline-none overflow-y-auto;
+}
+
+.z-command-empty {
+  @apply py-4 text-center text-xs;
+}
+
+.z-command-group {
+  @apply p-1 [&_[data-slot=command-group-heading]]:text-muted-foreground [&_[data-slot=command-group-heading]]:px-2 [&_[data-slot=command-group-heading]]:py-1 [&_[data-slot=command-group-heading]]:text-xs [&_[data-slot=command-group-heading]]:font-medium;
+}
+
+.z-command-item {
+  @apply data-highlighted:bg-accent data-highlighted:text-accent-foreground [&_svg:not([class*='size-'])]:size-4 gap-2 rounded-none px-2 py-2 text-xs select-none;
+}
+
+.z-command-shortcut {
+  @apply text-muted-foreground ml-auto text-xs tracking-widest;
+}
+
+.z-command-separator {
+  @apply bg-border -mx-1 h-px;
+}
+
+/* Input Group */
+.z-input-group {
+  @apply border-input has-[[data-slot=input-group-control]:focus-visible]:border-ring has-[[data-slot=input-group-control]:focus-visible]:ring-ring/50 h-8 rounded-none border transition-colors has-disabled:opacity-50 has-[[data-slot=input-group-control]:focus-visible]:ring-1;
+}
+
+.z-input-group-addon {
+  @apply text-muted-foreground h-auto gap-2 py-1.5 text-xs font-medium [&>svg:not([class*='size-'])]:size-4;
+}
+
+.z-input-group-addon-align-inline-start {
+  @apply pl-2;
+}
+
+.z-input-group-addon-align-inline-end {
+  @apply pr-2;
+}
+
 /* ── Override solid-resizable-panels handle defaults ── */
 .ResizeablePanelGroup .ResizeablePanelGroup-ResizeHandle {
   background-color: transparent;
