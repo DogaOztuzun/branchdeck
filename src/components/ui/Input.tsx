@@ -10,7 +10,7 @@ export function Input(props: InputProps) {
     <input
       {...props}
       class={cn(
-        'text-xs px-3 py-1.5 bg-bg-main border border-border-subtle text-text-main',
+        'text-base px-3 py-1.5 bg-bg-main border border-border-subtle text-text-main',
         'placeholder:text-text-dim',
         'focus:outline-1 focus:outline-accent-primary focus:border-accent-primary',
         props.class,

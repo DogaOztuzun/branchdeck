@@ -120,17 +120,17 @@ export function BranchWorktreeModal(props: BranchWorktreeModalProps) {
         />
 
         <Show when={loading()}>
-          <div class="mt-3 text-xs text-text-dim">Loading branches...</div>
+          <div class="mt-3 text-base text-text-dim">Loading branches...</div>
         </Show>
 
         <Show
           when={!loading() && !error() && filteredBranches().length === 0 && branches().length > 0}
         >
-          <div class="mt-3 text-xs text-text-dim">No branches match your search.</div>
+          <div class="mt-3 text-base text-text-dim">No branches match your search.</div>
         </Show>
 
         <Show when={!loading() && !error() && branches().length === 0}>
-          <div class="mt-3 text-xs text-text-dim">No branches found.</div>
+          <div class="mt-3 text-base text-text-dim">No branches found.</div>
         </Show>
 
         <Show when={!loading() && filteredBranches().length > 0}>
@@ -140,7 +140,7 @@ export function BranchWorktreeModal(props: BranchWorktreeModalProps) {
                 <button
                   type="button"
                   disabled={branch.hasWorktree}
-                  class={`flex items-center gap-2 w-full px-3 py-1.5 text-xs text-left cursor-pointer ${
+                  class={`flex items-center gap-2 w-full px-3 py-1.5 text-base text-left cursor-pointer ${
                     branch.hasWorktree
                       ? 'opacity-50 cursor-not-allowed'
                       : selected() === branch.name
@@ -156,10 +156,12 @@ export function BranchWorktreeModal(props: BranchWorktreeModalProps) {
                   <span class="truncate">{branch.name}</span>
                   <span class="ml-auto flex gap-1 shrink-0">
                     <Show when={branch.isRemote}>
-                      <span class="px-1.5 py-0.5 text-xs text-text-dim bg-bg-main">remote</span>
+                      <span class="px-1.5 py-0.5 text-base text-text-dim bg-bg-main">remote</span>
                     </Show>
                     <Show when={branch.hasWorktree}>
-                      <span class="px-1.5 py-0.5 text-xs text-accent-info bg-bg-main">in use</span>
+                      <span class="px-1.5 py-0.5 text-base text-accent-info bg-bg-main">
+                        in use
+                      </span>
                     </Show>
                   </span>
                 </button>
@@ -169,7 +171,7 @@ export function BranchWorktreeModal(props: BranchWorktreeModalProps) {
         </Show>
 
         <Show when={selectedBranch()}>
-          <div class="mt-3 space-y-1.5 text-xs">
+          <div class="mt-3 space-y-1.5 text-base">
             <div class="flex gap-2">
               <span class="text-text-dim">Branch:</span>
               <span class="text-text-main">{selectedBranch()?.name}</span>
@@ -182,13 +184,13 @@ export function BranchWorktreeModal(props: BranchWorktreeModalProps) {
         </Show>
 
         <Show when={error()}>
-          <p class="mt-2 text-xs text-accent-error">{error()}</p>
+          <p class="mt-2 text-base text-accent-error">{error()}</p>
         </Show>
 
         <div class="mt-4 flex justify-end gap-2">
           <button
             type="button"
-            class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
+            class="px-3 py-1.5 text-base text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
             onClick={() => props.onClose()}
           >
             Cancel
@@ -196,7 +198,7 @@ export function BranchWorktreeModal(props: BranchWorktreeModalProps) {
           <button
             type="button"
             disabled={isCreateDisabled()}
-            class="px-3 py-1.5 text-xs bg-accent-primary text-bg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+            class="px-3 py-1.5 text-base bg-accent-primary text-bg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
             onClick={handleCreate}
           >
             {creating() ? 'Creating...' : 'Create Worktree'}

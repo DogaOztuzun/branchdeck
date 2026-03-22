@@ -25,27 +25,27 @@ export function ApprovalBanner() {
               Permission
             </span>
             <Show when={totalPending() > 1}>
-              <span class="text-xs text-text-dim">({totalPending()})</span>
+              <span class="text-base text-text-dim">({totalPending()})</span>
             </Show>
-            <span class="text-xs font-mono text-accent-info truncate">
+            <span class="text-base font-mono text-accent-info truncate">
               {perm().tool ?? 'unknown'}
             </span>
             <Show when={perm().command}>
-              <span class="text-xs text-text-dim font-mono truncate max-w-xs">
+              <span class="text-base text-text-dim font-mono truncate max-w-xs">
                 {perm().command}
               </span>
             </Show>
             <div class="ml-auto flex items-center gap-1.5 shrink-0">
               <button
                 type="button"
-                class="px-2 py-0.5 text-xs font-medium text-green-400 border border-green-400/30 hover:bg-green-400/10 cursor-pointer"
+                class="px-2 py-0.5 text-base font-medium text-green-400 border border-green-400/30 hover:bg-green-400/10 cursor-pointer"
                 onClick={() => handleRespond('approve')}
               >
                 Approve
               </button>
               <button
                 type="button"
-                class="px-2 py-0.5 text-xs font-medium text-red-400 border border-red-400/30 hover:bg-red-400/10 cursor-pointer"
+                class="px-2 py-0.5 text-base font-medium text-red-400 border border-red-400/30 hover:bg-red-400/10 cursor-pointer"
                 onClick={() => handleRespond('deny')}
               >
                 Deny

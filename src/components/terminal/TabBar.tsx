@@ -33,7 +33,7 @@ export function TabBar(props: TabBarProps) {
                 type="button"
                 onClick={() => props.onSelectTab(tab.id)}
                 class={cn(
-                  'flex items-center gap-2 px-4 h-full text-xs font-medium border-r border-border-subtle transition-colors duration-150 cursor-pointer',
+                  'flex items-center gap-2 px-4 h-full text-base font-medium border-r border-border-subtle transition-colors duration-150 cursor-pointer',
                   isActive()
                     ? 'bg-bg-main text-accent-primary border-t border-t-accent-primary'
                     : 'text-text-dim hover:text-text-main hover:bg-bg-main/50',
@@ -62,7 +62,7 @@ export function TabBar(props: TabBarProps) {
       <div class="relative">
         <button
           type="button"
-          class="px-3 h-full text-xs text-text-dim hover:text-text-main cursor-pointer"
+          class="px-3 h-full text-base text-text-dim hover:text-text-main cursor-pointer"
           onClick={() => setMenuOpen(!menuOpen())}
         >
           +
@@ -71,7 +71,7 @@ export function TabBar(props: TabBarProps) {
           <div class="absolute right-0 top-full z-50 bg-bg-sidebar border border-border-subtle shadow-lg min-w-40">
             <button
               type="button"
-              class="block w-full text-left px-3 py-2 text-xs text-text-main hover:bg-bg-main cursor-pointer"
+              class="block w-full text-left px-3 py-2 text-base text-text-main hover:bg-bg-main cursor-pointer"
               onClick={() => {
                 props.onNewShell();
                 setMenuOpen(false);
@@ -82,7 +82,7 @@ export function TabBar(props: TabBarProps) {
             </button>
             <button
               type="button"
-              class="block w-full text-left px-3 py-2 text-xs text-text-main hover:bg-bg-main cursor-pointer"
+              class="block w-full text-left px-3 py-2 text-base text-text-main hover:bg-bg-main cursor-pointer"
               onClick={() => {
                 props.onNewClaude();
                 setMenuOpen(false);
@@ -97,14 +97,14 @@ export function TabBar(props: TabBarProps) {
                 {(preset) => (
                   <button
                     type="button"
-                    class="flex items-center gap-2 w-full text-left px-3 py-2 text-xs text-text-main hover:bg-bg-main cursor-pointer"
+                    class="flex items-center gap-2 w-full text-left px-3 py-2 text-base text-text-main hover:bg-bg-main cursor-pointer"
                     onClick={() => {
                       props.onRunPreset(preset);
                       setMenuOpen(false);
                     }}
                   >
                     <span>{preset.name}</span>
-                    <span class="ml-auto text-text-dim text-xs">{preset.tabType}</span>
+                    <span class="ml-auto text-text-dim text-base">{preset.tabType}</span>
                   </button>
                 )}
               </For>
@@ -112,7 +112,7 @@ export function TabBar(props: TabBarProps) {
             <div class="border-t border-border-subtle my-1" />
             <button
               type="button"
-              class="block w-full text-left px-3 py-2 text-xs text-text-dim hover:text-text-main hover:bg-bg-main cursor-pointer"
+              class="block w-full text-left px-3 py-2 text-base text-text-dim hover:text-text-main hover:bg-bg-main cursor-pointer"
               onClick={() => {
                 props.onManagePresets();
                 setMenuOpen(false);

@@ -143,7 +143,7 @@ export function PrTooltip(props: PrTooltipProps) {
     <Portal>
       {/* biome-ignore lint/a11y/noStaticElementInteractions: tooltip hover behavior, not interactive content */}
       <div
-        class="fixed z-50 max-w-[320px] border border-border bg-popover text-popover-foreground p-3 text-xs shadow-lg space-y-2"
+        class="fixed z-50 max-w-[320px] border border-border bg-popover text-popover-foreground p-3 text-base shadow-lg space-y-2"
         style={{
           top: `${position().top}px`,
           left: `${position().left}px`,
@@ -165,7 +165,7 @@ export function PrTooltip(props: PrTooltipProps) {
             <span class="font-semibold">PR #{props.pr.number}</span>
           )}
           <span
-            class="px-1.5 py-0.5 text-xs font-medium leading-none"
+            class="px-1.5 py-0.5 text-base font-medium leading-none"
             style={{
               'background-color': stateColor(props.pr.state, props.pr.isDraft),
               color: '#1a1b26',
@@ -181,10 +181,10 @@ export function PrTooltip(props: PrTooltipProps) {
 
         {/* Reviews section */}
         <div>
-          <h4 class="mb-1 text-xs font-semibold text-muted-foreground">Reviews</h4>
+          <h4 class="mb-1 text-base font-semibold text-muted-foreground">Reviews</h4>
           {props.pr.reviewDecision && (
             <span
-              class="mb-1 inline-block px-1.5 py-0.5 text-xs font-medium leading-none"
+              class="mb-1 inline-block px-1.5 py-0.5 text-base font-medium leading-none"
               style={{
                 'background-color': reviewColor(props.pr.reviewDecision),
                 color: '#1a1b26',
@@ -228,7 +228,7 @@ export function PrTooltip(props: PrTooltipProps) {
 
         {/* Checks section */}
         <div>
-          <h4 class="mb-1 text-xs font-semibold text-muted-foreground">Checks</h4>
+          <h4 class="mb-1 text-base font-semibold text-muted-foreground">Checks</h4>
           {props.pr.checks.length === 0 ? (
             <p class="text-muted-foreground">No checks</p>
           ) : (

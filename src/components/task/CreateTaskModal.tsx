@@ -96,7 +96,7 @@ export function CreateTaskModal(props: CreateTaskModalProps) {
 
         <form onSubmit={handleCreate}>
           <div>
-            <span class="text-xs text-text-dim">Task type</span>
+            <span class="text-base text-text-dim">Task type</span>
             <div class="mt-1">
               <Select
                 options={['issue-fix', 'pr-shepherd'] as TaskType[]}
@@ -123,7 +123,7 @@ export function CreateTaskModal(props: CreateTaskModalProps) {
 
           <Show when={isPrShepherd()}>
             <div class="mt-2">
-              <label class="text-xs text-text-dim" for="pr-number-input">
+              <label class="text-base text-text-dim" for="pr-number-input">
                 PR number
               </label>
               <input
@@ -139,7 +139,7 @@ export function CreateTaskModal(props: CreateTaskModalProps) {
           </Show>
 
           <div class="mt-2">
-            <label class="text-xs text-text-dim" for="task-description">
+            <label class="text-base text-text-dim" for="task-description">
               Description
             </label>
             <textarea
@@ -152,7 +152,7 @@ export function CreateTaskModal(props: CreateTaskModalProps) {
             />
           </div>
 
-          <div class="mt-3 space-y-1.5 text-xs">
+          <div class="mt-3 space-y-1.5 text-base">
             <div class="flex gap-2">
               <span class="text-text-dim">Repo:</span>
               <span class="text-text-main truncate">{props.repo}</span>
@@ -164,13 +164,13 @@ export function CreateTaskModal(props: CreateTaskModalProps) {
           </div>
 
           <Show when={error()}>
-            <p class="mt-2 text-xs text-accent-error">{error()}</p>
+            <p class="mt-2 text-base text-accent-error">{error()}</p>
           </Show>
 
           <div class="mt-4 flex justify-end gap-2">
             <button
               type="button"
-              class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
+              class="px-3 py-1.5 text-base text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
               onClick={() => props.onClose()}
             >
               Cancel
@@ -178,7 +178,7 @@ export function CreateTaskModal(props: CreateTaskModalProps) {
             <button
               type="submit"
               disabled={isCreateDisabled()}
-              class="px-3 py-1.5 text-xs bg-accent-primary text-bg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+              class="px-3 py-1.5 text-base bg-accent-primary text-bg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
             >
               {creating() ? 'Creating...' : 'Create Task'}
             </button>

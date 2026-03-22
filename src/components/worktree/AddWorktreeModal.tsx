@@ -136,7 +136,7 @@ export function AddWorktreeModal(props: AddWorktreeModalProps) {
 
           <Show when={localBranches().length > 0}>
             <div class="mt-2">
-              <span class="text-xs text-text-dim">Base branch</span>
+              <span class="text-base text-text-dim">Base branch</span>
               <div class="mt-1">
                 <Select
                   options={localBranches().map((b) => b.name)}
@@ -156,7 +156,7 @@ export function AddWorktreeModal(props: AddWorktreeModalProps) {
             </div>
           </Show>
 
-          <div class="mt-3 space-y-1.5 text-xs">
+          <div class="mt-3 space-y-1.5 text-base">
             <div class="flex gap-2">
               <span class="text-text-dim">Base:</span>
               <span class="text-text-main">{baseBranch() || preview()?.baseBranch || '—'}</span>
@@ -184,13 +184,13 @@ export function AddWorktreeModal(props: AddWorktreeModalProps) {
           </div>
 
           <Show when={error()}>
-            <p class="mt-2 text-xs text-accent-error">{error()}</p>
+            <p class="mt-2 text-base text-accent-error">{error()}</p>
           </Show>
 
           <div class="mt-4 flex justify-end gap-2">
             <button
               type="button"
-              class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
+              class="px-3 py-1.5 text-base text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
               onClick={() => props.onClose()}
             >
               Cancel
@@ -198,7 +198,7 @@ export function AddWorktreeModal(props: AddWorktreeModalProps) {
             <button
               type="submit"
               disabled={isCreateDisabled()}
-              class="px-3 py-1.5 text-xs bg-accent-primary text-bg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+              class="px-3 py-1.5 text-base bg-accent-primary text-bg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
             >
               {creating() ? 'Creating...' : 'Create Worktree'}
             </button>

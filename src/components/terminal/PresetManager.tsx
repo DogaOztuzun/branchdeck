@@ -140,10 +140,10 @@ export function PresetManager(props: PresetManagerProps) {
               <Show
                 when={editingIndex() === i()}
                 fallback={
-                  <div class="flex items-center justify-between px-3 py-2 text-xs border-b border-border-subtle">
+                  <div class="flex items-center justify-between px-3 py-2 text-base border-b border-border-subtle">
                     <div>
                       <span class="text-text-main">{preset.name}</span>
-                      <span class="ml-2 text-text-dim text-xs">{preset.tabType}</span>
+                      <span class="ml-2 text-text-dim text-base">{preset.tabType}</span>
                     </div>
                     <div class="flex gap-2">
                       <button
@@ -206,7 +206,7 @@ export function PresetManager(props: PresetManagerProps) {
                   <div class="flex justify-end gap-2">
                     <button
                       type="button"
-                      class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
+                      class="px-3 py-1.5 text-base text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
                       onClick={() => resetForm()}
                     >
                       Cancel
@@ -214,7 +214,7 @@ export function PresetManager(props: PresetManagerProps) {
                     <button
                       type="button"
                       disabled={saving() || !form().name.trim()}
-                      class="px-3 py-1.5 text-xs bg-accent-primary text-bg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+                      class="px-3 py-1.5 text-base bg-accent-primary text-bg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
                       onClick={() => handleSaveEdit(i())}
                     >
                       {saving() ? 'Saving...' : 'Save'}
@@ -227,11 +227,11 @@ export function PresetManager(props: PresetManagerProps) {
         </div>
 
         <Show when={presets().length === 0 && !adding()}>
-          <p class="text-xs text-text-dim py-4 text-center">No presets yet</p>
+          <p class="text-base text-text-dim py-4 text-center">No presets yet</p>
         </Show>
 
         <Show when={error()}>
-          <p class="mt-2 text-xs text-accent-error">{error()}</p>
+          <p class="mt-2 text-base text-accent-error">{error()}</p>
         </Show>
 
         <Show
@@ -239,7 +239,7 @@ export function PresetManager(props: PresetManagerProps) {
           fallback={
             <button
               type="button"
-              class="mt-3 w-full px-3 py-1.5 text-xs border border-border-subtle text-text-dim hover:text-text-main hover:border-accent-primary cursor-pointer"
+              class="mt-3 w-full px-3 py-1.5 text-base border border-border-subtle text-text-dim hover:text-text-main hover:border-accent-primary cursor-pointer"
               onClick={() => startAdd()}
             >
               + Add Preset
@@ -288,7 +288,7 @@ export function PresetManager(props: PresetManagerProps) {
             <div class="flex justify-end gap-2">
               <button
                 type="button"
-                class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
+                class="px-3 py-1.5 text-base text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
                 onClick={() => resetForm()}
               >
                 Cancel
@@ -296,7 +296,7 @@ export function PresetManager(props: PresetManagerProps) {
               <button
                 type="button"
                 disabled={saving() || !form().name.trim()}
-                class="px-3 py-1.5 text-xs bg-accent-primary text-bg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+                class="px-3 py-1.5 text-base bg-accent-primary text-bg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
                 onClick={() => handleSaveNew()}
               >
                 {saving() ? 'Saving...' : 'Add Preset'}
@@ -308,7 +308,7 @@ export function PresetManager(props: PresetManagerProps) {
         <div class="mt-4 flex justify-end">
           <button
             type="button"
-            class="px-3 py-1.5 text-xs text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
+            class="px-3 py-1.5 text-base text-text-dim hover:text-text-main cursor-pointer hover:bg-bg-main/50"
             onClick={() => props.onClose()}
           >
             Close

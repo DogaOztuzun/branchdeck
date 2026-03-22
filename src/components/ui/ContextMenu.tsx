@@ -41,7 +41,7 @@ export function ContextMenu(props: ContextMenuProps) {
           {(item) => (
             <button
               type="button"
-              class={`block w-full text-left px-3 py-1.5 text-xs cursor-pointer ${
+              class={`block w-full text-left px-3 py-1.5 text-base cursor-pointer ${
                 item.variant === 'danger'
                   ? 'text-accent-error hover:bg-accent-error/10'
                   : 'text-text-main hover:bg-bg-main/50'

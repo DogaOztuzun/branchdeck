@@ -29,16 +29,16 @@ function CiBadge(props: { status: string | null }) {
   return (
     <Switch>
       <Match when={props.status === 'failing'}>
-        <span class="text-xs font-medium text-red-400">failing</span>
+        <span class="text-base font-medium text-red-400">failing</span>
       </Match>
       <Match when={props.status === 'pending'}>
-        <span class="text-xs font-medium text-yellow-400">pending</span>
+        <span class="text-base font-medium text-yellow-400">pending</span>
       </Match>
       <Match when={props.status === 'passing'}>
-        <span class="text-xs font-medium text-green-400">passing</span>
+        <span class="text-base font-medium text-green-400">passing</span>
       </Match>
       <Match when={!props.status}>
-        <span class="text-xs text-text-dim">no CI</span>
+        <span class="text-base text-text-dim">no CI</span>
       </Match>
     </Switch>
   );
@@ -49,7 +49,7 @@ function ReviewBadge(props: { decision: string | null }) {
     <Show when={props.decision}>
       {(d) => (
         <span
-          class={`text-xs font-medium ${d() === 'changes_requested' ? 'text-orange-400' : d() === 'approved' ? 'text-green-400' : 'text-text-dim'}`}
+          class={`text-base font-medium ${d() === 'changes_requested' ? 'text-orange-400' : d() === 'approved' ? 'text-green-400' : 'text-text-dim'}`}
         >
           {d() === 'changes_requested' ? 'changes req.' : d()}
         </span>
@@ -314,9 +314,9 @@ export function PrList() {
             </div>
           </Match>
           <Match when={filteredPrs().length === 0}>
-            <div class="text-xs text-text-dim text-center px-3 py-6">
+            <div class="text-base text-text-dim text-center px-3 py-6">
               <p>No open PRs found</p>
-              <p class="mt-2 text-xs opacity-70">
+              <p class="mt-2 text-base opacity-70">
                 Add a repository with open pull requests to get started
               </p>
             </div>
@@ -325,7 +325,7 @@ export function PrList() {
             <div class="divide-y divide-border-subtle/30">
               <For each={filteredPrs()}>
                 {(pr) => (
-                  <div class="px-3 py-2 text-xs hover:bg-bg-main/30 transition-colors duration-150">
+                  <div class="px-3 py-2 text-base hover:bg-bg-main/30 transition-colors duration-150">
                     <div class="flex items-start gap-1.5">
                       <Checkbox
                         class="shrink-0 mt-0.5"
@@ -339,11 +339,11 @@ export function PrList() {
                         class="min-w-0 hover:underline"
                         title={pr.title}
                       >
-                        <span class="text-xs font-medium text-accent-primary">#{pr.number}</span>{' '}
-                        <span class="text-xs text-text-main">{pr.title}</span>
+                        <span class="text-base font-medium text-accent-primary">#{pr.number}</span>{' '}
+                        <span class="text-base text-text-main">{pr.title}</span>
                       </a>
                     </div>
-                    <div class="flex items-center gap-2 mt-1 text-xs text-text-dim pl-5">
+                    <div class="flex items-center gap-2 mt-1 text-base text-text-dim pl-5">
                       <span class="truncate">{pr.repoName}</span>
                       <CiBadge status={pr.ciStatus} />
                       <ReviewBadge decision={pr.reviewDecision} />
@@ -358,10 +358,10 @@ export function PrList() {
                       </Show>
                     </div>
                     <div class="flex items-center justify-between mt-1 pl-5">
-                      <span class="text-xs text-text-dim">{pr.author}</span>
+                      <span class="text-base text-text-dim">{pr.author}</span>
                       <button
                         type="button"
-                        class={`text-xs font-medium px-2 py-0.5 border cursor-pointer transition-colors duration-150 ${
+                        class={`text-base font-medium px-2 py-0.5 border cursor-pointer transition-colors duration-150 ${
                           shepherding() === pr.number
                             ? 'border-accent-primary/30 text-accent-primary/50 bg-accent-primary/5'
                             : 'border-border-subtle text-text-dim hover:text-accent-primary hover:border-accent-primary/50 hover:bg-accent-primary/5'
@@ -383,7 +383,7 @@ export function PrList() {
 
       {/* Error display */}
       <Show when={error()}>
-        <div class="px-3 py-1.5 text-xs text-accent-error border-t border-border-subtle/50">
+        <div class="px-3 py-1.5 text-base text-accent-error border-t border-border-subtle/50">
           {error()}
         </div>
       </Show>

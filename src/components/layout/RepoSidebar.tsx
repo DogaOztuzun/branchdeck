@@ -210,7 +210,7 @@ export function RepoSidebar() {
                 <button
                   type="button"
                   class={cn(
-                    'flex items-center w-full px-3 py-1 text-xs cursor-pointer hover:bg-bg-main/50 gap-1.5 transition-colors duration-150',
+                    'flex items-center w-full px-3 py-1 text-base cursor-pointer hover:bg-bg-main/50 gap-1.5 transition-colors duration-150',
                     isActive() ? 'text-accent-primary' : 'text-text-main',
                   )}
                   onClick={async () => {
@@ -231,7 +231,7 @@ export function RepoSidebar() {
                     class={cn(isActive() ? 'text-accent-primary' : 'text-text-dim', 'shrink-0')}
                   />
                   <span class="truncate font-medium">{repo.name}</span>
-                  <span class="ml-auto text-xs text-accent-info shrink-0 max-w-[50%] truncate text-right">
+                  <span class="ml-auto text-base text-accent-info shrink-0 max-w-[50%] truncate text-right">
                     {repo.currentBranch}
                   </span>
                 </button>
@@ -242,7 +242,7 @@ export function RepoSidebar() {
                         <button
                           type="button"
                           class={cn(
-                            'flex items-center w-full px-3 py-1 text-xs cursor-pointer hover:bg-bg-main/50 group gap-1.5 transition-colors duration-150',
+                            'flex items-center w-full px-3 py-1 text-base cursor-pointer hover:bg-bg-main/50 group gap-1.5 transition-colors duration-150',
                             repoStore.state.activeWorktreePath === wt.path
                               ? 'text-accent-info'
                               : 'text-text-dim',
@@ -283,7 +283,7 @@ export function RepoSidebar() {
                             if (!tracking || (tracking.ahead === 0 && tracking.behind === 0))
                               return null;
                             return (
-                              <span class="ml-auto flex gap-1 text-xs shrink-0">
+                              <span class="ml-auto flex gap-1 text-base shrink-0">
                                 {tracking.ahead > 0 && (
                                   <span class="text-accent-success">
                                     {'\u2191'}
@@ -318,7 +318,7 @@ export function RepoSidebar() {
                     </For>
                     <button
                       type="button"
-                      class="w-full flex items-center gap-1.5 px-3 py-1 text-xs text-text-dim hover:text-text-main cursor-pointer text-left hover:bg-bg-main/50 transition-colors duration-150"
+                      class="w-full flex items-center gap-1.5 px-3 py-1 text-base text-text-dim hover:text-text-main cursor-pointer text-left hover:bg-bg-main/50 transition-colors duration-150"
                       onClick={() => setAddWorktreeRepo(repo.path)}
                     >
                       <Plus size={12} />
@@ -332,7 +332,7 @@ export function RepoSidebar() {
         </For>
       </div>
       <Show when={deleteError()}>
-        <div class="px-3 py-2 text-xs text-accent-error border-t border-border-subtle">
+        <div class="px-3 py-2 text-base text-accent-error border-t border-border-subtle">
           {deleteError()}
           <button
             type="button"

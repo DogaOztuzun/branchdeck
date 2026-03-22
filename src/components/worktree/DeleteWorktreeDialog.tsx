@@ -33,13 +33,13 @@ export function DeleteWorktreeDialog(props: DeleteWorktreeDialogProps) {
           </DialogTitle>
         </DialogHeader>
 
-        <p class="mt-2 text-xs text-text-dim">
+        <p class="mt-2 text-base text-text-dim">
           Deleting will permanently remove the worktree directory from disk.
         </p>
 
         <div class="flex items-center gap-2 mt-4">
           <Checkbox checked={deleteBranch()} onChange={(checked) => setDeleteBranch(checked)} />
-          <CheckboxLabel class="text-xs text-text-main cursor-pointer">
+          <CheckboxLabel class="text-base text-text-main cursor-pointer">
             Also delete local branch
           </CheckboxLabel>
         </div>

@@ -10,14 +10,16 @@
     "JetBrains Mono", "Fira Code", "Cascadia Code", ui-monospace, SFMono-Regular, monospace;
 
   /* ── Font scale (aligned to DESIGN.md) ── */
-  --font-size-xs: 13px;
-  --font-size-xs--line-height: 1.6;
-  --font-size-sm: 16px;
-  --font-size-sm--line-height: 1.5;
-  --font-size-base: 16px;
-  --font-size-base--line-height: 1.5;
-  --font-size-lg: 20px;
-  --font-size-lg--line-height: 1.4;
+  --text-xs: 10px;
+  --text-xs--line-height: 1.4;
+  --text-sm: 12px;
+  --text-sm--line-height: 1.5;
+  --text-base: 13px;
+  --text-base--line-height: 1.6;
+  --text-lg: 16px;
+  --text-lg--line-height: 1.5;
+  --text-xl: 20px;
+  --text-xl--line-height: 1.4;
 
   /* ── Branchdeck palette (Tokyo Night — aligned to VS Code theme) ── */
   --color-bg-main: #1a1b26;
@@ -121,7 +123,7 @@ body,
 }
 
 .z-select-label {
-  @apply text-muted-foreground px-2 py-1 text-xs font-medium;
+  @apply text-muted-foreground px-2 py-1 text-base font-medium;
 }
 
 /* Dialog */
@@ -146,7 +148,7 @@ body,
 }
 
 .z-dialog-description {
-  @apply text-muted-foreground text-xs;
+  @apply text-muted-foreground text-base;
 }
 
 .z-dialog-close-button {
@@ -155,7 +157,7 @@ body,
 
 /* Button */
 .z-button {
-  @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-none text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0;
+  @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-none text-base font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0;
 }
 
 .z-button-variant-default {
@@ -200,7 +202,7 @@ body,
 
 /* Badge */
 .z-badge {
-  @apply h-5 gap-1 rounded-none border border-transparent px-2 py-0.5 text-xs font-medium transition-all [&>svg]:size-3;
+  @apply h-5 gap-1 rounded-none border border-transparent px-2 py-0.5 text-base font-medium transition-all [&>svg]:size-3;
 }
 
 .z-badge-variant-default {
@@ -243,7 +245,7 @@ body,
 }
 
 .z-tabs-trigger {
-  @apply data-selected:bg-bg-main data-selected:text-foreground rounded-none border-x border-t border-transparent px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground data-selected:border-border cursor-pointer;
+  @apply data-selected:bg-bg-main data-selected:text-foreground rounded-none border-x border-t border-transparent px-3 py-1.5 text-base text-muted-foreground transition-colors hover:text-foreground data-selected:border-border cursor-pointer;
 }
 
 .z-tabs-content {
@@ -252,7 +254,7 @@ body,
 
 /* Tooltip */
 .z-tooltip-content {
-  @apply bg-popover text-popover-foreground z-50 overflow-hidden rounded-none border px-2 py-1.5 text-xs shadow-md;
+  @apply bg-popover text-popover-foreground z-50 overflow-hidden rounded-none border px-2 py-1.5 text-base shadow-md;
 }
 
 /* Input */
@@ -275,7 +277,7 @@ body,
 
 /* Label */
 .z-label {
-  @apply text-xs font-medium leading-none;
+  @apply text-base font-medium leading-none;
 }
 
 /* Accordion */
@@ -284,11 +286,11 @@ body,
 }
 
 .z-accordion-trigger {
-  @apply focus-visible:ring-ring/50 focus-visible:border-ring **:data-[slot=accordion-trigger-icon]:text-muted-foreground rounded-none py-2.5 text-left text-xs font-medium hover:underline focus-visible:ring-1 **:data-[slot=accordion-trigger-icon]:ml-auto **:data-[slot=accordion-trigger-icon]:size-4;
+  @apply focus-visible:ring-ring/50 focus-visible:border-ring **:data-[slot=accordion-trigger-icon]:text-muted-foreground rounded-none py-2.5 text-left text-base font-medium hover:underline focus-visible:ring-1 **:data-[slot=accordion-trigger-icon]:ml-auto **:data-[slot=accordion-trigger-icon]:size-4;
 }
 
 .z-accordion-content {
-  @apply text-xs overflow-hidden;
+  @apply text-base overflow-hidden;
 }
 
 .z-accordion-content-inner {
@@ -297,7 +299,7 @@ body,
 
 /* Breadcrumb */
 .z-breadcrumb-list {
-  @apply text-muted-foreground gap-1.5 text-xs;
+  @apply text-muted-foreground gap-1.5 text-base;
 }
 
 .z-breadcrumb-item {
@@ -326,15 +328,15 @@ body,
 }
 
 .z-context-menu-item {
-  @apply focus:bg-accent focus:text-accent-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 gap-2 rounded-none px-2 py-2 text-xs [&_svg:not([class*='size-'])]:size-4;
+  @apply focus:bg-accent focus:text-accent-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 gap-2 rounded-none px-2 py-2 text-base [&_svg:not([class*='size-'])]:size-4;
 }
 
 .z-context-menu-checkbox-item {
-  @apply focus:bg-accent focus:text-accent-foreground gap-2 rounded-none py-2 pr-8 pl-2 text-xs [&_svg:not([class*='size-'])]:size-4;
+  @apply focus:bg-accent focus:text-accent-foreground gap-2 rounded-none py-2 pr-8 pl-2 text-base [&_svg:not([class*='size-'])]:size-4;
 }
 
 .z-context-menu-radio-item {
-  @apply focus:bg-accent focus:text-accent-foreground gap-2 rounded-none py-2 pr-8 pl-2 text-xs [&_svg:not([class*='size-'])]:size-4;
+  @apply focus:bg-accent focus:text-accent-foreground gap-2 rounded-none py-2 pr-8 pl-2 text-base [&_svg:not([class*='size-'])]:size-4;
 }
 
 .z-context-menu-item-indicator {
@@ -342,7 +344,7 @@ body,
 }
 
 .z-context-menu-label {
-  @apply text-muted-foreground px-2 py-2 text-xs;
+  @apply text-muted-foreground px-2 py-2 text-base;
 }
 
 .z-context-menu-separator {
@@ -350,7 +352,7 @@ body,
 }
 
 .z-context-menu-shortcut {
-  @apply text-muted-foreground ml-auto text-xs tracking-widest;
+  @apply text-muted-foreground ml-auto text-base tracking-widest;
 }
 
 /* Command */
@@ -371,7 +373,7 @@ body,
 }
 
 .z-command-input {
-  @apply w-full text-xs;
+  @apply w-full text-base;
 }
 
 .z-command-list {
@@ -379,19 +381,19 @@ body,
 }
 
 .z-command-empty {
-  @apply py-4 text-center text-xs;
+  @apply py-4 text-center text-base;
 }
 
 .z-command-group {
-  @apply p-1 [&_[data-slot=command-group-heading]]:text-muted-foreground [&_[data-slot=command-group-heading]]:px-2 [&_[data-slot=command-group-heading]]:py-1 [&_[data-slot=command-group-heading]]:text-xs [&_[data-slot=command-group-heading]]:font-medium;
+  @apply p-1 [&_[data-slot=command-group-heading]]:text-muted-foreground [&_[data-slot=command-group-heading]]:px-2 [&_[data-slot=command-group-heading]]:py-1 [&_[data-slot=command-group-heading]]:text-base [&_[data-slot=command-group-heading]]:font-medium;
 }
 
 .z-command-item {
-  @apply data-highlighted:bg-accent data-highlighted:text-accent-foreground [&_svg:not([class*='size-'])]:size-4 gap-2 rounded-none px-2 py-2 text-xs select-none;
+  @apply data-highlighted:bg-accent data-highlighted:text-accent-foreground [&_svg:not([class*='size-'])]:size-4 gap-2 rounded-none px-2 py-2 text-base select-none;
 }
 
 .z-command-shortcut {
-  @apply text-muted-foreground ml-auto text-xs tracking-widest;
+  @apply text-muted-foreground ml-auto text-base tracking-widest;
 }
 
 .z-command-separator {
@@ -404,7 +406,7 @@ body,
 }
 
 .z-input-group-addon {
-  @apply text-muted-foreground h-auto gap-2 py-1.5 text-xs font-medium [&>svg:not([class*='size-'])]:size-4;
+  @apply text-muted-foreground h-auto gap-2 py-1.5 text-base font-medium [&>svg:not([class*='size-'])]:size-4;
 }
 
 .z-input-group-addon-align-inline-start {
