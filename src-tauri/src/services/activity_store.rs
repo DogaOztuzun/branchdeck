@@ -240,8 +240,9 @@ impl ActivityStore {
                     agent.last_activity = ts;
                 }
             }
-            Event::RunComplete { .. } => {
-                // Handled by KnowledgeService, not ActivityStore
+            Event::RunComplete { .. } | Event::PrStatusChanged { .. } => {
+                // RunComplete handled by KnowledgeService
+                // PrStatusChanged handled by Orchestrator
             }
         }
     }
