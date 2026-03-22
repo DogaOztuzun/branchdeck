@@ -382,7 +382,7 @@ async function runSession(request, resumeSessionId = null) {
 
   activeAbort = new AbortController();
 
-  const requestedMode = request.options?.permission_mode ?? "acceptEdits";
+  const requestedMode = request.options?.permissionMode ?? "acceptEdits";
 
   const options = {
     cwd: request.worktree,
