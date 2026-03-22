@@ -53,6 +53,7 @@ pub struct PrContext {
     pub repo: String,
     pub number: u64,
     pub branch: String,
+    #[serde(default)]
     pub base_branch: String,
 }
 
