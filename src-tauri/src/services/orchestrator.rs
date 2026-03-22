@@ -544,11 +544,16 @@ pub async fn execute_effects<R: tauri::Runtime>(
                 .await
                 {
                     Ok(_status) => {
-                        // Record the running entry with a generated tab_id
-                        let tab_id = uuid::Uuid::new_v4().to_string();
+                        // Read the actual tab_id from the RunManager's active run
+                        let tab_id = {
+                            let rm = run_manager.lock().await;
+                            rm.get_status()
+                                .and_then(|r| r.tab_id)
+                                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string())
+                        };
                         let mut orch = orchestrator.lock().await;
                         record_running(&mut orch, &key, &worktree_path, &tab_id, now_ms(), 1);
-                        info!("Dispatched orchestrator session for {key}");
+                        info!("Dispatched orchestrator session for {key} (tab={tab_id})");
                     }
                     Err(e) => {
                         error!("Failed to dispatch session for {key}: {e}");
