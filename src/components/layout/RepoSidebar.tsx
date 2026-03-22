@@ -68,7 +68,7 @@ function PrBadge(props: {
     <Show when={pr()}>
       {/* biome-ignore lint/a11y/noStaticElementInteractions: tooltip hover trigger */}
       <span
-        class="ml-1 flex items-center gap-0.5 text-[10px] shrink-0"
+        class="ml-1 flex items-center gap-0.5 text-xs shrink-0"
         onMouseEnter={(e) => {
           const p = pr();
           if (p) props.onHoverStart(p, e.currentTarget as HTMLElement);
@@ -231,7 +231,7 @@ export function RepoSidebar() {
                     class={cn(isActive() ? 'text-accent-primary' : 'text-text-dim', 'shrink-0')}
                   />
                   <span class="truncate font-medium">{repo.name}</span>
-                  <span class="ml-auto text-[10px] text-accent-info shrink-0 max-w-[50%] truncate text-right">
+                  <span class="ml-auto text-xs text-accent-info shrink-0 max-w-[50%] truncate text-right">
                     {repo.currentBranch}
                   </span>
                 </button>
@@ -283,7 +283,7 @@ export function RepoSidebar() {
                             if (!tracking || (tracking.ahead === 0 && tracking.behind === 0))
                               return null;
                             return (
-                              <span class="ml-auto flex gap-1 text-[10px] shrink-0">
+                              <span class="ml-auto flex gap-1 text-xs shrink-0">
                                 {tracking.ahead > 0 && (
                                   <span class="text-accent-success">
                                     {'\u2191'}

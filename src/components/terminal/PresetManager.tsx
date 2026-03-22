@@ -143,7 +143,7 @@ export function PresetManager(props: PresetManagerProps) {
                   <div class="flex items-center justify-between px-3 py-2 text-xs border-b border-border-subtle">
                     <div>
                       <span class="text-text-main">{preset.name}</span>
-                      <span class="ml-2 text-text-dim text-[10px]">{preset.tabType}</span>
+                      <span class="ml-2 text-text-dim text-xs">{preset.tabType}</span>
                     </div>
                     <div class="flex gap-2">
                       <button

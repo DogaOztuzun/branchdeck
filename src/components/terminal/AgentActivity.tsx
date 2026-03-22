@@ -76,7 +76,7 @@ export function AgentActivity(props: AgentActivityProps) {
       <div class="border-t border-border-subtle bg-bg-sidebar">
         <div class="flex items-center justify-between px-3 py-1 border-b border-border-subtle">
           <span class="text-[10px] text-text-dim uppercase tracking-wider">Agent Activity</span>
-          <span class="text-[10px] text-text-dim">{props.entries.length} events</span>
+          <span class="text-xs text-text-dim">{props.entries.length} events</span>
         </div>
         <div class="overflow-y-auto max-h-32">
           <Show
@@ -89,7 +89,7 @@ export function AgentActivity(props: AgentActivityProps) {
           >
             <For each={reversed()}>
               {(entry) => (
-                <div class="flex items-baseline gap-2 px-3 py-0.5 text-[11px] hover:bg-bg-main/30">
+                <div class="flex items-baseline gap-2 px-3 py-0.5 text-xs hover:bg-bg-main/30">
                   <span class="text-text-dim shrink-0 w-16">{formatTime(entry.ts)}</span>
                   <span class={`shrink-0 w-10 ${kindColor(entry.kind)}`}>
                     {kindLabel(entry.kind)}

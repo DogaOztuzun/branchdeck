@@ -62,7 +62,7 @@ export function TopBar() {
       {/* Queue badge */}
       <Show when={queue()}>
         {(qs) => (
-          <div class={cn('ml-4 flex items-center gap-2 text-[10px]', queueBadgeColor())}>
+          <div class={cn('ml-4 flex items-center gap-2 text-xs', queueBadgeColor())}>
             <button
               type="button"
               class="cursor-pointer hover:bg-bg-main/50 px-2 py-1 transition-colors duration-150"
@@ -78,7 +78,7 @@ export function TopBar() {
             </button>
             <button
               type="button"
-              class="text-[10px] text-accent-error hover:text-accent-error/80 cursor-pointer"
+              class="text-xs text-accent-error hover:text-accent-error/80 cursor-pointer"
               onClick={() => cancelQueue().catch(() => {})}
             >
               Cancel
@@ -92,7 +92,7 @@ export function TopBar() {
           type="button"
           onClick={() => layout.setActiveView('workspace')}
           class={cn(
-            'px-4 h-full text-[11px] font-bold uppercase tracking-wider border-x border-border-subtle transition-colors duration-150 cursor-pointer',
+            'px-4 h-full text-xs font-bold uppercase tracking-wider border-x border-border-subtle transition-colors duration-150 cursor-pointer',
             layout.activeView() === 'workspace'
               ? 'bg-bg-main text-accent-primary'
               : 'text-text-dim hover:text-text-main',
@@ -104,7 +104,7 @@ export function TopBar() {
           type="button"
           onClick={() => layout.setActiveView('orchestrations')}
           class={cn(
-            'px-4 h-full text-[11px] font-bold uppercase tracking-wider border-r border-border-subtle transition-colors duration-150 cursor-pointer flex items-center gap-2',
+            'px-4 h-full text-xs font-bold uppercase tracking-wider border-r border-border-subtle transition-colors duration-150 cursor-pointer flex items-center gap-2',
             layout.activeView() === 'orchestrations'
               ? 'bg-bg-main text-accent-primary'
               : 'text-text-dim hover:text-text-main',
@@ -112,7 +112,7 @@ export function TopBar() {
         >
           Orchestrations
           <Show when={queue()}>
-            <span class="bg-accent-warning/20 text-accent-warning px-1 text-[9px]">
+            <span class="bg-accent-warning/20 text-accent-warning px-1 text-[10px]">
               {queue()?.active ? 1 : 0}
             </span>
           </Show>

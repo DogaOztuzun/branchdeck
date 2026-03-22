@@ -104,7 +104,7 @@ export function TabBar(props: TabBarProps) {
                     }}
                   >
                     <span>{preset.name}</span>
-                    <span class="ml-auto text-text-dim text-[10px]">{preset.tabType}</span>
+                    <span class="ml-auto text-text-dim text-xs">{preset.tabType}</span>
                   </button>
                 )}
               </For>

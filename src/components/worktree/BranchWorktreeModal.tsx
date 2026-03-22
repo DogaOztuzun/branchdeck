@@ -156,12 +156,10 @@ export function BranchWorktreeModal(props: BranchWorktreeModalProps) {
                   <span class="truncate">{branch.name}</span>
                   <span class="ml-auto flex gap-1 shrink-0">
                     <Show when={branch.isRemote}>
-                      <span class="px-1.5 py-0.5 text-[10px] text-text-dim bg-bg-main">remote</span>
+                      <span class="px-1.5 py-0.5 text-xs text-text-dim bg-bg-main">remote</span>
                     </Show>
                     <Show when={branch.hasWorktree}>
-                      <span class="px-1.5 py-0.5 text-[10px] text-accent-info bg-bg-main">
-                        in use
-                      </span>
+                      <span class="px-1.5 py-0.5 text-xs text-accent-info bg-bg-main">in use</span>
                     </Show>
                   </span>
                 </button>

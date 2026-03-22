@@ -165,7 +165,7 @@ export function PrTooltip(props: PrTooltipProps) {
             <span class="font-semibold">PR #{props.pr.number}</span>
           )}
           <span
-            class="rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none"
+            class="rounded-full px-1.5 py-0.5 text-xs font-medium leading-none"
             style={{
               'background-color': stateColor(props.pr.state, props.pr.isDraft),
               color: '#1a1b26',
@@ -184,7 +184,7 @@ export function PrTooltip(props: PrTooltipProps) {
           <h4 class="mb-1 font-semibold text-text-dim">Reviews</h4>
           {props.pr.reviewDecision && (
             <span
-              class="mb-1 inline-block px-1.5 py-0.5 text-[10px] font-medium leading-none"
+              class="mb-1 inline-block px-1.5 py-0.5 text-xs font-medium leading-none"
               style={{
                 'background-color': reviewColor(props.pr.reviewDecision),
                 color: '#1a1b26',
