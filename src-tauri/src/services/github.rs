@@ -354,7 +354,7 @@ pub async fn list_open_prs(
     filter: Option<PrFilter>,
 ) -> Result<Vec<PrSummary>, AppError> {
     let (owner, repo_name) = resolve_owner_repo(Path::new(repo_path))?;
-    let display_name = repo_name.clone();
+    let display_name = format!("{owner}/{repo_name}");
 
     let client = get_client().await?;
 
