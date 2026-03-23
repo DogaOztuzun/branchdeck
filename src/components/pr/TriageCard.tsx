@@ -68,7 +68,7 @@ export function TriageCard(props: TriageCardProps) {
 
   return (
     <div
-      class="px-3 py-1.5 hover:bg-bg-main/50 flex items-center gap-2 text-base border-b border-border-subtle/50 transition-colors duration-150"
+      class="px-3 py-1.5 hover:bg-[var(--color-surface-raised)] flex items-center gap-2 text-base border-b border-border-subtle/50 transition-colors duration-150"
       tabIndex={0}
     >
       {/* Status dot */}

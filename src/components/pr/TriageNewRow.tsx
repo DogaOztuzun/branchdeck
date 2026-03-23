@@ -60,7 +60,7 @@ export function TriageNewRow(props: TriageNewRowProps) {
     <div class="border-b border-border-subtle/50">
       {/* Row — click to expand */}
       <div
-        class="px-3 py-1.5 hover:bg-bg-main/50 flex items-center gap-2 text-base cursor-pointer transition-colors duration-150"
+        class="px-3 py-1.5 hover:bg-[var(--color-surface-raised)] flex items-center gap-2 text-base cursor-pointer transition-colors duration-150"
         tabIndex={0}
         onClick={() => setExpanded(!expanded())}
         onKeyDown={(e) => {
