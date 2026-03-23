@@ -77,7 +77,7 @@ export function TriageNewRow(props: TriageNewRowProps) {
   return (
     <>
       <div
-        class="px-3 py-1 hover:bg-bg-main/30 flex items-center gap-3 text-[13px] cursor-default"
+        class="px-3 py-1 hover:bg-bg-main/30 flex items-center gap-3 text-base cursor-default"
         tabIndex={0}
         onContextMenu={handleContextMenu}
         onKeyDown={(e) => {
@@ -93,11 +93,11 @@ export function TriageNewRow(props: TriageNewRowProps) {
         <span class="text-xs text-text-dim shrink-0">
           #{props.item.pr.number}
         </span>
-        <span class={`text-[10px] font-medium uppercase shrink-0 ${ciColor()}`}>
+        <span class={`text-xs font-medium uppercase shrink-0 ${ciColor()}`}>
           {ciLabel()}
         </span>
         <Show when={reviewLabel()}>
-          <span class={`text-[10px] font-medium uppercase shrink-0 ${reviewColor()}`}>
+          <span class={`text-xs font-medium uppercase shrink-0 ${reviewColor()}`}>
             {reviewLabel()}
           </span>
         </Show>

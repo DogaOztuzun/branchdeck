@@ -54,10 +54,10 @@ export function TriageCard(props: TriageCardProps) {
       tabIndex={0}
     >
       <div class="flex items-center justify-between gap-2 mb-1">
-        <span class="text-[13px] font-medium text-text-main truncate">
+        <span class="text-base font-medium text-text-main truncate">
           {branchName()}
         </span>
-        <span class={`text-[10px] font-medium uppercase shrink-0 ${colorClass()}`}>
+        <span class={`text-xs font-medium uppercase shrink-0 ${colorClass()}`}>
           {label()}
         </span>
       </div>
@@ -73,7 +73,7 @@ export function TriageCard(props: TriageCardProps) {
             <span class="ml-1">#{props.item.pr!.number}</span>
           </Show>
         </div>
-        <div class="bg-bg-main p-1.5 text-[12px] text-text-dim truncate">
+        <div class="bg-bg-main p-1.5 text-sm text-text-dim truncate">
           {stepText()}
         </div>
       </Show>
@@ -87,7 +87,7 @@ export function TriageCard(props: TriageCardProps) {
         </div>
         <button
           type="button"
-          class="text-[12px] text-text-dim hover:text-text-main border border-border-subtle px-2 py-0.5 cursor-pointer"
+          class="text-sm text-text-dim hover:text-text-main border border-border-subtle px-2 py-0.5 cursor-pointer"
           onClick={() => skipPr(props.item.prKey).catch(() => {})}
         >
           Dismiss

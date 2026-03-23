@@ -80,7 +80,7 @@ export function PrTriageView() {
         >
           <ArrowLeft size={16} />
         </button>
-        <span class="text-[16px] font-semibold text-text-main">PR TRIAGE</span>
+        <span class="text-lg font-semibold text-text-main">PR TRIAGE</span>
         <button
           type="button"
           class="p-1 text-text-dim hover:text-text-main cursor-pointer"
@@ -92,7 +92,7 @@ export function PrTriageView() {
       </div>
 
       {/* Summary counts */}
-      <div class="text-[13px] text-text-dim mb-4">
+      <div class="text-base text-text-dim mb-4">
         <Show when={groups().needsAttention.length > 0}>
           <span class="text-accent-error">{groups().needsAttention.length} need attention</span>
           <span class="mx-1">·</span>
