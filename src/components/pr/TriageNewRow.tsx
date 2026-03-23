@@ -4,7 +4,7 @@ import type { PrSummary } from '../../types/github';
 import type { TriagePr } from '../../types/lifecycle';
 
 type TriageNewRowProps = {
-  item: TriagePr & { pr: PrSummary; repoPath: string };
+  item: TriagePr & { pr: PrSummary };
 };
 
 export function TriageNewRow(props: TriageNewRowProps) {
@@ -23,6 +23,7 @@ export function TriageNewRow(props: TriageNewRowProps) {
   }
 
   async function handleStartWorkflow() {
+    if (!props.item.repoPath) return;
     closeMenu();
     setLoading(true);
     try {

@@ -62,10 +62,10 @@ export function PrTriageView() {
       groups().done.length,
   );
 
-  function isNarrowedNewItem(
+  function hasDiscoveredPr(
     item: TriagePr,
-  ): item is TriagePr & { pr: NonNullable<TriagePr['pr']>; repoPath: string } {
-    return item.pr !== undefined && item.repoPath !== undefined;
+  ): item is TriagePr & { pr: NonNullable<TriagePr['pr']> } {
+    return item.pr !== undefined;
   }
 
   return (
@@ -197,8 +197,8 @@ export function PrTriageView() {
           <div class="divide-y divide-border-subtle/30">
             <For each={filteredNew()}>
               {(item) => (
-                <Show when={isNarrowedNewItem(item)}>
-                  <TriageNewRow item={item as TriagePr & { pr: NonNullable<TriagePr['pr']>; repoPath: string }} />
+                <Show when={hasDiscoveredPr(item)}>
+                  <TriageNewRow item={item as TriagePr & { pr: NonNullable<TriagePr['pr']> }} />
                 </Show>
               )}
             </For>

@@ -8,6 +8,7 @@ import type {
   LifecycleEvent,
   TriagePr,
 } from '../../types/lifecycle';
+import { listOpenPrs } from '../commands/github';
 import {
   getLifecycles,
   getRunningEntries,
@@ -155,14 +156,21 @@ function createLifecycleStore() {
   }
 
   async function loadInitial() {
-    // Build repoNameToPath from repo store
     const repoStore = getRepoStore();
+
+    // Build repoName → path by calling listOpenPrs per repo.
+    // Each returned PR carries the GitHub repoName from the remote,
+    // which tells us the mapping from GitHub name → local path.
     const nameToPath: Record<string, string> = {};
     for (const repo of repoStore.state.repos) {
-      // We need the GitHub "owner/repo" name. Since RepoInfo only has local name,
-      // we'll build the mapping from discovered PRs (each has repoName + we know repo.path).
-      // For now, store local name → path, and also try matching by path suffix.
-      nameToPath[repo.name] = repo.path;
+      try {
+        const repoPrs = await listOpenPrs(repo.path);
+        if (repoPrs.length > 0) {
+          nameToPath[repoPrs[0].repoName] = repo.path;
+        }
+      } catch {
+        // Skip unreachable repos
+      }
     }
 
     try {
@@ -175,6 +183,9 @@ function createLifecycleStore() {
       batch(() => {
         setState(
           produce((s) => {
+            // Store resolved repo mappings
+            Object.assign(s.repoNameToPath, nameToPath);
+
             // Process lifecycles: separate active from completed
             for (const event of events) {
               if (event.status === 'completed') {
@@ -188,21 +199,6 @@ function createLifecycleStore() {
             for (const pr of prs) {
               const key = `${pr.repoName}#${pr.number}`;
               s.discoveredPrs[key] = pr;
-              // Build repoName → path mapping from discovered PRs
-              if (!s.repoNameToPath[pr.repoName]) {
-                // Match by repo path ending
-                for (const repo of repoStore.state.repos) {
-                  const pathParts = repo.path.split('/');
-                  const localName = pathParts[pathParts.length - 1];
-                  const repoNameParts = pr.repoName.split('/');
-                  const ghRepoName =
-                    repoNameParts[repoNameParts.length - 1];
-                  if (localName === ghRepoName) {
-                    s.repoNameToPath[pr.repoName] = repo.path;
-                    break;
-                  }
-                }
-              }
             }
 
             // Process running entries for session mapping
