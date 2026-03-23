@@ -85,9 +85,6 @@ export function TriageCard(props: TriageCardProps) {
           <span class="text-text-main truncate font-medium">
             {branchName()}
           </span>
-          <span class="text-xs text-text-dim shrink-0">
-            {repoShort()}
-          </span>
         </div>
         <Show when={isInProgress()}>
           <div class="text-xs text-text-dim truncate mt-0.5">

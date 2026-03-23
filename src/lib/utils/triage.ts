@@ -28,14 +28,23 @@ export function groupTriagePrs(items: TriagePr[]): TriageGroups {
     }
   }
 
-  // Sort newPrs: failing CI first
-  newPrs.sort((a, b) => {
+  // Sort all groups: newest first by createdAt, failing CI prioritized
+  const sortByRecent = (a: TriagePr, b: TriagePr) => {
+    // Failing CI first
     const aFailing = a.pr?.ciStatus === 'FAILURE' || a.pr?.ciStatus === 'ERROR';
     const bFailing = b.pr?.ciStatus === 'FAILURE' || b.pr?.ciStatus === 'ERROR';
     if (aFailing && !bFailing) return -1;
     if (!aFailing && bFailing) return 1;
-    return 0;
-  });
+    // Then newest first
+    const aTime = a.pr?.createdAt ? new Date(a.pr.createdAt).getTime() : 0;
+    const bTime = b.pr?.createdAt ? new Date(b.pr.createdAt).getTime() : 0;
+    return bTime - aTime;
+  };
+
+  newPrs.sort(sortByRecent);
+  inProgress.sort(sortByRecent);
+  watching.sort(sortByRecent);
+  done.sort(sortByRecent);
 
   return { needsAttention, inProgress, watching, newPrs, done };
 }

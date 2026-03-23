@@ -8,6 +8,18 @@ import { AnalysisCard } from './AnalysisCard';
 import { TriageCard } from './TriageCard';
 import { TriageNewRow } from './TriageNewRow';
 
+type RepoGroup = { repo: string; items: TriagePr[] };
+
+function groupByRepo(items: TriagePr[]): RepoGroup[] {
+  const map = new Map<string, TriagePr[]>();
+  for (const item of items) {
+    const repo = item.pr?.repoName?.split('/').pop() ?? 'unknown';
+    if (!map.has(repo)) map.set(repo, []);
+    map.get(repo)!.push(item);
+  }
+  return Array.from(map.entries()).map(([repo, items]) => ({ repo, items }));
+}
+
 type RunStepEvent = {
   sessionId: string;
   description: string;
@@ -155,13 +167,22 @@ export function PrTriageView() {
             IN PROGRESS ({groups().inProgress.length})
           </h3>
           <div>
-            <For each={groups().inProgress}>
-              {(item) => (
-                <TriageCard
-                  item={item}
-                  lastStep={item.currentSessionId ? lastSteps()[item.currentSessionId] : undefined}
-                  tickMs={tickMs()}
-                />
+            <For each={groupByRepo(groups().inProgress)}>
+              {(group) => (
+                <>
+                  <div class="px-3 py-1 text-xs text-text-dim uppercase tracking-wider bg-bg-main/30 border-b border-border-subtle/50">
+                    {group.repo}
+                  </div>
+                  <For each={group.items}>
+                    {(item) => (
+                      <TriageCard
+                        item={item}
+                        lastStep={item.currentSessionId ? lastSteps()[item.currentSessionId] : undefined}
+                        tickMs={tickMs()}
+                      />
+                    )}
+                  </For>
+                </>
               )}
             </For>
           </div>
@@ -175,9 +196,18 @@ export function PrTriageView() {
             WATCHING ({groups().watching.length})
           </h3>
           <div>
-            <For each={groups().watching}>
-              {(item) => (
-                <TriageCard item={item} lastStep={undefined} tickMs={tickMs()} />
+            <For each={groupByRepo(groups().watching)}>
+              {(group) => (
+                <>
+                  <div class="px-3 py-1 text-xs text-text-dim uppercase tracking-wider bg-bg-main/30 border-b border-border-subtle/50">
+                    {group.repo}
+                  </div>
+                  <For each={group.items}>
+                    {(item) => (
+                      <TriageCard item={item} lastStep={undefined} tickMs={tickMs()} />
+                    )}
+                  </For>
+                </>
               )}
             </For>
           </div>
@@ -202,11 +232,20 @@ export function PrTriageView() {
             </Show>
           </div>
           <div>
-            <For each={filteredNew()}>
-              {(item) => (
-                <Show when={hasDiscoveredPr(item)}>
-                  <TriageNewRow item={item as TriagePr & { pr: NonNullable<TriagePr['pr']> }} />
-                </Show>
+            <For each={groupByRepo(filteredNew())}>
+              {(group) => (
+                <>
+                  <div class="px-3 py-1 text-xs text-text-dim uppercase tracking-wider bg-bg-main/30 border-b border-border-subtle/50">
+                    {group.repo}
+                  </div>
+                  <For each={group.items}>
+                    {(item) => (
+                      <Show when={hasDiscoveredPr(item)}>
+                        <TriageNewRow item={item as TriagePr & { pr: NonNullable<TriagePr['pr']> }} />
+                      </Show>
+                    )}
+                  </For>
+                </>
               )}
             </For>
           </div>

@@ -78,9 +78,6 @@ export function TriageNewRow(props: TriageNewRowProps) {
             <span class="text-text-main truncate font-medium">
               {props.item.pr.branch}
             </span>
-            <span class="text-xs text-text-dim shrink-0">
-              {props.item.pr.repoName.split('/').pop()}
-            </span>
           </div>
           <Show when={props.item.pr.title}>
             <div class="text-xs text-text-dim truncate mt-0.5">
