@@ -830,6 +830,9 @@ async fn execute_dispatch<R: tauri::Runtime>(
 ) {
     use crate::models::agent::now_ms;
 
+    // The effective worktree path — may be overridden if we reuse an existing checkout
+    let mut effective_path = worktree_path.to_string();
+
     // Ensure worktree exists and is on the correct branch
     if worktree_needs_create(worktree_path, &pr_context.branch) {
         // Look up repo filesystem path from orchestrator state
@@ -859,9 +862,6 @@ async fn execute_dispatch<R: tauri::Runtime>(
             Ok(wt) => info!("Created worktree at {}", wt.path.display()),
             Err(e) => {
                 let err_msg = format!("{e}");
-                // If branch is already checked out somewhere, find that path
-                // and use it instead of failing. Common when the user is
-                // working on the same branch in a different worktree.
                 if err_msg.contains("already checked out") {
                     if let Some(existing_path) = find_worktree_for_branch(
                         std::path::Path::new(&repo_fs_path),
@@ -872,6 +872,7 @@ async fn execute_dispatch<R: tauri::Runtime>(
                             pr_context.branch,
                             existing_path.display()
                         );
+                        effective_path = existing_path.display().to_string();
                     } else {
                         error!(
                             "Branch {} already checked out but couldn't find where",
@@ -889,6 +890,7 @@ async fn execute_dispatch<R: tauri::Runtime>(
         }
     }
 
+    let worktree_path = effective_path.as_str();
     write_pr_context(worktree_path, pr_context);
     deploy_skill_file(worktree_path);
     let task_path = create_orchestrator_task(worktree_path, key, pr_context);
