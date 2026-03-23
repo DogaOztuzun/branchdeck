@@ -1,6 +1,6 @@
 import { Show } from 'solid-js';
 import { skipPr } from '../../lib/commands/lifecycle';
-import { LIFECYCLE_STATUS_COLORS, LIFECYCLE_STATUS_LABELS } from '../../lib/constants/lifecycle';
+import { LIFECYCLE_STATUS_LABELS } from '../../lib/constants/lifecycle';
 import type { TriagePr } from '../../types/lifecycle';
 
 type RunStepEvent = {
@@ -22,10 +22,20 @@ function formatElapsed(ms: number): string {
   return `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
+function StatusDot(props: { status: string | undefined }) {
+  const color = () => {
+    const s = props.status;
+    if (s === 'running' || s === 'fixing' || s === 'retrying') return 'bg-accent-warning';
+    if (s === 'stale') return 'bg-text-dim/40';
+    if (s === 'approved') return 'bg-accent-info';
+    return 'bg-text-dim/40';
+  };
+  return <span class={`inline-block w-2 h-2 shrink-0 ${color()}`} />;
+}
+
 export function TriageCard(props: TriageCardProps) {
   const status = () => props.item.lifecycle?.status;
   const label = () => (status() ? LIFECYCLE_STATUS_LABELS[status()!] : '');
-  const colorClass = () => (status() ? LIFECYCLE_STATUS_COLORS[status()!] : 'text-text-dim');
 
   const branchName = () =>
     props.item.pr?.branch ?? props.item.prKey;
@@ -48,51 +58,67 @@ export function TriageCard(props: TriageCardProps) {
   const repoShort = () =>
     props.item.pr?.repoName?.split('/').pop() ?? '';
 
+  const statusColor = () => {
+    const s = status();
+    if (s === 'running' || s === 'fixing' || s === 'retrying') return 'text-accent-warning';
+    if (s === 'stale') return 'text-text-dim';
+    if (s === 'approved') return 'text-accent-info';
+    return 'text-text-dim';
+  };
+
   return (
     <div
-      class="bg-bg-sidebar border border-border-subtle p-3"
+      class="px-3 py-1.5 hover:bg-bg-main/50 flex items-center gap-2 text-base border-b border-border-subtle/50 transition-colors duration-150"
       tabIndex={0}
     >
-      <div class="flex items-center justify-between gap-2 mb-1">
-        <span class="text-base font-medium text-text-main truncate">
-          {branchName()}
-        </span>
-        <span class={`text-xs font-medium uppercase shrink-0 ${colorClass()}`}>
-          {label()}
-        </span>
+      {/* Status dot */}
+      <StatusDot status={status()} />
+
+      {/* Left: branch + step text */}
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2">
+          <Show when={props.item.pr}>
+            <span class="text-sm text-accent-info shrink-0">
+              #{props.item.pr!.number}
+            </span>
+          </Show>
+          <span class="text-text-main truncate font-medium">
+            {branchName()}
+          </span>
+          <span class="text-xs text-text-dim shrink-0">
+            {repoShort()}
+          </span>
+        </div>
+        <Show when={isInProgress()}>
+          <div class="text-xs text-text-dim truncate mt-0.5">
+            {stepText()}
+          </div>
+        </Show>
+        <Show when={status() === 'stale'}>
+          <div class="text-xs text-text-dim mt-0.5">
+            CI now passing
+          </div>
+        </Show>
       </div>
 
-      <Show when={isInProgress()}>
-        <div class="text-xs text-text-dim mb-1">
-          <Show when={elapsed()}>
-            <span class="font-mono">{elapsed()}</span>
-            <span class="mx-1">·</span>
-          </Show>
-          <span>{repoShort()}</span>
-          <Show when={props.item.pr}>
-            <span class="ml-1">#{props.item.pr!.number}</span>
-          </Show>
-        </div>
-        <div class="bg-bg-main p-1.5 text-sm text-text-dim truncate">
-          {stepText()}
-        </div>
-      </Show>
-
-      <Show when={status() === 'stale'}>
-        <div class="text-xs text-text-dim mb-2">
-          CI now passing
-          <Show when={props.item.pr}>
-            <span class="ml-1">· {repoShort()} #{props.item.pr!.number}</span>
-          </Show>
-        </div>
-        <button
-          type="button"
-          class="text-sm text-text-dim hover:text-text-main border border-border-subtle px-2 py-0.5 cursor-pointer"
-          onClick={() => skipPr(props.item.prKey).catch(() => {})}
-        >
-          Dismiss
-        </button>
-      </Show>
+      {/* Right: status + elapsed + action */}
+      <div class="flex items-center gap-2 shrink-0">
+        <Show when={elapsed()}>
+          <span class="text-xs text-text-dim font-mono">{elapsed()}</span>
+        </Show>
+        <span class={`text-xs font-medium uppercase ${statusColor()}`}>
+          {label()}
+        </span>
+        <Show when={status() === 'stale'}>
+          <button
+            type="button"
+            class="text-xs text-text-dim hover:text-text-main border border-border-subtle px-2 py-0.5 cursor-pointer"
+            onClick={() => skipPr(props.item.prKey).catch(() => {})}
+          >
+            Dismiss
+          </button>
+        </Show>
+      </div>
     </div>
   );
 }

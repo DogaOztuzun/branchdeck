@@ -7,6 +7,17 @@ type TriageNewRowProps = {
   item: TriagePr & { pr: PrSummary };
 };
 
+function StatusDot(props: { status: string | null }) {
+  const color = () => {
+    const s = props.status;
+    if (s === 'FAILURE' || s === 'ERROR') return 'bg-accent-error';
+    if (s === 'SUCCESS') return 'bg-accent-success';
+    if (s === 'PENDING') return 'bg-accent-warning';
+    return 'bg-text-dim/40';
+  };
+  return <span class={`inline-block w-2 h-2 shrink-0 ${color()}`} />;
+}
+
 export function TriageNewRow(props: TriageNewRowProps) {
   const [menuOpen, setMenuOpen] = createSignal(false);
   const [menuPos, setMenuPos] = createSignal({ x: 0, y: 0 });
@@ -35,27 +46,10 @@ export function TriageNewRow(props: TriageNewRowProps) {
     }
   }
 
-  const ciColor = () => {
-    const status = props.item.pr.ciStatus;
-    if (status === 'FAILURE' || status === 'ERROR') return 'text-accent-error';
-    if (status === 'SUCCESS') return 'text-accent-success';
-    if (status === 'PENDING') return 'text-accent-warning';
-    return 'text-text-dim';
-  };
-
-  const ciLabel = () => {
-    const status = props.item.pr.ciStatus;
-    if (status === 'FAILURE' || status === 'ERROR') return 'FAIL';
-    if (status === 'SUCCESS') return 'PASS';
-    if (status === 'PENDING') return 'PEND';
-    return '';
-  };
-
   const reviewLabel = () => {
     const decision = props.item.pr.reviewDecision;
     if (decision === 'APPROVED') return 'APPROVED';
     if (decision === 'CHANGES_REQUESTED') return 'CHANGES';
-    if (decision === 'REVIEW_REQUIRED') return 'REVIEW';
     return '';
   };
 
@@ -77,21 +71,27 @@ export function TriageNewRow(props: TriageNewRowProps) {
   return (
     <>
       <div
-        class="px-3 py-1.5 hover:bg-bg-main/50 flex items-center gap-2 text-base cursor-default border-b border-border-subtle/50"
+        class="px-3 py-1.5 hover:bg-bg-main/50 flex items-center gap-2 text-base cursor-default border-b border-border-subtle/50 transition-colors duration-150"
         tabIndex={0}
         onContextMenu={handleContextMenu}
         onKeyDown={(e) => {
           if (e.key === 'Enter') handleStartWorkflow();
         }}
       >
+        {/* Status dot */}
+        <StatusDot status={props.item.pr.ciStatus} />
+
         {/* Left: branch + title */}
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-2">
+            <span class="text-sm text-accent-info shrink-0">
+              #{props.item.pr.number}
+            </span>
             <span class="text-text-main truncate font-medium">
               {props.item.pr.branch}
             </span>
             <span class="text-xs text-text-dim shrink-0">
-              {props.item.pr.repoName.split('/').pop()}#{props.item.pr.number}
+              {props.item.pr.repoName.split('/').pop()}
             </span>
           </div>
           <Show when={props.item.pr.title}>
@@ -103,11 +103,6 @@ export function TriageNewRow(props: TriageNewRowProps) {
 
         {/* Right: badges + action */}
         <div class="flex items-center gap-2 shrink-0">
-          <Show when={ciLabel()}>
-            <span class={`text-xs font-medium uppercase ${ciColor()}`}>
-              {ciLabel()}
-            </span>
-          </Show>
           <Show when={reviewLabel()}>
             <span class={`text-xs font-medium uppercase ${reviewColor()}`}>
               {reviewLabel()}

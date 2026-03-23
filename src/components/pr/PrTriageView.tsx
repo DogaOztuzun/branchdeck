@@ -154,7 +154,7 @@ export function PrTriageView() {
           <h3 class="text-xs text-text-dim uppercase tracking-wider mb-2">
             IN PROGRESS ({groups().inProgress.length})
           </h3>
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <div>
             <For each={groups().inProgress}>
               {(item) => (
                 <TriageCard
@@ -174,7 +174,7 @@ export function PrTriageView() {
           <h3 class="text-xs text-text-dim uppercase tracking-wider mb-2">
             WATCHING ({groups().watching.length})
           </h3>
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div>
             <For each={groups().watching}>
               {(item) => (
                 <TriageCard item={item} lastStep={undefined} tickMs={tickMs()} />
@@ -224,13 +224,24 @@ export function PrTriageView() {
           <h3 class="text-xs text-text-dim uppercase tracking-wider mb-2">
             DONE ({groups().done.length})
           </h3>
-          <div class="flex flex-wrap gap-1.5">
+          <div>
             <For each={groups().done}>
               {(item) => (
-                <span class="bg-bg-main border border-border-subtle px-2 py-1 text-sm text-text-dim inline-flex items-center gap-1.5">
-                  {item.pr?.branch ?? item.prKey}
-                  <span class="text-accent-success text-xs">&#10003;</span>
-                </span>
+                <div class="px-3 py-1.5 flex items-center gap-2 text-base border-b border-border-subtle/50">
+                  <span class="inline-block w-2 h-2 shrink-0 bg-accent-success" />
+                  <Show when={item.pr}>
+                    <span class="text-sm text-accent-info shrink-0">#{item.pr!.number}</span>
+                  </Show>
+                  <span class="text-text-dim truncate">
+                    {item.pr?.branch ?? item.prKey}
+                  </span>
+                  <Show when={item.pr}>
+                    <span class="text-xs text-text-dim shrink-0">
+                      {item.pr!.repoName.split('/').pop()}
+                    </span>
+                  </Show>
+                  <span class="ml-auto text-xs text-accent-success uppercase">Done</span>
+                </div>
               )}
             </For>
           </div>
