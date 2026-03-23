@@ -19,23 +19,11 @@ function StatusDot(props: { status: string | null }) {
 }
 
 export function TriageNewRow(props: TriageNewRowProps) {
-  const [menuOpen, setMenuOpen] = createSignal(false);
-  const [menuPos, setMenuPos] = createSignal({ x: 0, y: 0 });
+  const [expanded, setExpanded] = createSignal(false);
   const [loading, setLoading] = createSignal(false);
-
-  function handleContextMenu(e: MouseEvent) {
-    e.preventDefault();
-    setMenuPos({ x: e.clientX, y: e.clientY });
-    setMenuOpen(true);
-  }
-
-  function closeMenu() {
-    setMenuOpen(false);
-  }
 
   async function handleStartWorkflow() {
     if (!props.item.repoPath) return;
-    closeMenu();
     setLoading(true);
     try {
       await shepherdPr(props.item.repoPath, props.item.pr.number);
@@ -69,20 +57,19 @@ export function TriageNewRow(props: TriageNewRowProps) {
   };
 
   return (
-    <>
+    <div class="border-b border-border-subtle/50">
+      {/* Row — click to expand */}
       <div
-        class="px-3 py-1.5 hover:bg-bg-main/50 flex items-center gap-2 text-base cursor-pointer border-b border-border-subtle/50 transition-colors duration-150"
+        class="px-3 py-1.5 hover:bg-bg-main/50 flex items-center gap-2 text-base cursor-pointer transition-colors duration-150"
         tabIndex={0}
-        onClick={handleStartWorkflow}
-        onContextMenu={handleContextMenu}
+        onClick={() => setExpanded(!expanded())}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') handleStartWorkflow();
+          if (e.key === 'Enter') setExpanded(!expanded());
+          if (e.key === 'Escape') setExpanded(false);
         }}
       >
-        {/* Status dot */}
         <StatusDot status={props.item.pr.ciStatus} />
 
-        {/* Left: branch + title */}
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-2">
             <span class="text-sm text-accent-info shrink-0">
@@ -102,7 +89,6 @@ export function TriageNewRow(props: TriageNewRowProps) {
           </Show>
         </div>
 
-        {/* Right: badges + action */}
         <div class="flex items-center gap-2 shrink-0">
           <Show when={reviewLabel()}>
             <span class={`text-xs font-medium uppercase ${reviewColor()}`}>
@@ -125,26 +111,23 @@ export function TriageNewRow(props: TriageNewRowProps) {
         </div>
       </div>
 
-      {/* Context menu */}
-      <Show when={menuOpen()}>
-        <div
-          class="fixed inset-0 z-50"
-          onClick={closeMenu}
-          onContextMenu={(e) => { e.preventDefault(); closeMenu(); }}
-        />
-        <div
-          class="fixed z-50 bg-bg-sidebar border border-border-subtle py-1 min-w-[160px]"
-          style={{ left: `${menuPos().x}px`, top: `${menuPos().y}px` }}
-        >
-          <button
-            type="button"
-            class="w-full px-3 py-1.5 text-left text-base text-text-main hover:bg-bg-main/50 cursor-pointer"
-            onClick={handleStartWorkflow}
-          >
-            Start Workflow
-          </button>
+      {/* Expanded detail — shows action */}
+      <Show when={expanded() && !loading()}>
+        <div class="px-3 pb-2 pt-1 bg-bg-main/30 flex items-center gap-3">
+          <span class="text-xs text-text-dim flex-1">
+            {props.item.pr.url}
+          </span>
+          <Show when={props.item.repoPath}>
+            <button
+              type="button"
+              class="text-xs text-accent-primary border border-accent-primary/30 px-3 py-1 hover:bg-accent-primary/10 cursor-pointer"
+              onClick={(e) => { e.stopPropagation(); handleStartWorkflow(); }}
+            >
+              Analyze PR
+            </button>
+          </Show>
         </div>
       </Show>
-    </>
+    </div>
   );
 }
