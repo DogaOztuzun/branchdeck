@@ -227,9 +227,9 @@ export function PrTriageView() {
           <div class="flex flex-wrap gap-1.5">
             <For each={groups().done}>
               {(item) => (
-                <span class="bg-bg-main border border-border-subtle px-1.5 py-0.5 text-xs text-text-dim inline-flex items-center gap-1">
+                <span class="bg-bg-main border border-border-subtle px-2 py-1 text-sm text-text-dim inline-flex items-center gap-1.5">
                   {item.pr?.branch ?? item.prKey}
-                  <span class="text-accent-success">&#10003;</span>
+                  <span class="text-accent-success text-xs">&#10003;</span>
                 </span>
               )}
             </For>
