@@ -150,11 +150,11 @@ export function PrTriageView() {
 
       {/* In Progress */}
       <Show when={groups().inProgress.length > 0}>
-        <div class="mb-6">
+        <div class="mb-6 pt-4 border-t border-border-subtle/30">
           <h3 class="text-xs text-text-dim uppercase tracking-wider mb-2">
             IN PROGRESS ({groups().inProgress.length})
           </h3>
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <For each={groups().inProgress}>
               {(item) => (
                 <TriageCard
@@ -186,7 +186,7 @@ export function PrTriageView() {
 
       {/* New */}
       <Show when={groups().newPrs.length > 0 || totalPrs() === 0}>
-        <div class="mb-6">
+        <div class="mb-6 pt-4 border-t border-border-subtle/30">
           <div class="flex items-center gap-2 mb-2">
             <h3 class="text-xs text-text-dim uppercase tracking-wider">
               NEW ({filteredNew().length})
@@ -201,7 +201,7 @@ export function PrTriageView() {
               </button>
             </Show>
           </div>
-          <div class="divide-y divide-border-subtle">
+          <div>
             <For each={filteredNew()}>
               {(item) => (
                 <Show when={hasDiscoveredPr(item)}>
@@ -220,7 +220,7 @@ export function PrTriageView() {
 
       {/* Done */}
       <Show when={groups().done.length > 0}>
-        <div class="mb-6">
+        <div class="mb-6 pt-4 border-t border-border-subtle/30">
           <h3 class="text-xs text-text-dim uppercase tracking-wider mb-2">
             DONE ({groups().done.length})
           </h3>
