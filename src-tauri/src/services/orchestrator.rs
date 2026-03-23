@@ -718,6 +718,39 @@ fn create_orchestrator_task(
     task_path
 }
 
+/// Find the filesystem path where a branch is already checked out.
+fn find_worktree_for_branch(
+    repo_path: &std::path::Path,
+    branch: &str,
+) -> Option<std::path::PathBuf> {
+    let repo = git2::Repository::open(repo_path).ok()?;
+
+    // Check if the main repo itself has this branch checked out
+    if let Ok(head) = repo.head() {
+        if head.shorthand() == Some(branch) {
+            return Some(repo_path.to_path_buf());
+        }
+    }
+
+    // Check worktrees
+    if let Ok(worktrees) = repo.worktrees() {
+        for name in worktrees.iter().flatten() {
+            if let Ok(wt) = repo.find_worktree(name) {
+                let wt_path = wt.path();
+                if let Ok(wt_repo) = git2::Repository::open(wt_path) {
+                    if let Ok(head) = wt_repo.head() {
+                        if head.shorthand() == Some(branch) {
+                            return Some(wt_path.to_path_buf());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
 /// Check if worktree exists with the correct branch. Returns true if a new worktree
 /// needs to be created (either doesn't exist, wrong branch, or invalid repo).
 fn worktree_needs_create(worktree_path: &str, expected_branch: &str) -> bool {
@@ -825,9 +858,33 @@ async fn execute_dispatch<R: tauri::Runtime>(
         ) {
             Ok(wt) => info!("Created worktree at {}", wt.path.display()),
             Err(e) => {
-                error!("Failed to create worktree for {key}: {e}");
-                orchestrator.lock().await.claimed.remove(key);
-                return;
+                let err_msg = format!("{e}");
+                // If branch is already checked out somewhere, find that path
+                // and use it instead of failing. Common when the user is
+                // working on the same branch in a different worktree.
+                if err_msg.contains("already checked out") {
+                    if let Some(existing_path) = find_worktree_for_branch(
+                        std::path::Path::new(&repo_fs_path),
+                        &pr_context.branch,
+                    ) {
+                        info!(
+                            "Branch {} already checked out at {}, reusing",
+                            pr_context.branch,
+                            existing_path.display()
+                        );
+                    } else {
+                        error!(
+                            "Branch {} already checked out but couldn't find where",
+                            pr_context.branch
+                        );
+                        orchestrator.lock().await.claimed.remove(key);
+                        return;
+                    }
+                } else {
+                    error!("Failed to create worktree for {key}: {e}");
+                    orchestrator.lock().await.claimed.remove(key);
+                    return;
+                }
             }
         }
     }
