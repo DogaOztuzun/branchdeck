@@ -1,3 +1,4 @@
+use log::debug;
 use serde::{Deserialize, Serialize};
 
 use super::agent::EpochMs;
@@ -50,6 +51,8 @@ pub struct LifecycleEvent {
     pub status: LifecycleStatus,
     pub attempt: u32,
     pub started_at: EpochMs,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
 }
 
 // --- Agent-facing types (written to JSON files) → snake_case ---
@@ -207,6 +210,8 @@ pub struct Orchestrator {
     pub repo_paths: std::collections::HashMap<String, String>,
     /// Active retry timer handles — abort on cancel to prevent stale `RetryDue` events
     pub retry_timers: std::collections::HashMap<String, tokio::task::JoinHandle<()>>,
+    /// Completed lifecycle events — gives frontend timestamp visibility for Done section
+    pub completed_lifecycles: std::collections::HashMap<String, LifecycleEvent>,
 }
 
 impl std::fmt::Debug for Orchestrator {
@@ -219,6 +224,7 @@ impl std::fmt::Debug for Orchestrator {
             .field("completed", &self.completed.len())
             .field("review_ready", &self.review_ready.len())
             .field("repo_paths", &self.repo_paths.len())
+            .field("completed_lifecycles", &self.completed_lifecycles.len())
             .finish_non_exhaustive()
     }
 }
@@ -235,6 +241,7 @@ impl Orchestrator {
             review_ready: std::collections::HashMap::new(),
             repo_paths: std::collections::HashMap::new(),
             retry_timers: std::collections::HashMap::new(),
+            completed_lifecycles: std::collections::HashMap::new(),
         }
     }
 }
@@ -268,6 +275,16 @@ pub fn is_pr_eligible(pr: &PrSummary, config: &OrchestratorConfig) -> bool {
         return false;
     }
 
-    // Only consider PRs with failing CI
-    matches!(pr.ci_status.as_deref(), Some("FAILURE" | "ERROR"))
+    // Eligible if CI is failing
+    if matches!(pr.ci_status.as_deref(), Some("FAILURE" | "ERROR")) {
+        return true;
+    }
+
+    // Rule 4: also eligible if changes requested (even with passing CI)
+    if matches!(pr.review_decision.as_deref(), Some("CHANGES_REQUESTED")) {
+        debug!("PR {}#{} eligible via CHANGES_REQUESTED review", pr.repo_name, pr.number);
+        return true;
+    }
+
+    false
 }

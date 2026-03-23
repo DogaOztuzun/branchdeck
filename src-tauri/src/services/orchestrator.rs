@@ -113,6 +113,7 @@ pub fn apply_pr_event(
                 status: LifecycleStatus::Running,
                 attempt: 1,
                 started_at: now,
+                session_id: None, // populated by executor after dispatch
             },
         });
 
@@ -162,6 +163,7 @@ pub fn apply_session_end(
                     status: LifecycleStatus::ReviewReady,
                     attempt: entry.attempt,
                     started_at: entry.started_at,
+                    session_id: None,
                 },
             });
         }
@@ -169,15 +171,20 @@ pub fn apply_session_end(
             state.claimed.remove(pr_key);
             state.completed.insert(pr_key.to_string());
 
-            effects.push(OrchestratorEffect::EmitLifecycleEvent {
-                event: LifecycleEvent {
-                    pr_key: pr_key.to_string(),
-                    worktree_path: entry.worktree_path,
-                    status: LifecycleStatus::Completed,
-                    attempt: entry.attempt,
-                    started_at: entry.started_at,
-                },
-            });
+            let event = LifecycleEvent {
+                pr_key: pr_key.to_string(),
+                worktree_path: entry.worktree_path,
+                status: LifecycleStatus::Completed,
+                attempt: entry.attempt,
+                started_at: entry.started_at,
+                session_id: None,
+            };
+            info!("PR {pr_key} completed (fix succeeded), tracking in completed_lifecycles");
+            state
+                .completed_lifecycles
+                .insert(pr_key.to_string(), event.clone());
+
+            effects.push(OrchestratorEffect::EmitLifecycleEvent { event });
         }
         SessionOutcome::FixIncomplete | SessionOutcome::NoOutput => {
             if entry.attempt >= MAX_RETRIES {
@@ -186,15 +193,15 @@ pub fn apply_session_end(
                 state.completed.insert(pr_key.to_string());
                 error!("PR {pr_key} exceeded max retries ({MAX_RETRIES}), giving up");
 
-                effects.push(OrchestratorEffect::EmitLifecycleEvent {
-                    event: LifecycleEvent {
-                        pr_key: pr_key.to_string(),
-                        worktree_path: entry.worktree_path,
-                        status: LifecycleStatus::Failed,
-                        attempt: entry.attempt,
-                        started_at: entry.started_at,
-                    },
-                });
+                let event = LifecycleEvent {
+                    pr_key: pr_key.to_string(),
+                    worktree_path: entry.worktree_path,
+                    status: LifecycleStatus::Failed,
+                    attempt: entry.attempt,
+                    started_at: entry.started_at,
+                    session_id: None,
+                };
+                effects.push(OrchestratorEffect::EmitLifecycleEvent { event });
             } else {
                 let (delay_ms, error_msg) = match outcome {
                     SessionOutcome::FixIncomplete => (CONTINUATION_DELAY_MS, None),
@@ -233,6 +240,7 @@ pub fn apply_session_end(
                         status: LifecycleStatus::Retrying,
                         attempt: entry.attempt + 1,
                         started_at: entry.started_at,
+                        session_id: None,
                     },
                 });
             }
@@ -310,6 +318,7 @@ pub fn apply_relaunch(
             status: LifecycleStatus::Fixing,
             attempt: next_attempt,
             started_at: now,
+            session_id: None, // populated by executor after dispatch
         },
     });
 
@@ -372,6 +381,30 @@ pub fn apply_reconciliation(
         });
     }
 
+    // Re-activate completed PRs that have new CI failures (AC-7)
+    let completed_keys_for_repo: Vec<String> = state
+        .completed
+        .iter()
+        .filter(|k| k.starts_with(&repo_prefix))
+        .cloned()
+        .collect();
+
+    for key in &completed_keys_for_repo {
+        // Check if this PR is in the current set with failing CI
+        let has_new_failure = current_prs.iter().any(|pr| {
+            pr_key(&pr.repo_name, pr.number) == *key
+                && matches!(pr.ci_status.as_deref(), Some("FAILURE" | "ERROR"))
+        });
+
+        if has_new_failure {
+            info!("Reconciliation: re-activating completed PR {key} (new CI failure)");
+            state.completed.remove(key);
+            state.completed_lifecycles.remove(key);
+        } else {
+            debug!("Reconciliation: completed PR {key} still passing, keeping in Done");
+        }
+    }
+
     // Detect CI-now-passing for review_ready PRs (AC10: stale detection)
     for pr in current_prs {
         let key = pr_key(&pr.repo_name, pr.number);
@@ -386,6 +419,7 @@ pub fn apply_reconciliation(
                         status: LifecycleStatus::Stale,
                         attempt: entry.attempt,
                         started_at: entry.started_at,
+                        session_id: None,
                     },
                 });
             }
@@ -447,6 +481,7 @@ pub fn apply_retry_due(
             status: LifecycleStatus::Running,
             attempt: retry.attempt,
             started_at: now,
+            session_id: None, // populated by executor after dispatch
         },
     });
 
@@ -492,17 +527,23 @@ pub fn apply_skip(state: &mut Orchestrator, pr_key: &str) -> Vec<OrchestratorEff
     state.claimed.remove(pr_key);
     state.retry_queue.remove(pr_key);
     state.review_ready.remove(pr_key);
+    state.completed.insert(pr_key.to_string());
 
     // Emit terminal lifecycle event so frontend clears the card
-    effects.push(OrchestratorEffect::EmitLifecycleEvent {
-        event: LifecycleEvent {
-            pr_key: pr_key.to_string(),
-            worktree_path: String::new(),
-            status: LifecycleStatus::Completed,
-            attempt: 0,
-            started_at: 0,
-        },
-    });
+    let event = LifecycleEvent {
+        pr_key: pr_key.to_string(),
+        worktree_path: String::new(),
+        status: LifecycleStatus::Completed,
+        attempt: 0,
+        started_at: 0,
+        session_id: None,
+    };
+    info!("PR {pr_key} skipped, tracking in completed_lifecycles");
+    state
+        .completed_lifecycles
+        .insert(pr_key.to_string(), event.clone());
+
+    effects.push(OrchestratorEffect::EmitLifecycleEvent { event });
 
     effects
 }
@@ -914,7 +955,19 @@ pub async fn execute_effects<R: tauri::Runtime>(
                     debug!("Cancelled retry for {key} (no active timer)");
                 }
             }
-            OrchestratorEffect::EmitLifecycleEvent { event } => {
+            OrchestratorEffect::EmitLifecycleEvent { mut event } => {
+                // Populate session_id from running entry if not already set
+                if event.session_id.is_none()
+                    && matches!(
+                        event.status,
+                        LifecycleStatus::Running | LifecycleStatus::Fixing
+                    )
+                {
+                    let orch = orchestrator.lock().await;
+                    if let Some(entry) = orch.running.get(&event.pr_key) {
+                        event.session_id = Some(entry.tab_id.clone());
+                    }
+                }
                 if let Err(e) = app_handle.emit("lifecycle:updated", &event) {
                     error!("Failed to emit lifecycle:updated: {e}");
                 }
