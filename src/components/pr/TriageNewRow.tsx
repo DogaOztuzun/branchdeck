@@ -48,7 +48,7 @@ export function TriageNewRow(props: TriageNewRowProps) {
     if (status === 'FAILURE' || status === 'ERROR') return 'FAIL';
     if (status === 'SUCCESS') return 'PASS';
     if (status === 'PENDING') return 'PEND';
-    return status ?? '—';
+    return status ?? '';
   };
 
   const reviewLabel = () => {
@@ -77,7 +77,7 @@ export function TriageNewRow(props: TriageNewRowProps) {
   return (
     <>
       <div
-        class="px-3 py-2 hover:bg-bg-main/30 flex items-center gap-3 text-base cursor-default"
+        class="px-3 py-1 hover:bg-bg-main/30 flex items-center gap-3 text-[13px] cursor-default"
         tabIndex={0}
         onContextMenu={handleContextMenu}
         onKeyDown={(e) => {
