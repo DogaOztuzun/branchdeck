@@ -62,7 +62,10 @@ async fn poll_loop<R: tauri::Runtime>(
                 // Emit full snapshot to frontend
                 let all_prs_flat: Vec<PrSummary> =
                     grouped.values().flat_map(|v| v.iter().cloned()).collect();
-                info!("PR poller: emitting pr:discovered ({} PRs)", all_prs_flat.len());
+                info!(
+                    "PR poller: emitting pr:discovered ({} PRs)",
+                    all_prs_flat.len()
+                );
                 if let Err(e) = app_handle.emit("pr:discovered", &all_prs_flat) {
                     error!("Failed to emit pr:discovered: {e}");
                 }

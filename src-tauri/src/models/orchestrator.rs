@@ -282,7 +282,10 @@ pub fn is_pr_eligible(pr: &PrSummary, config: &OrchestratorConfig) -> bool {
 
     // Rule 4: also eligible if changes requested (even with passing CI)
     if matches!(pr.review_decision.as_deref(), Some("CHANGES_REQUESTED")) {
-        debug!("PR {}#{} eligible via CHANGES_REQUESTED review", pr.repo_name, pr.number);
+        debug!(
+            "PR {}#{} eligible via CHANGES_REQUESTED review",
+            pr.repo_name, pr.number
+        );
         return true;
     }
 

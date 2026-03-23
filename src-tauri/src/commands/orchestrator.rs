@@ -247,7 +247,10 @@ pub async fn get_running_entries_cmd(
 ) -> Result<Vec<RunningEntry>, AppError> {
     let orch = orchestrator.lock().await;
     let entries: Vec<RunningEntry> = orch.running.values().cloned().collect();
-    debug!("get_running_entries_cmd: returning {} entries", entries.len());
+    debug!(
+        "get_running_entries_cmd: returning {} entries",
+        entries.len()
+    );
     Ok(entries)
 }
 

@@ -4,7 +4,7 @@ mod common;
 
 use branchdeck_lib::models::github::PrSummary;
 use branchdeck_lib::models::orchestrator::{
-    is_pr_eligible, Orchestrator, OrchestratorConfig, OrchestratorEffect, LifecycleStatus,
+    is_pr_eligible, LifecycleStatus, Orchestrator, OrchestratorConfig, OrchestratorEffect,
     SessionOutcome,
 };
 use branchdeck_lib::services::orchestrator::{

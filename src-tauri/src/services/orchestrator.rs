@@ -128,6 +128,7 @@ pub fn apply_pr_event(
 /// - `FixCompleted` → mark completed, release claim
 /// - `FixIncomplete` → schedule continuation retry
 /// - `NoOutput` → schedule failure retry with backoff
+#[allow(clippy::too_many_lines)]
 pub fn apply_session_end(
     state: &mut Orchestrator,
     pr_key: &str,
