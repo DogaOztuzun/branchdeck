@@ -4,7 +4,8 @@ mod common;
 
 use branchdeck_lib::models::github::PrSummary;
 use branchdeck_lib::models::orchestrator::{
-    Orchestrator, OrchestratorConfig, OrchestratorEffect, SessionOutcome,
+    is_pr_eligible, Orchestrator, OrchestratorConfig, OrchestratorEffect, LifecycleStatus,
+    SessionOutcome,
 };
 use branchdeck_lib::services::orchestrator::{
     apply_pr_event, apply_reconciliation, apply_relaunch, apply_retry_due, apply_session_end,
@@ -504,4 +505,88 @@ fn determine_outcome_fix_incomplete() {
         &dir.path().display().to_string(),
     );
     assert_eq!(outcome, SessionOutcome::FixIncomplete);
+}
+
+// --- Triage lifecycle: completed tracking + re-activation ---
+
+#[test]
+fn session_end_fix_completed_tracks_in_completed_lifecycles() {
+    let mut state = make_orchestrator(true, 1);
+    state.running.insert(
+        "test/repo#1".to_string(),
+        branchdeck_lib::models::orchestrator::RunningEntry {
+            pr_key: "test/repo#1".to_string(),
+            worktree_path: "/tmp/wt".to_string(),
+            tab_id: "tab-1".to_string(),
+            started_at: 1000,
+            attempt: 1,
+            branch: "fix/bug".to_string(),
+            base_branch: "main".to_string(),
+        },
+    );
+
+    let _effects = apply_session_end(
+        &mut state,
+        "test/repo#1",
+        SessionOutcome::FixCompleted,
+        2000,
+    );
+
+    assert!(state.completed.contains("test/repo#1"));
+    assert!(state.completed_lifecycles.contains_key("test/repo#1"));
+    let event = &state.completed_lifecycles["test/repo#1"];
+    assert_eq!(event.status, LifecycleStatus::Completed);
+}
+
+#[test]
+fn skip_tracks_in_completed_lifecycles() {
+    let mut state = make_orchestrator(true, 1);
+    state.claimed.insert("test/repo#1".to_string());
+
+    let _effects = apply_skip(&mut state, "test/repo#1");
+
+    assert!(state.completed.contains("test/repo#1"));
+    assert!(state.completed_lifecycles.contains_key("test/repo#1"));
+}
+
+#[test]
+fn reconciliation_removes_completed_on_new_ci_failure() {
+    let mut state = make_orchestrator(true, 1);
+    state.completed.insert("test/repo#1".to_string());
+    state.completed_lifecycles.insert(
+        "test/repo#1".to_string(),
+        branchdeck_lib::models::orchestrator::LifecycleEvent {
+            pr_key: "test/repo#1".to_string(),
+            worktree_path: "/tmp/wt".to_string(),
+            status: LifecycleStatus::Completed,
+            attempt: 1,
+            started_at: 1000,
+            session_id: None,
+        },
+    );
+
+    // Current PRs: #1 is now failing again
+    let prs = vec![make_pr(1, "fix/bug", Some("FAILURE"))];
+    let _effects = apply_reconciliation(&mut state, "test/repo", &prs);
+
+    // Should be removed from both completed sets
+    assert!(!state.completed.contains("test/repo#1"));
+    assert!(!state.completed_lifecycles.contains_key("test/repo#1"));
+}
+
+#[test]
+fn is_pr_eligible_review_requested() {
+    let config = make_config(true, 1);
+    let mut pr = make_pr(1, "fix/bug", Some("SUCCESS"));
+    pr.review_decision = Some("CHANGES_REQUESTED".to_string());
+
+    assert!(is_pr_eligible(&pr, &config));
+}
+
+#[test]
+fn is_pr_eligible_passing_ci_no_review_not_eligible() {
+    let config = make_config(true, 1);
+    let pr = make_pr(1, "fix/bug", Some("SUCCESS"));
+
+    assert!(!is_pr_eligible(&pr, &config));
 }
