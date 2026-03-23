@@ -41,7 +41,7 @@ export function registerShortcuts() {
         break;
       case 'P':
         e.preventDefault();
-        layout.showRightPanel({ kind: 'prs' });
+        layout.setActiveView('pr-triage');
         break;
     }
   });

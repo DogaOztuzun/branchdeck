@@ -1,3 +1,5 @@
+import type { PrSummary } from './github';
+
 export type EpochMs = number;
 
 export type LifecycleStatus =
@@ -16,6 +18,17 @@ export type LifecycleEvent = {
   status: LifecycleStatus;
   attempt: number;
   startedAt: EpochMs;
+  sessionId?: string;
+};
+
+export type RunningEntry = {
+  prKey: string;
+  worktreePath: string;
+  tabId: string;
+  startedAt: EpochMs;
+  attempt: number;
+  branch: string;
+  baseBranch: string;
 };
 
 export type PlanStep = {
@@ -61,4 +74,21 @@ export type AnalysisPlan = {
   approved: boolean;
   approved_plan: ApprovedPlan | null;
   resolved: boolean;
+};
+
+export type TriagePr = {
+  prKey: string;
+  pr: PrSummary | undefined;
+  lifecycle: LifecycleEvent | undefined;
+  analysis: AnalysisPlan | undefined;
+  currentSessionId: string | undefined;
+  repoPath: string | undefined;
+};
+
+export type TriageGroups = {
+  needsAttention: TriagePr[];
+  inProgress: TriagePr[];
+  watching: TriagePr[];
+  newPrs: TriagePr[];
+  done: TriagePr[];
 };

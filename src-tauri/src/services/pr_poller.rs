@@ -1,7 +1,8 @@
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use log::{debug, error, info};
+use tauri::Emitter;
 use tokio::time::{interval, Duration};
 
 use crate::models::agent::{now_ms, Event};
@@ -11,17 +12,31 @@ use crate::services::github;
 
 const POLL_INTERVAL_SECS: u64 = 30;
 
+/// Shared state: all discovered PRs keyed by repo name.
+pub type DiscoveredPrsState = Arc<RwLock<HashMap<String, Vec<PrSummary>>>>;
+
 /// Start the PR poller as a background tokio task.
 /// Polls GitHub PRs for all managed repos on an interval,
-/// publishes `PrStatusChanged` events when state changes.
-pub fn start_pr_poller(event_bus: Arc<EventBus>, repo_paths: Vec<String>) {
+/// publishes `PrStatusChanged` events when state changes,
+/// and emits `pr:discovered` Tauri events for the frontend.
+pub fn start_pr_poller<R: tauri::Runtime + 'static>(
+    event_bus: Arc<EventBus>,
+    repo_paths: Vec<String>,
+    discovered_prs: DiscoveredPrsState,
+    app_handle: tauri::AppHandle<R>,
+) {
     tauri::async_runtime::spawn(async move {
-        poll_loop(&event_bus, &repo_paths).await;
+        poll_loop(&event_bus, &repo_paths, &discovered_prs, &app_handle).await;
     });
     info!("PR poller started (interval={POLL_INTERVAL_SECS}s)");
 }
 
-async fn poll_loop(event_bus: &EventBus, repo_paths: &[String]) {
+async fn poll_loop<R: tauri::Runtime>(
+    event_bus: &EventBus,
+    repo_paths: &[String],
+    discovered_prs: &DiscoveredPrsState,
+    app_handle: &tauri::AppHandle<R>,
+) {
     let mut ticker = interval(Duration::from_secs(POLL_INTERVAL_SECS));
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     let mut last_state: HashMap<String, Vec<PrSummary>> = HashMap::new();
@@ -38,6 +53,22 @@ async fn poll_loop(event_bus: &EventBus, repo_paths: &[String]) {
             Ok(prs) => {
                 let grouped = group_by_repo(&prs);
                 publish_changes(event_bus, &grouped, &mut last_state);
+
+                // Update shared state for frontend IPC queries
+                if let Ok(mut state) = discovered_prs.write() {
+                    state.clone_from(&grouped);
+                }
+
+                // Emit full snapshot to frontend
+                let all_prs_flat: Vec<PrSummary> =
+                    grouped.values().flat_map(|v| v.iter().cloned()).collect();
+                info!(
+                    "PR poller: emitting pr:discovered ({} PRs)",
+                    all_prs_flat.len()
+                );
+                if let Err(e) = app_handle.emit("pr:discovered", &all_prs_flat) {
+                    error!("Failed to emit pr:discovered: {e}");
+                }
             }
             Err(e) => {
                 error!("PR poller failed: {e}");

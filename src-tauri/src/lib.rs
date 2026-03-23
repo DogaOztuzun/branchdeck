@@ -277,6 +277,11 @@ pub fn run() {
 
             app.manage(orchestrator_state.clone());
 
+            // PR poller shared state
+            let discovered_prs: services::pr_poller::DiscoveredPrsState =
+                std::sync::Arc::new(std::sync::RwLock::new(std::collections::HashMap::new()));
+            app.manage(discovered_prs.clone());
+
             recover_stale_runs(app.handle());
             setup_agent_monitoring(app, &event_bus, &activity_store);
             start_stale_checker(app);
@@ -294,7 +299,12 @@ pub fn run() {
             );
 
             // Start PR poller
-            services::pr_poller::start_pr_poller(Arc::clone(&event_bus), repo_paths);
+            services::pr_poller::start_pr_poller(
+                Arc::clone(&event_bus),
+                repo_paths,
+                discovered_prs,
+                app.handle().clone(),
+            );
 
             // Knowledge service initialization
             #[cfg(feature = "knowledge")]
@@ -418,6 +428,8 @@ pub fn run() {
             commands::orchestrator::orchestrator_shepherd_pr_cmd,
             commands::orchestrator::read_analysis_cmd,
             commands::orchestrator::write_approval_cmd,
+            commands::orchestrator::list_discovered_prs_cmd,
+            commands::orchestrator::get_running_entries_cmd,
             // Task
             commands::task::create_task_cmd,
             commands::task::get_task_cmd,

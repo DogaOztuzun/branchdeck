@@ -1,9 +1,13 @@
 use crate::error::AppError;
-use crate::models::orchestrator::{AnalysisPlan, ApprovedPlan, LifecycleEvent, LifecycleStatus};
+use crate::models::github::PrSummary;
+use crate::models::orchestrator::{
+    AnalysisPlan, ApprovedPlan, LifecycleEvent, LifecycleStatus, RunningEntry,
+};
 use crate::services::event_bus::EventBusState;
 use crate::services::orchestrator::{self as orch_service, OrchestratorState};
+use crate::services::pr_poller::DiscoveredPrsState;
 use crate::services::run_manager::RunManagerState;
-use log::{error, info};
+use log::{debug, error, info};
 use std::sync::Arc;
 use tauri::State;
 
@@ -86,6 +90,7 @@ pub async fn get_lifecycles_cmd(
             status: LifecycleStatus::Running,
             attempt: entry.attempt,
             started_at: entry.started_at,
+            session_id: Some(entry.tab_id.clone()),
         });
     }
 
@@ -96,17 +101,29 @@ pub async fn get_lifecycles_cmd(
             status: LifecycleStatus::Retrying,
             attempt: entry.attempt,
             started_at: entry.due_at_ms,
+            session_id: None,
         });
     }
 
     for entry in orch.review_ready.values() {
+        let status = if entry.stale {
+            LifecycleStatus::Stale
+        } else {
+            LifecycleStatus::ReviewReady
+        };
         events.push(LifecycleEvent {
             pr_key: entry.pr_key.clone(),
             worktree_path: entry.worktree_path.clone(),
-            status: LifecycleStatus::ReviewReady,
+            status,
             attempt: entry.attempt,
             started_at: entry.started_at,
+            session_id: None,
         });
+    }
+
+    // Include completed lifecycles for Done section
+    for event in orch.completed_lifecycles.values() {
+        events.push(event.clone());
     }
 
     Ok(events)
@@ -189,6 +206,7 @@ pub async fn orchestrator_shepherd_pr_cmd(
                     status: LifecycleStatus::Running,
                     attempt: 1,
                     started_at: crate::models::agent::now_ms(),
+                    session_id: None, // populated by executor after dispatch
                 },
             },
         ]
@@ -206,6 +224,34 @@ pub async fn orchestrator_shepherd_pr_cmd(
     .await;
 
     Ok(())
+}
+
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub fn list_discovered_prs_cmd(
+    discovered_prs: State<'_, DiscoveredPrsState>,
+) -> Result<Vec<PrSummary>, AppError> {
+    let state = discovered_prs.read().map_err(|e| {
+        error!("Failed to read discovered PRs: {e}");
+        AppError::Config(format!("Lock poisoned: {e}"))
+    })?;
+    let flat: Vec<PrSummary> = state.values().flat_map(|v| v.iter().cloned()).collect();
+    debug!("list_discovered_prs_cmd: returning {} PRs", flat.len());
+    Ok(flat)
+}
+
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub async fn get_running_entries_cmd(
+    orchestrator: State<'_, OrchestratorState>,
+) -> Result<Vec<RunningEntry>, AppError> {
+    let orch = orchestrator.lock().await;
+    let entries: Vec<RunningEntry> = orch.running.values().cloned().collect();
+    debug!(
+        "get_running_entries_cmd: returning {} entries",
+        entries.len()
+    );
+    Ok(entries)
 }
 
 #[tauri::command]

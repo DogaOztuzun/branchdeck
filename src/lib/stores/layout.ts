@@ -3,11 +3,10 @@ import type { PanelGroupAPI } from 'solid-resizable-panels';
 
 export type RightPanelContext =
   | { kind: 'task'; worktreePath: string }
-  | { kind: 'prs' }
   | { kind: 'changes' }
   | { kind: 'agents' };
 
-export type AppView = 'workspace' | 'orchestrations';
+export type AppView = 'workspace' | 'pr-triage';
 
 const [panelApi, setPanelApi] = createSignal<PanelGroupAPI | null>(null);
 const [repoSidebarOpen, setRepoSidebarOpen] = createSignal(true);

@@ -1,9 +1,10 @@
 import { listen } from '@tauri-apps/api/event';
-import { GitPullRequest, PanelLeft, PanelRight } from 'lucide-solid';
+import { PanelLeft, PanelRight } from 'lucide-solid';
 import { createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { cn } from '../../lib/cn';
 import { cancelQueue } from '../../lib/commands/run';
 import { getLayoutStore } from '../../lib/stores/layout';
+import { getLifecycleStore } from '../../lib/stores/lifecycle';
 import { getRepoStore } from '../../lib/stores/repo';
 import { getTaskStore } from '../../lib/stores/task';
 import type { QueueStatus } from '../../types/github';
@@ -12,6 +13,7 @@ export function TopBar() {
   const repoStore = getRepoStore();
   const taskStore = getTaskStore();
   const layout = getLayoutStore();
+  const lifecycleStore = getLifecycleStore();
   const [queue, setQueue] = createSignal<QueueStatus | null>(null);
 
   let unlistenQueue: (() => void) | null = null;
@@ -66,7 +68,7 @@ export function TopBar() {
             <button
               type="button"
               class="cursor-pointer hover:bg-bg-main/50 px-2 py-1 transition-colors duration-150"
-              onClick={() => layout.setActiveView('orchestrations')}
+              onClick={() => layout.setActiveView('pr-triage')}
               title="View batch queue"
             >
               <span class={cn(qs().active ? 'animate-pulse' : '')}>
@@ -102,18 +104,18 @@ export function TopBar() {
         </button>
         <button
           type="button"
-          onClick={() => layout.setActiveView('orchestrations')}
+          onClick={() => layout.setActiveView('pr-triage')}
           class={cn(
             'px-4 h-full text-base font-bold uppercase tracking-wider border-r border-border-subtle transition-colors duration-150 cursor-pointer flex items-center gap-2',
-            layout.activeView() === 'orchestrations'
+            layout.activeView() === 'pr-triage'
               ? 'bg-bg-main text-accent-primary'
               : 'text-text-dim hover:text-text-main',
           )}
         >
-          Orchestrations
-          <Show when={queue()}>
-            <span class="bg-accent-warning/20 text-accent-warning px-1 text-[10px]">
-              {queue()?.active ? 1 : 0}
+          PR Triage
+          <Show when={lifecycleStore.getAttentionCount() > 0}>
+            <span class="bg-accent-error text-white text-xs px-1.5 min-w-[18px] text-center">
+              {lifecycleStore.getAttentionCount()}
             </span>
           </Show>
           <Show when={taskStore.state.pendingPermissions.length > 0}>
@@ -126,20 +128,6 @@ export function TopBar() {
       </div>
 
       <div class="flex items-center gap-1 ml-2">
-        <button
-          type="button"
-          class={cn(
-            'p-1.5 cursor-pointer hover:bg-bg-main/50 transition-colors duration-150',
-            layout.rightPanelContext().kind === 'prs'
-              ? 'text-accent-primary'
-              : 'text-text-dim hover:text-text-main',
-          )}
-          aria-label="Toggle PRs"
-          title="PRs (Ctrl+Shift+P)"
-          onClick={() => layout.showRightPanel({ kind: 'prs' })}
-        >
-          <GitPullRequest size={16} />
-        </button>
         <button
           type="button"
           class={cn(

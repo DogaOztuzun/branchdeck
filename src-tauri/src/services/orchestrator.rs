@@ -113,6 +113,7 @@ pub fn apply_pr_event(
                 status: LifecycleStatus::Running,
                 attempt: 1,
                 started_at: now,
+                session_id: None, // populated by executor after dispatch
             },
         });
 
@@ -127,6 +128,7 @@ pub fn apply_pr_event(
 /// - `FixCompleted` → mark completed, release claim
 /// - `FixIncomplete` → schedule continuation retry
 /// - `NoOutput` → schedule failure retry with backoff
+#[allow(clippy::too_many_lines)]
 pub fn apply_session_end(
     state: &mut Orchestrator,
     pr_key: &str,
@@ -162,6 +164,7 @@ pub fn apply_session_end(
                     status: LifecycleStatus::ReviewReady,
                     attempt: entry.attempt,
                     started_at: entry.started_at,
+                    session_id: None,
                 },
             });
         }
@@ -169,15 +172,20 @@ pub fn apply_session_end(
             state.claimed.remove(pr_key);
             state.completed.insert(pr_key.to_string());
 
-            effects.push(OrchestratorEffect::EmitLifecycleEvent {
-                event: LifecycleEvent {
-                    pr_key: pr_key.to_string(),
-                    worktree_path: entry.worktree_path,
-                    status: LifecycleStatus::Completed,
-                    attempt: entry.attempt,
-                    started_at: entry.started_at,
-                },
-            });
+            let event = LifecycleEvent {
+                pr_key: pr_key.to_string(),
+                worktree_path: entry.worktree_path,
+                status: LifecycleStatus::Completed,
+                attempt: entry.attempt,
+                started_at: entry.started_at,
+                session_id: None,
+            };
+            info!("PR {pr_key} completed (fix succeeded), tracking in completed_lifecycles");
+            state
+                .completed_lifecycles
+                .insert(pr_key.to_string(), event.clone());
+
+            effects.push(OrchestratorEffect::EmitLifecycleEvent { event });
         }
         SessionOutcome::FixIncomplete | SessionOutcome::NoOutput => {
             if entry.attempt >= MAX_RETRIES {
@@ -186,15 +194,19 @@ pub fn apply_session_end(
                 state.completed.insert(pr_key.to_string());
                 error!("PR {pr_key} exceeded max retries ({MAX_RETRIES}), giving up");
 
-                effects.push(OrchestratorEffect::EmitLifecycleEvent {
-                    event: LifecycleEvent {
-                        pr_key: pr_key.to_string(),
-                        worktree_path: entry.worktree_path,
-                        status: LifecycleStatus::Failed,
-                        attempt: entry.attempt,
-                        started_at: entry.started_at,
-                    },
-                });
+                let event = LifecycleEvent {
+                    pr_key: pr_key.to_string(),
+                    worktree_path: entry.worktree_path,
+                    status: LifecycleStatus::Failed,
+                    attempt: entry.attempt,
+                    started_at: entry.started_at,
+                    session_id: None,
+                };
+                state
+                    .completed_lifecycles
+                    .insert(pr_key.to_string(), event.clone());
+
+                effects.push(OrchestratorEffect::EmitLifecycleEvent { event });
             } else {
                 let (delay_ms, error_msg) = match outcome {
                     SessionOutcome::FixIncomplete => (CONTINUATION_DELAY_MS, None),
@@ -233,6 +245,7 @@ pub fn apply_session_end(
                         status: LifecycleStatus::Retrying,
                         attempt: entry.attempt + 1,
                         started_at: entry.started_at,
+                        session_id: None,
                     },
                 });
             }
@@ -310,6 +323,7 @@ pub fn apply_relaunch(
             status: LifecycleStatus::Fixing,
             attempt: next_attempt,
             started_at: now,
+            session_id: None, // populated by executor after dispatch
         },
     });
 
@@ -372,6 +386,33 @@ pub fn apply_reconciliation(
         });
     }
 
+    // Re-activate completed PRs that have new CI failures (AC-7)
+    let completed_keys_for_repo: Vec<String> = state
+        .completed
+        .iter()
+        .filter(|k| k.starts_with(&repo_prefix))
+        .cloned()
+        .collect();
+
+    for key in &completed_keys_for_repo {
+        // Check if this PR is in the current set with failing CI
+        let should_reactivate = current_prs.iter().any(|pr| {
+            pr_key(&pr.repo_name, pr.number) == *key
+                && (matches!(pr.ci_status.as_deref(), Some("FAILURE" | "ERROR"))
+                    || matches!(pr.review_decision.as_deref(), Some("CHANGES_REQUESTED")))
+        });
+
+        if should_reactivate {
+            info!(
+                "Reconciliation: re-activating completed PR {key} (new failure or review changes)"
+            );
+            state.completed.remove(key);
+            state.completed_lifecycles.remove(key);
+        } else {
+            debug!("Reconciliation: completed PR {key} still passing, keeping in Done");
+        }
+    }
+
     // Detect CI-now-passing for review_ready PRs (AC10: stale detection)
     for pr in current_prs {
         let key = pr_key(&pr.repo_name, pr.number);
@@ -386,6 +427,7 @@ pub fn apply_reconciliation(
                         status: LifecycleStatus::Stale,
                         attempt: entry.attempt,
                         started_at: entry.started_at,
+                        session_id: None,
                     },
                 });
             }
@@ -447,6 +489,7 @@ pub fn apply_retry_due(
             status: LifecycleStatus::Running,
             attempt: retry.attempt,
             started_at: now,
+            session_id: None, // populated by executor after dispatch
         },
     });
 
@@ -492,17 +535,23 @@ pub fn apply_skip(state: &mut Orchestrator, pr_key: &str) -> Vec<OrchestratorEff
     state.claimed.remove(pr_key);
     state.retry_queue.remove(pr_key);
     state.review_ready.remove(pr_key);
+    state.completed.insert(pr_key.to_string());
 
     // Emit terminal lifecycle event so frontend clears the card
-    effects.push(OrchestratorEffect::EmitLifecycleEvent {
-        event: LifecycleEvent {
-            pr_key: pr_key.to_string(),
-            worktree_path: String::new(),
-            status: LifecycleStatus::Completed,
-            attempt: 0,
-            started_at: 0,
-        },
-    });
+    let event = LifecycleEvent {
+        pr_key: pr_key.to_string(),
+        worktree_path: String::new(),
+        status: LifecycleStatus::Completed,
+        attempt: 0,
+        started_at: 0,
+        session_id: None,
+    };
+    info!("PR {pr_key} skipped, tracking in completed_lifecycles");
+    state
+        .completed_lifecycles
+        .insert(pr_key.to_string(), event.clone());
+
+    effects.push(OrchestratorEffect::EmitLifecycleEvent { event });
 
     effects
 }
@@ -676,6 +725,39 @@ fn create_orchestrator_task(
     task_path
 }
 
+/// Find the filesystem path where a branch is already checked out.
+fn find_worktree_for_branch(
+    repo_path: &std::path::Path,
+    branch: &str,
+) -> Option<std::path::PathBuf> {
+    let repo = git2::Repository::open(repo_path).ok()?;
+
+    // Check if the main repo itself has this branch checked out
+    if let Ok(head) = repo.head() {
+        if head.shorthand() == Some(branch) {
+            return Some(repo_path.to_path_buf());
+        }
+    }
+
+    // Check worktrees
+    if let Ok(worktrees) = repo.worktrees() {
+        for name in worktrees.iter().flatten() {
+            if let Ok(wt) = repo.find_worktree(name) {
+                let wt_path = wt.path();
+                if let Ok(wt_repo) = git2::Repository::open(wt_path) {
+                    if let Ok(head) = wt_repo.head() {
+                        if head.shorthand() == Some(branch) {
+                            return Some(wt_path.to_path_buf());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
 /// Check if worktree exists with the correct branch. Returns true if a new worktree
 /// needs to be created (either doesn't exist, wrong branch, or invalid repo).
 fn worktree_needs_create(worktree_path: &str, expected_branch: &str) -> bool {
@@ -755,6 +837,9 @@ async fn execute_dispatch<R: tauri::Runtime>(
 ) {
     use crate::models::agent::now_ms;
 
+    // The effective worktree path — may be overridden if we reuse an existing checkout
+    let mut effective_path = worktree_path.to_string();
+
     // Ensure worktree exists and is on the correct branch
     if worktree_needs_create(worktree_path, &pr_context.branch) {
         // Look up repo filesystem path from orchestrator state
@@ -783,13 +868,36 @@ async fn execute_dispatch<R: tauri::Runtime>(
         ) {
             Ok(wt) => info!("Created worktree at {}", wt.path.display()),
             Err(e) => {
-                error!("Failed to create worktree for {key}: {e}");
-                orchestrator.lock().await.claimed.remove(key);
-                return;
+                let err_msg = format!("{e}");
+                if err_msg.contains("already checked out") {
+                    if let Some(existing_path) = find_worktree_for_branch(
+                        std::path::Path::new(&repo_fs_path),
+                        &pr_context.branch,
+                    ) {
+                        info!(
+                            "Branch {} already checked out at {}, reusing",
+                            pr_context.branch,
+                            existing_path.display()
+                        );
+                        effective_path = existing_path.display().to_string();
+                    } else {
+                        error!(
+                            "Branch {} already checked out but couldn't find where",
+                            pr_context.branch
+                        );
+                        orchestrator.lock().await.claimed.remove(key);
+                        return;
+                    }
+                } else {
+                    error!("Failed to create worktree for {key}: {e}");
+                    orchestrator.lock().await.claimed.remove(key);
+                    return;
+                }
             }
         }
     }
 
+    let worktree_path = effective_path.as_str();
     write_pr_context(worktree_path, pr_context);
     deploy_skill_file(worktree_path);
     let task_path = create_orchestrator_task(worktree_path, key, pr_context);
@@ -914,7 +1022,19 @@ pub async fn execute_effects<R: tauri::Runtime>(
                     debug!("Cancelled retry for {key} (no active timer)");
                 }
             }
-            OrchestratorEffect::EmitLifecycleEvent { event } => {
+            OrchestratorEffect::EmitLifecycleEvent { mut event } => {
+                // Populate session_id from running entry if not already set
+                if event.session_id.is_none()
+                    && matches!(
+                        event.status,
+                        LifecycleStatus::Running | LifecycleStatus::Fixing
+                    )
+                {
+                    let orch = orchestrator.lock().await;
+                    if let Some(entry) = orch.running.get(&event.pr_key) {
+                        event.session_id = Some(entry.tab_id.clone());
+                    }
+                }
                 if let Err(e) = app_handle.emit("lifecycle:updated", &event) {
                     error!("Failed to emit lifecycle:updated: {e}");
                 }
