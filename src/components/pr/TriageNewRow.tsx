@@ -71,8 +71,9 @@ export function TriageNewRow(props: TriageNewRowProps) {
   return (
     <>
       <div
-        class="px-3 py-1.5 hover:bg-bg-main/50 flex items-center gap-2 text-base cursor-default border-b border-border-subtle/50 transition-colors duration-150"
+        class="px-3 py-1.5 hover:bg-bg-main/50 flex items-center gap-2 text-base cursor-pointer border-b border-border-subtle/50 transition-colors duration-150"
         tabIndex={0}
+        onClick={handleStartWorkflow}
         onContextMenu={handleContextMenu}
         onKeyDown={(e) => {
           if (e.key === 'Enter') handleStartWorkflow();
@@ -119,16 +120,7 @@ export function TriageNewRow(props: TriageNewRowProps) {
             <span class="text-xs text-text-dim">{age()}</span>
           </Show>
           <Show when={loading()}>
-            <span class="text-xs text-accent-warning">Starting...</span>
-          </Show>
-          <Show when={props.item.repoPath && !loading()}>
-            <button
-              type="button"
-              class="text-xs text-accent-primary border border-accent-primary/30 px-2 py-0.5 hover:bg-accent-primary/10 cursor-pointer"
-              onClick={(e) => { e.stopPropagation(); handleStartWorkflow(); }}
-            >
-              Analyze
-            </button>
+            <span class="text-xs text-accent-warning">Analyzing...</span>
           </Show>
         </div>
       </div>
