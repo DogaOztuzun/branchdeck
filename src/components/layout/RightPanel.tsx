@@ -1,6 +1,5 @@
 import { Match, Switch } from 'solid-js';
 import { getLayoutStore } from '../../lib/stores/layout';
-import { PrList } from '../pr/PrList';
 import { TaskDetail } from '../task/TaskDetail';
 import { AgentsPanel } from './AgentsPanel';
 import { ChangesSidebar } from './ChangesSidebar';
@@ -16,9 +15,6 @@ export function RightPanel() {
           const worktreePath = () => (ctx().kind === 'task' ? ctx().worktreePath : '');
           return <TaskDetail worktreePath={worktreePath()} />;
         })()}
-      </Match>
-      <Match when={layout.rightPanelContext().kind === 'prs'}>
-        <PrList />
       </Match>
       <Match when={layout.rightPanelContext().kind === 'changes'}>
         <ChangesSidebar />

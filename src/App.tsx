@@ -1,7 +1,7 @@
 import { Match, onMount, Switch } from 'solid-js';
-import { OrchestrationView } from './components/layout/OrchestrationView';
 import { Shell } from './components/layout/Shell';
 import { TopBar } from './components/layout/TopBar';
+import { PrTriageView } from './components/pr/PrTriageView';
 import { ToastRegion } from './components/ui/ToastRegion';
 import { registerShortcuts } from './lib/shortcuts';
 import { getLayoutStore } from './lib/stores/layout';
@@ -20,8 +20,8 @@ export function App() {
         <Match when={layout.activeView() === 'workspace'}>
           <Shell />
         </Match>
-        <Match when={layout.activeView() === 'orchestrations'}>
-          <OrchestrationView />
+        <Match when={layout.activeView() === 'pr-triage'}>
+          <PrTriageView />
         </Match>
       </Switch>
       <ToastRegion />
