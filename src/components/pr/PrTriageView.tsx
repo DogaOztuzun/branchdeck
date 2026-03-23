@@ -60,15 +60,13 @@ export function PrTriageView() {
   const filteredNew = createMemo(() => {
     if (!showFailingOnly()) return groups().newPrs;
     return groups().newPrs.filter(
-      (item) =>
-        item.pr?.ciStatus === 'FAILURE' || item.pr?.ciStatus === 'ERROR',
+      (item) => item.pr?.ciStatus === 'FAILURE' || item.pr?.ciStatus === 'ERROR',
     );
   });
 
   const hasFailingPrs = createMemo(() =>
     groups().newPrs.some(
-      (item) =>
-        item.pr?.ciStatus === 'FAILURE' || item.pr?.ciStatus === 'ERROR',
+      (item) => item.pr?.ciStatus === 'FAILURE' || item.pr?.ciStatus === 'ERROR',
     ),
   );
 
@@ -81,9 +79,7 @@ export function PrTriageView() {
       groups().done.length,
   );
 
-  function hasDiscoveredPr(
-    item: TriagePr,
-  ): item is TriagePr & { pr: NonNullable<TriagePr['pr']> } {
+  function hasDiscoveredPr(item: TriagePr): item is TriagePr & { pr: NonNullable<TriagePr['pr']> } {
     return item.pr !== undefined;
   }
 
@@ -177,7 +173,9 @@ export function PrTriageView() {
                     {(item) => (
                       <TriageCard
                         item={item}
-                        lastStep={item.currentSessionId ? lastSteps()[item.currentSessionId] : undefined}
+                        lastStep={
+                          item.currentSessionId ? lastSteps()[item.currentSessionId] : undefined
+                        }
                         tickMs={tickMs()}
                       />
                     )}
@@ -203,9 +201,7 @@ export function PrTriageView() {
                     {group.repo}
                   </div>
                   <For each={group.items}>
-                    {(item) => (
-                      <TriageCard item={item} lastStep={undefined} tickMs={tickMs()} />
-                    )}
+                    {(item) => <TriageCard item={item} lastStep={undefined} tickMs={tickMs()} />}
                   </For>
                 </>
               )}
@@ -241,7 +237,9 @@ export function PrTriageView() {
                   <For each={group.items}>
                     {(item) => (
                       <Show when={hasDiscoveredPr(item)}>
-                        <TriageNewRow item={item as TriagePr & { pr: NonNullable<TriagePr['pr']> }} />
+                        <TriageNewRow
+                          item={item as TriagePr & { pr: NonNullable<TriagePr['pr']> }}
+                        />
                       </Show>
                     )}
                   </For>
@@ -271,9 +269,7 @@ export function PrTriageView() {
                   <Show when={item.pr}>
                     <span class="text-sm text-accent-info shrink-0">#{item.pr!.number}</span>
                   </Show>
-                  <span class="text-text-dim truncate">
-                    {item.pr?.branch ?? item.prKey}
-                  </span>
+                  <span class="text-text-dim truncate">{item.pr?.branch ?? item.prKey}</span>
                   <Show when={item.pr}>
                     <span class="text-xs text-text-dim shrink-0">
                       {item.pr!.repoName.split('/').pop()}

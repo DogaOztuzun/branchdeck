@@ -1,13 +1,8 @@
 import { listen } from '@tauri-apps/api/event';
-import { createMemo } from 'solid-js';
-import { batch } from 'solid-js';
+import { batch, createMemo } from 'solid-js';
 import { createStore, produce } from 'solid-js/store';
 import type { PrSummary } from '../../types/github';
-import type {
-  AnalysisPlan,
-  LifecycleEvent,
-  TriagePr,
-} from '../../types/lifecycle';
+import type { AnalysisPlan, LifecycleEvent, TriagePr } from '../../types/lifecycle';
 import { listOpenPrs } from '../commands/github';
 import {
   getLifecycles,
@@ -44,18 +39,12 @@ function createLifecycleStore() {
       setState(
         produce((s) => {
           // Session tracking: update prKey → sessionId mapping
-          if (
-            (event.status === 'running' || event.status === 'fixing') &&
-            event.sessionId
-          ) {
+          if ((event.status === 'running' || event.status === 'fixing') && event.sessionId) {
             s.sessionByPr[event.prKey] = event.sessionId;
           }
 
           // Re-activation: completed PR moving back to active
-          if (
-            event.status === 'running' &&
-            s.completedLifecycles[event.prKey]
-          ) {
+          if (event.status === 'running' && s.completedLifecycles[event.prKey]) {
             delete s.completedLifecycles[event.prKey];
           }
 
@@ -70,18 +59,12 @@ function createLifecycleStore() {
       );
 
       // Auto-fetch analysis on reviewReady or stale
-      if (
-        (event.status === 'reviewReady' || event.status === 'stale') &&
-        event.worktreePath
-      ) {
+      if ((event.status === 'reviewReady' || event.status === 'stale') && event.worktreePath) {
         loadAnalysis(event.prKey, event.worktreePath);
       }
 
       // Fallback: fetch session mapping if sessionId missing for running status
-      if (
-        (event.status === 'running' || event.status === 'fixing') &&
-        !event.sessionId
-      ) {
+      if ((event.status === 'running' || event.status === 'fixing') && !event.sessionId) {
         getRunningEntries()
           .then((entries) => {
             setState(
@@ -115,12 +98,9 @@ function createLifecycleStore() {
 
   async function startListening() {
     if (!lifecycleUnlisten) {
-      const unlisten = await listen<LifecycleEvent>(
-        'lifecycle:updated',
-        (e) => {
-          handleLifecycleEvent(e.payload);
-        },
-      );
+      const unlisten = await listen<LifecycleEvent>('lifecycle:updated', (e) => {
+        handleLifecycleEvent(e.payload);
+      });
       lifecycleUnlisten = unlisten;
     }
 
@@ -258,9 +238,7 @@ function createLifecycleStore() {
     }
 
     // Add completed entries without discovery
-    for (const [prKey, lifecycle] of Object.entries(
-      state.completedLifecycles,
-    )) {
+    for (const [prKey, lifecycle] of Object.entries(state.completedLifecycles)) {
       if (!seen.has(prKey)) {
         seen.add(prKey);
         result.push({
@@ -283,9 +261,7 @@ function createLifecycleStore() {
 
   function getAttentionCount(): number {
     return triagePrs().filter(
-      (t) =>
-        t.lifecycle?.status === 'reviewReady' ||
-        t.lifecycle?.status === 'failed',
+      (t) => t.lifecycle?.status === 'reviewReady' || t.lifecycle?.status === 'failed',
     ).length;
   }
 

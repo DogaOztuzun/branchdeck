@@ -59,12 +59,11 @@ export function TriageNewRow(props: TriageNewRowProps) {
   return (
     <div class="border-b border-border-subtle/50">
       {/* Row — click to expand */}
-      <div
-        class="px-3 py-1.5 hover:bg-[var(--color-surface-raised)] flex items-center gap-2 text-base cursor-pointer transition-colors duration-150"
-        tabIndex={0}
+      <button
+        type="button"
+        class="w-full text-left px-3 py-1.5 hover:bg-[var(--color-surface-raised)] flex items-center gap-2 text-base cursor-pointer transition-colors duration-150"
         onClick={() => setExpanded(!expanded())}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') setExpanded(!expanded());
           if (e.key === 'Escape') setExpanded(false);
         }}
       >
@@ -72,25 +71,17 @@ export function TriageNewRow(props: TriageNewRowProps) {
 
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-2">
-            <span class="text-sm text-accent-info shrink-0">
-              #{props.item.pr.number}
-            </span>
-            <span class="text-text-main truncate font-medium">
-              {props.item.pr.branch}
-            </span>
+            <span class="text-sm text-accent-info shrink-0">#{props.item.pr.number}</span>
+            <span class="text-text-main truncate font-medium">{props.item.pr.branch}</span>
           </div>
           <Show when={props.item.pr.title}>
-            <div class="text-xs text-text-dim truncate mt-0.5">
-              {props.item.pr.title}
-            </div>
+            <div class="text-xs text-text-dim truncate mt-0.5">{props.item.pr.title}</div>
           </Show>
         </div>
 
         <div class="flex items-center gap-2 shrink-0">
           <Show when={reviewLabel()}>
-            <span class={`text-xs font-medium uppercase ${reviewColor()}`}>
-              {reviewLabel()}
-            </span>
+            <span class={`text-xs font-medium uppercase ${reviewColor()}`}>{reviewLabel()}</span>
           </Show>
           <Show when={props.item.pr.additions != null}>
             <span class="text-xs text-text-dim">
@@ -106,19 +97,20 @@ export function TriageNewRow(props: TriageNewRowProps) {
             <span class="text-xs text-accent-warning">Analyzing...</span>
           </Show>
         </div>
-      </div>
+      </button>
 
       {/* Expanded detail — shows action */}
       <Show when={expanded() && !loading()}>
         <div class="px-3 pb-2 pt-1 bg-bg-main/30 flex items-center gap-3">
-          <span class="text-xs text-text-dim flex-1">
-            {props.item.pr.url}
-          </span>
+          <span class="text-xs text-text-dim flex-1">{props.item.pr.url}</span>
           <Show when={props.item.repoPath}>
             <button
               type="button"
               class="text-xs text-accent-primary border border-accent-primary/30 px-3 py-1 hover:bg-accent-primary/10 cursor-pointer"
-              onClick={(e) => { e.stopPropagation(); handleStartWorkflow(); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleStartWorkflow();
+              }}
             >
               Analyze PR
             </button>

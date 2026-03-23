@@ -37,8 +37,7 @@ export function TriageCard(props: TriageCardProps) {
   const status = () => props.item.lifecycle?.status;
   const label = () => (status() ? LIFECYCLE_STATUS_LABELS[status()!] : '');
 
-  const branchName = () =>
-    props.item.pr?.branch ?? props.item.prKey;
+  const branchName = () => props.item.pr?.branch ?? props.item.prKey;
 
   const elapsed = () => {
     const startedAt = props.item.lifecycle?.startedAt;
@@ -46,8 +45,7 @@ export function TriageCard(props: TriageCardProps) {
     return formatElapsed(props.tickMs - startedAt);
   };
 
-  const stepText = () =>
-    props.lastStep?.description ?? 'Waiting in queue...';
+  const stepText = () => props.lastStep?.description ?? 'Waiting in queue...';
 
   const isInProgress = () =>
     status() === 'running' ||
@@ -55,8 +53,7 @@ export function TriageCard(props: TriageCardProps) {
     status() === 'approved' ||
     status() === 'retrying';
 
-  const repoShort = () =>
-    props.item.pr?.repoName?.split('/').pop() ?? '';
+  const repoShort = () => props.item.pr?.repoName?.split('/').pop() ?? '';
 
   const statusColor = () => {
     const s = status();
@@ -67,10 +64,7 @@ export function TriageCard(props: TriageCardProps) {
   };
 
   return (
-    <div
-      class="px-3 py-1.5 hover:bg-[var(--color-surface-raised)] flex items-center gap-2 text-base border-b border-border-subtle/50 transition-colors duration-150"
-      tabIndex={0}
-    >
+    <div class="px-3 py-1.5 hover:bg-[var(--color-surface-raised)] flex items-center gap-2 text-base border-b border-border-subtle/50 transition-colors duration-150">
       {/* Status dot */}
       <StatusDot status={status()} />
 
@@ -78,23 +72,15 @@ export function TriageCard(props: TriageCardProps) {
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2">
           <Show when={props.item.pr}>
-            <span class="text-sm text-accent-info shrink-0">
-              #{props.item.pr!.number}
-            </span>
+            <span class="text-sm text-accent-info shrink-0">#{props.item.pr!.number}</span>
           </Show>
-          <span class="text-text-main truncate font-medium">
-            {branchName()}
-          </span>
+          <span class="text-text-main truncate font-medium">{branchName()}</span>
         </div>
         <Show when={isInProgress()}>
-          <div class="text-xs text-text-dim truncate mt-0.5">
-            {stepText()}
-          </div>
+          <div class="text-xs text-text-dim truncate mt-0.5">{stepText()}</div>
         </Show>
         <Show when={status() === 'stale'}>
-          <div class="text-xs text-text-dim mt-0.5">
-            CI now passing
-          </div>
+          <div class="text-xs text-text-dim mt-0.5">CI now passing</div>
         </Show>
       </div>
 
@@ -103,9 +89,7 @@ export function TriageCard(props: TriageCardProps) {
         <Show when={elapsed()}>
           <span class="text-xs text-text-dim font-mono">{elapsed()}</span>
         </Show>
-        <span class={`text-xs font-medium uppercase ${statusColor()}`}>
-          {label()}
-        </span>
+        <span class={`text-xs font-medium uppercase ${statusColor()}`}>{label()}</span>
         <Show when={status() === 'stale'}>
           <button
             type="button"
