@@ -99,7 +99,7 @@ export function PrTriageView() {
       </div>
 
       {/* Summary counts */}
-      <div class="text-base text-text-dim mb-4">
+      <div class="text-sm text-text-dim mb-4">
         <Show when={groups().needsAttention.length > 0}>
           <span class="text-accent-error">{groups().needsAttention.length} need attention</span>
           <span class="mx-1">·</span>
