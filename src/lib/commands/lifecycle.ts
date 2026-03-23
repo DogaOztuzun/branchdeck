@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { error as logError } from '@tauri-apps/plugin-log';
-import type { ApprovedPlan, LifecycleEvent } from '../../types/lifecycle';
+import type { PrSummary } from '../../types/github';
+import type { ApprovedPlan, LifecycleEvent, RunningEntry } from '../../types/lifecycle';
 
 export async function relaunchPr(prKey: string, worktreePath: string): Promise<void> {
   try {
@@ -64,6 +65,24 @@ export async function writeApproval(
     await invoke('write_approval_cmd', { worktreePath, approvedPlan });
   } catch (e) {
     logError(`writeApproval failed: ${e}`);
+    throw e;
+  }
+}
+
+export async function listDiscoveredPrs(): Promise<PrSummary[]> {
+  try {
+    return await invoke<PrSummary[]>('list_discovered_prs_cmd');
+  } catch (e) {
+    logError(`listDiscoveredPrs failed: ${e}`);
+    throw e;
+  }
+}
+
+export async function getRunningEntries(): Promise<RunningEntry[]> {
+  try {
+    return await invoke<RunningEntry[]>('get_running_entries_cmd');
+  } catch (e) {
+    logError(`getRunningEntries failed: ${e}`);
     throw e;
   }
 }
