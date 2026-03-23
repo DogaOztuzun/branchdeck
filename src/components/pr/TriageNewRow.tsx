@@ -48,7 +48,7 @@ export function TriageNewRow(props: TriageNewRowProps) {
     if (status === 'FAILURE' || status === 'ERROR') return 'FAIL';
     if (status === 'SUCCESS') return 'PASS';
     if (status === 'PENDING') return 'PEND';
-    return status ?? '';
+    return '';
   };
 
   const reviewLabel = () => {
@@ -77,53 +77,65 @@ export function TriageNewRow(props: TriageNewRowProps) {
   return (
     <>
       <div
-        class="px-3 py-1 hover:bg-bg-main/30 flex items-center gap-3 text-base cursor-default"
+        class="px-3 py-1.5 hover:bg-bg-main/50 flex items-center gap-2 text-base cursor-default border-b border-border-subtle/50"
         tabIndex={0}
         onContextMenu={handleContextMenu}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') handleContextMenu(e as unknown as MouseEvent);
+          if (e.key === 'Enter') handleStartWorkflow();
         }}
       >
-        <span class="truncate flex-1 text-text-main">
-          {props.item.pr.branch}
-        </span>
-        <span class="text-xs text-text-dim shrink-0">
-          {props.item.pr.repoName.split('/').pop()}
-        </span>
-        <span class="text-xs text-text-dim shrink-0">
-          #{props.item.pr.number}
-        </span>
-        <span class={`text-xs font-medium uppercase shrink-0 ${ciColor()}`}>
-          {ciLabel()}
-        </span>
-        <Show when={reviewLabel()}>
-          <span class={`text-xs font-medium uppercase shrink-0 ${reviewColor()}`}>
-            {reviewLabel()}
-          </span>
-        </Show>
-        <Show when={props.item.pr.additions != null}>
-          <span class="text-xs text-accent-success shrink-0">
-            +{props.item.pr.additions}
-          </span>
-          <span class="text-xs text-accent-error shrink-0">
-            -{props.item.pr.deletions}
-          </span>
-        </Show>
-        <Show when={age()}>
-          <span class="text-xs text-text-dim shrink-0">{age()}</span>
-        </Show>
-        <Show when={loading()}>
-          <span class="text-xs text-accent-warning shrink-0">Starting...</span>
-        </Show>
-        <Show when={props.item.repoPath && !loading()}>
-          <button
-            type="button"
-            class="text-xs text-text-dim hover:text-accent-primary shrink-0 cursor-pointer"
-            onClick={(e) => { e.stopPropagation(); handleStartWorkflow(); }}
-          >
-            Analyze
-          </button>
-        </Show>
+        {/* Left: branch + title */}
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-text-main truncate font-medium">
+              {props.item.pr.branch}
+            </span>
+            <span class="text-xs text-text-dim shrink-0">
+              {props.item.pr.repoName.split('/').pop()}#{props.item.pr.number}
+            </span>
+          </div>
+          <Show when={props.item.pr.title}>
+            <div class="text-xs text-text-dim truncate mt-0.5">
+              {props.item.pr.title}
+            </div>
+          </Show>
+        </div>
+
+        {/* Right: badges + action */}
+        <div class="flex items-center gap-2 shrink-0">
+          <Show when={ciLabel()}>
+            <span class={`text-xs font-medium uppercase ${ciColor()}`}>
+              {ciLabel()}
+            </span>
+          </Show>
+          <Show when={reviewLabel()}>
+            <span class={`text-xs font-medium uppercase ${reviewColor()}`}>
+              {reviewLabel()}
+            </span>
+          </Show>
+          <Show when={props.item.pr.additions != null}>
+            <span class="text-xs text-text-dim">
+              <span class="text-accent-success">+{props.item.pr.additions}</span>
+              <span class="mx-0.5">/</span>
+              <span class="text-accent-error">-{props.item.pr.deletions}</span>
+            </span>
+          </Show>
+          <Show when={age()}>
+            <span class="text-xs text-text-dim">{age()}</span>
+          </Show>
+          <Show when={loading()}>
+            <span class="text-xs text-accent-warning">Starting...</span>
+          </Show>
+          <Show when={props.item.repoPath && !loading()}>
+            <button
+              type="button"
+              class="text-xs text-accent-primary border border-accent-primary/30 px-2 py-0.5 hover:bg-accent-primary/10 cursor-pointer"
+              onClick={(e) => { e.stopPropagation(); handleStartWorkflow(); }}
+            >
+              Analyze
+            </button>
+          </Show>
+        </div>
       </div>
 
       {/* Context menu */}
