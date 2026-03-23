@@ -202,6 +202,10 @@ pub fn apply_session_end(
                     started_at: entry.started_at,
                     session_id: None,
                 };
+                state
+                    .completed_lifecycles
+                    .insert(pr_key.to_string(), event.clone());
+
                 effects.push(OrchestratorEffect::EmitLifecycleEvent { event });
             } else {
                 let (delay_ms, error_msg) = match outcome {
@@ -392,13 +396,16 @@ pub fn apply_reconciliation(
 
     for key in &completed_keys_for_repo {
         // Check if this PR is in the current set with failing CI
-        let has_new_failure = current_prs.iter().any(|pr| {
+        let should_reactivate = current_prs.iter().any(|pr| {
             pr_key(&pr.repo_name, pr.number) == *key
-                && matches!(pr.ci_status.as_deref(), Some("FAILURE" | "ERROR"))
+                && (matches!(pr.ci_status.as_deref(), Some("FAILURE" | "ERROR"))
+                    || matches!(pr.review_decision.as_deref(), Some("CHANGES_REQUESTED")))
         });
 
-        if has_new_failure {
-            info!("Reconciliation: re-activating completed PR {key} (new CI failure)");
+        if should_reactivate {
+            info!(
+                "Reconciliation: re-activating completed PR {key} (new failure or review changes)"
+            );
             state.completed.remove(key);
             state.completed_lifecycles.remove(key);
         } else {
