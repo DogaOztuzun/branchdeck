@@ -19,7 +19,7 @@ export function PrTriageView() {
 
   const [lastSteps, setLastSteps] = createSignal<Record<string, RunStepEvent>>({});
   const [tickMs, setTickMs] = createSignal(Date.now());
-  const [showAllNew, setShowAllNew] = createSignal(false);
+  const [showFailingOnly, setShowFailingOnly] = createSignal(false);
 
   let unlistenStep: (() => void) | null = null;
   let tickInterval: ReturnType<typeof setInterval> | null = null;
@@ -46,12 +46,19 @@ export function PrTriageView() {
   const groups = createMemo(() => groupTriagePrs(lifecycleStore.getTriagePrs()));
 
   const filteredNew = createMemo(() => {
-    if (showAllNew()) return groups().newPrs;
+    if (!showFailingOnly()) return groups().newPrs;
     return groups().newPrs.filter(
       (item) =>
         item.pr?.ciStatus === 'FAILURE' || item.pr?.ciStatus === 'ERROR',
     );
   });
+
+  const hasFailingPrs = createMemo(() =>
+    groups().newPrs.some(
+      (item) =>
+        item.pr?.ciStatus === 'FAILURE' || item.pr?.ciStatus === 'ERROR',
+    ),
+  );
 
   const totalPrs = createMemo(
     () =>
@@ -184,17 +191,17 @@ export function PrTriageView() {
             <h3 class="text-xs text-text-dim uppercase tracking-wider">
               NEW ({filteredNew().length})
             </h3>
-            <Show when={groups().newPrs.length > filteredNew().length || showAllNew()}>
+            <Show when={hasFailingPrs()}>
               <button
                 type="button"
                 class="text-xs text-text-dim cursor-pointer hover:text-text-main"
-                onClick={() => setShowAllNew(!showAllNew())}
+                onClick={() => setShowFailingOnly(!showFailingOnly())}
               >
-                {showAllNew() ? 'Failing only' : `Show all (${groups().newPrs.length})`}
+                {showFailingOnly() ? `Show all (${groups().newPrs.length})` : 'Failing only'}
               </button>
             </Show>
           </div>
-          <div class="divide-y divide-border-subtle/30">
+          <div class="divide-y divide-border-subtle">
             <For each={filteredNew()}>
               {(item) => (
                 <Show when={hasDiscoveredPr(item)}>

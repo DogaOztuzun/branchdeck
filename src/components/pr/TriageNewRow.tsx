@@ -77,7 +77,7 @@ export function TriageNewRow(props: TriageNewRowProps) {
   return (
     <>
       <div
-        class="px-3 py-1 hover:bg-bg-main/30 flex items-center gap-3 text-base cursor-default"
+        class="group px-3 py-1 hover:bg-bg-main/30 flex items-center gap-3 text-base cursor-default"
         tabIndex={0}
         onContextMenu={handleContextMenu}
         onKeyDown={(e) => {
@@ -114,6 +114,15 @@ export function TriageNewRow(props: TriageNewRowProps) {
         </Show>
         <Show when={loading()}>
           <span class="text-xs text-accent-warning shrink-0">Starting...</span>
+        </Show>
+        <Show when={props.item.repoPath && !loading()}>
+          <button
+            type="button"
+            class="text-xs text-text-dim hover:text-accent-primary shrink-0 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+            onClick={(e) => { e.stopPropagation(); handleStartWorkflow(); }}
+          >
+            Analyze
+          </button>
         </Show>
       </div>
 
