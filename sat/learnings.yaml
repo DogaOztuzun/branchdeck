@@ -2,6 +2,23 @@ fixed_issues: []
 
 false_positives: []
 
-weak_areas: []
+weak_areas:
+  - area: onboarding-empty-state
+    description: No empty state guidance for first-time users — Add Repository button has low visibility
+    first_seen: run-20260324-235809
+    issue_count: 1
+  - area: worktree-creation-flow
+    description: Modal works well visually but post-creation UX is weak — no auto-terminal, disabled button lacks explanation
+    first_seen: run-20260324-235809
+    issue_count: 2
 
-scenario_feedback: []
+scenario_feedback:
+  - scenario_id: add-first-repository
+    quality: bad
+    reason: Scenario assumes empty workspace but test environment has repos loaded. Step 1 is uninterpretable by runner. Needs pre-condition setup.
+  - scenario_id: create-worktree-from-sidebar
+    quality: good
+    reason: Found real app issues (no auto-terminal on worktree click, missing disabled-button explanation). Runner struggled with custom components but scenario design is solid.
+  - scenario_id: open-terminal-tabs
+    quality: good
+    reason: Core terminal tab flow works well. Step 8 needs splitting into discrete actions but overall scenario found the right things.
