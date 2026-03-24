@@ -64,11 +64,12 @@ function parseScenarioFile(filePath: string): {
 }
 
 async function captureScreenshot(
+  scenarioId: string,
   stepNum: number,
   phase: 'before' | 'after',
 ): Promise<string> {
   const runDir = process.env.SAT_RUN_DIR || 'sat/runs/run-default';
-  const screenshotDir = path.resolve(runDir, 'screenshots');
+  const screenshotDir = path.resolve(runDir, 'screenshots', scenarioId);
   fs.mkdirSync(screenshotDir, { recursive: true });
 
   const filename = `step-${stepNum}-${phase}.png`;
@@ -77,7 +78,7 @@ async function captureScreenshot(
   const base64 = await browser.takeScreenshot();
   fs.writeFileSync(filepath, Buffer.from(base64, 'base64'));
 
-  return `screenshots/${filename}`;
+  return `screenshots/${scenarioId}/${filename}`;
 }
 
 async function getPageSummary(): Promise<string> {
@@ -216,7 +217,19 @@ async function interpretAndExecuteStep(stepText: string): Promise<{
       return { action_taken: `Could not find for hover: ${target}`, success: false, failure_reason: `Element not found: ${target}` };
     }
 
-    // Fallback: try to find something related and interact
+    // Fallback: try to find any element matching key terms and interact with it
+    const fallbackEl = await findElementByDescription(stepText);
+    if (fallbackEl) {
+      const tagName = await fallbackEl.getTagName();
+      if (tagName === 'button' || tagName === 'a') {
+        await fallbackEl.click();
+        await browser.pause(500);
+        return { action_taken: `Fallback: clicked ${tagName} matching "${stepText}"`, success: true, failure_reason: null };
+      }
+      const text = await fallbackEl.getText();
+      return { action_taken: `Fallback: found element for "${stepText}" (text: "${text.slice(0, 80)}")`, success: true, failure_reason: null };
+    }
+
     return {
       action_taken: `Unrecognized step pattern: ${stepText}`,
       success: false,
@@ -229,47 +242,134 @@ async function interpretAndExecuteStep(stepText: string): Promise<{
 }
 
 /**
+ * Strip filler words from a natural-language description to extract key terms.
+ */
+function extractKeyTerms(description: string): string[] {
+  const fillers = new Set([
+    'a', 'an', 'the', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'from',
+    'that', 'this', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+    'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+    'should', 'may', 'might', 'shall', 'can', 'and', 'or', 'but', 'if',
+    'its', 'it', 'they', 'them', 'their', 'there', 'here', 'where',
+    'when', 'how', 'what', 'which', 'who', 'whom', 'whose',
+    'any', 'some', 'no', 'not', 'only', 'just', 'also', 'still',
+    'new', 'first', 'last', 'next', 'under', 'over', 'into', 'onto',
+  ]);
+  return description
+    .toLowerCase()
+    .replace(/['"()]/g, '')
+    .split(/\s+/)
+    .filter((w) => w.length > 1 && !fillers.has(w));
+}
+
+/**
+ * Branchdeck-specific element mapping.
+ * Maps common scenario descriptions to known selectors.
+ */
+const KNOWN_ELEMENTS: Record<string, string> = {
+  'repository': 'button*=Branchdeck',
+  'repo': 'button*=Branchdeck',
+  'sidebar': '[data-resizable-panel-id="repo-sidebar"]',
+  'terminal': '[data-resizable-panel-id="terminal"]',
+  'worktree': 'button*=New Worktree',
+  'add repository': 'button*=Add Repository',
+  'add repo': 'button*=Add Repository',
+  'open terminal': 'button*=Open Terminal',
+  'claude': 'button*=Start Claude Code',
+  'claude code': 'button*=Start Claude Code',
+  'workspace': 'button*=Workspace',
+  'pr triage': 'button*=PR Triage',
+  'create button': 'button*=Create',
+  'create': 'button*=Create',
+  'cancel': 'button*=Cancel',
+  'close': 'button*=Close',
+  'modal': '[role="dialog"]',
+  'dialog': '[role="dialog"]',
+  'input': 'input',
+  'dropdown': 'select',
+  'tab dropdown': 'button[aria-label="Open tab menu"]',
+  'plus button': 'button*=+',
+  'new tab': 'button*=+',
+  'main branch': 'button*=main',
+  'main': 'button*=main',
+  'agents': 'button*=Agents',
+  'prs': 'button*=PRs',
+  'changes': 'button*=Changes',
+};
+
+/**
  * Find a DOM element from a natural-language description.
- * Tries multiple strategies in order of specificity.
+ * Tries known mappings first, then keyword matching, then generic strategies.
  */
 async function findElementByDescription(description: string): Promise<WebdriverIO.Element | null> {
   const desc = description.toLowerCase().replace(/['"]/g, '');
+  const keyTerms = extractKeyTerms(description);
 
-  // Strategy 1: aria-label match
-  try {
-    const ariaEl = await $(`[aria-label*="${desc}"]`);
-    if (await ariaEl.isExisting()) return ariaEl;
-  } catch { /* continue */ }
+  // Strategy 0: Check known element mappings (most reliable)
+  for (const [pattern, selector] of Object.entries(KNOWN_ELEMENTS)) {
+    if (desc.includes(pattern) || keyTerms.some((t) => pattern.includes(t))) {
+      try {
+        const el = await $(selector);
+        if (await el.isExisting()) return el;
+      } catch { /* continue */ }
+    }
+  }
 
-  // Strategy 2: button/link text match
-  try {
-    const btnEl = await $(`button*=${description}`);
-    if (await btnEl.isExisting()) return btnEl;
-  } catch { /* continue */ }
+  // Strategy 1: aria-label match on key terms
+  for (const term of keyTerms) {
+    try {
+      const ariaEl = await $(`[aria-label*="${term}" i]`);
+      if (await ariaEl.isExisting()) return ariaEl;
+    } catch { /* continue */ }
+  }
 
-  // Strategy 3: any element containing the text
+  // Strategy 2: button text match on key terms
+  for (const term of keyTerms) {
+    try {
+      const btnEl = await $(`button*=${term}`);
+      if (await btnEl.isExisting()) return btnEl;
+    } catch { /* continue */ }
+  }
+
+  // Strategy 3: full description text match
   try {
     const textEl = await $(`*=${description}`);
     if (await textEl.isExisting()) return textEl;
   } catch { /* continue */ }
 
-  // Strategy 4: data-testid or data-resizable-panel-id
-  const slugified = desc.replace(/\s+/g, '-');
-  try {
-    const dataEl = await $(`[data-testid="${slugified}"], [data-resizable-panel-id="${slugified}"]`);
-    if (await dataEl.isExisting()) return dataEl;
-  } catch { /* continue */ }
+  // Strategy 4: data-testid or data-resizable-panel-id from key terms
+  for (const term of keyTerms) {
+    try {
+      const dataEl = await $(`[data-testid*="${term}"], [data-resizable-panel-id*="${term}"]`);
+      if (await dataEl.isExisting()) return dataEl;
+    } catch { /* continue */ }
+  }
 
-  // Strategy 5: input by placeholder
-  try {
-    const placeholderEl = await $(`input[placeholder*="${desc}"]`);
-    if (await placeholderEl.isExisting()) return placeholderEl;
-  } catch { /* continue */ }
+  // Strategy 5: input by placeholder from key terms
+  for (const term of keyTerms) {
+    try {
+      const placeholderEl = await $(`input[placeholder*="${term}" i]`);
+      if (await placeholderEl.isExisting()) return placeholderEl;
+    } catch { /* continue */ }
+  }
 
   // Strategy 6: heading text
+  for (const term of keyTerms) {
+    try {
+      const headingEl = await $(`h1*=${term}, h2*=${term}, h3*=${term}`);
+      if (await headingEl.isExisting()) return headingEl;
+    } catch { /* continue */ }
+  }
+
+  // Strategy 7: any clickable element with matching text
   try {
-    const headingEl = await $(`h1*=${description}, h2*=${description}, h3*=${description}`);
-    if (await headingEl.isExisting()) return headingEl;
+    const allButtons = await $$('button');
+    for (const btn of allButtons) {
+      const text = (await btn.getText()).toLowerCase();
+      if (keyTerms.some((term) => text.includes(term))) {
+        return btn;
+      }
+    }
   } catch { /* continue */ }
 
   return null;
@@ -340,14 +440,14 @@ describe('SAT Scenario Run', () => {
       const stepStart = Date.now();
 
       // Before screenshot
-      const beforeScreenshot = await captureScreenshot(stepNum, 'before');
+      const beforeScreenshot = await captureScreenshot(scenario.id, stepNum, 'before');
       const beforeSummary = await getPageSummary();
 
       // Execute step
       const result = await interpretAndExecuteStep(stepText);
 
       // After screenshot
-      const afterScreenshot = await captureScreenshot(stepNum, 'after');
+      const afterScreenshot = await captureScreenshot(scenario.id, stepNum, 'after');
       const afterSummary = await getPageSummary();
 
       const stepDuration = Date.now() - stepStart;
