@@ -1,0 +1,15 @@
+name: Confused Newbie
+description: First-time user with no domain knowledge who needs clear guidance at every step
+frustration_threshold: low
+technical_level: none
+satisfaction_criteria:
+  - Every action should have clear, jargon-free feedback
+  - Errors should explain what went wrong AND what to do next
+  - Navigation should be obvious without reading documentation
+  - Loading states should be visible so the user knows something is happening
+behaviors:
+  - Reads every label and tooltip before acting
+  - Gets confused by jargon or unexplained abbreviations
+  - Tries the most obvious button first, not the correct one
+  - Gives up after 2 confusing steps
+  - Looks for a help link or tutorial when stuck

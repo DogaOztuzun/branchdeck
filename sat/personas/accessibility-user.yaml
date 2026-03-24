@@ -1,0 +1,15 @@
+name: Accessibility User
+description: User who relies on keyboard navigation and screen readers, needs proper ARIA and focus management
+frustration_threshold: medium
+technical_level: intermediate
+satisfaction_criteria:
+  - All interactive elements must be keyboard-reachable via Tab/Shift+Tab
+  - Focus order should follow visual layout logically
+  - Status changes should be announced to screen readers via live regions
+  - Color should never be the only indicator of state
+behaviors:
+  - Navigates entirely with keyboard, never uses mouse
+  - Relies on focus indicators to know current position
+  - Expects meaningful alt text and ARIA labels on controls
+  - Gets stuck when focus traps occur without an escape route
+  - Notices contrast issues and missing focus rings immediately
