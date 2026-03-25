@@ -105,7 +105,9 @@ If story is scored **Complex**, spawn a subagent first:
 
 Wait for completion. The detailed story file gives quick-dev better context for complex refactors.
 
-### 3c: Implement via quick-dev subagent
+### 3c: Implement via quick-dev subagent (MANDATORY — NO EXCEPTIONS)
+
+**CRITICAL: You MUST use the Agent tool to spawn a subagent running /bmad-quick-dev. Do NOT implement code directly in this context. The story-cycle context handles git ceremony ONLY. All implementation happens inside the quick-dev subagent, which generates spec files, runs structured review, and creates proper artifacts.**
 
 Build the subagent prompt based on complexity and architecture level:
 
