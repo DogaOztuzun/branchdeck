@@ -63,9 +63,8 @@ pub fn load_personas(dir: &Path) -> Result<Vec<(String, SatPersona)>, AppError> 
     })?;
 
     for dir_entry in entries {
-        let dir_entry = dir_entry.map_err(|e| {
-            AppError::Sat(format!("failed to read directory entry: {e}"))
-        })?;
+        let dir_entry =
+            dir_entry.map_err(|e| AppError::Sat(format!("failed to read directory entry: {e}")))?;
         let path = dir_entry.path();
         if path.extension().and_then(|ext| ext.to_str()) == Some("yaml") {
             let filename = path
@@ -118,8 +117,8 @@ pub fn parse_scenario_md(content: &str) -> Result<SatScenario, AppError> {
         ));
     }
 
-    let document: yaml_front_matter::Document<SatScenarioMeta> =
-        YamlFrontMatter::parse(content).map_err(|e| {
+    let document: yaml_front_matter::Document<SatScenarioMeta> = YamlFrontMatter::parse(content)
+        .map_err(|e| {
             error!("Failed to parse scenario frontmatter: {e}");
             AppError::Sat(format!("scenario frontmatter parse error: {e}"))
         })?;
@@ -352,9 +351,8 @@ pub fn generate_manifest(config: &SatGenerationConfig) -> Result<SatManifest, Ap
     let manifest = build_manifest(&personas, &scenarios, &now);
 
     // 5. Write manifest
-    std::fs::create_dir_all(&config.scenarios_dir).map_err(|e| {
-        AppError::Sat(format!("failed to create scenarios dir: {e}"))
-    })?;
+    std::fs::create_dir_all(&config.scenarios_dir)
+        .map_err(|e| AppError::Sat(format!("failed to create scenarios dir: {e}")))?;
     write_manifest(&manifest, &config.scenarios_dir)?;
 
     info!(
@@ -383,9 +381,8 @@ pub fn load_scenarios(dir: &Path) -> Result<Vec<SatScenario>, AppError> {
     })?;
 
     for dir_entry in entries {
-        let dir_entry = dir_entry.map_err(|e| {
-            AppError::Sat(format!("failed to read directory entry: {e}"))
-        })?;
+        let dir_entry =
+            dir_entry.map_err(|e| AppError::Sat(format!("failed to read directory entry: {e}")))?;
         let path = dir_entry.path();
         if path.extension().and_then(|ext| ext.to_str()) == Some("md") {
             match parse_scenario_file(&path) {
@@ -441,7 +438,9 @@ fn extract_list_section(body: &str, heading: &str) -> Vec<String> {
             }
             // Strip leading "1. ", "- ", "* " etc.
             let stripped = trimmed
-                .trim_start_matches(|c: char| c.is_ascii_digit() || c == '.' || c == '-' || c == '*')
+                .trim_start_matches(|c: char| {
+                    c.is_ascii_digit() || c == '.' || c == '-' || c == '*'
+                })
                 .trim_start();
             if stripped.is_empty() {
                 None
@@ -459,7 +458,7 @@ mod tests {
     use super::*;
     use crate::models::sat::{FrustrationThreshold, TechnicalLevel};
 
-    const POWER_USER_YAML: &str = r#"
+    const POWER_USER_YAML: &str = r"
 name: Power User
 description: Experienced developer who expects keyboard shortcuts
 frustration_threshold: high
@@ -470,9 +469,9 @@ satisfaction_criteria:
 behaviors:
   - Skips onboarding and tooltips entirely
   - Tries keyboard shortcuts before clicking
-"#;
+";
 
-    const NEWBIE_YAML: &str = r#"
+    const NEWBIE_YAML: &str = r"
 name: Confused Newbie
 description: First-time user with no domain knowledge
 frustration_threshold: low
@@ -481,9 +480,9 @@ satisfaction_criteria:
   - Every action should have clear feedback
 behaviors:
   - Reads every label and tooltip before acting
-"#;
+";
 
-    const SCENARIO_MD: &str = r#"---
+    const SCENARIO_MD: &str = "---
 id: test-scenario
 title: Test Scenario Title
 persona: power-user
@@ -507,7 +506,7 @@ A user wants to test a feature in the app.
 ## Edge Cases
 - The button is disabled when offline
 - The result takes longer than 5 seconds
-"#;
+";
 
     #[test]
     fn parse_power_user_persona() {
