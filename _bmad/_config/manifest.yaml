@@ -1,28 +1,42 @@
 installation:
-  version: 6.1.0
+  version: 6.2.1
   installDate: 2026-03-15T11:29:12.063Z
-  lastUpdated: 2026-03-15T11:29:12.063Z
+  lastUpdated: 2026-03-25T01:40:06.126Z
 modules:
   - name: core
-    version: 6.1.0
+    version: 6.2.1
     installDate: 2026-03-15T11:29:11.524Z
-    lastUpdated: 2026-03-15T11:29:11.524Z
+    lastUpdated: 2026-03-25T01:40:05.083Z
     source: built-in
     npmPackage: null
     repoUrl: null
   - name: bmm
-    version: 6.1.0
+    version: 6.2.1
     installDate: 2026-03-15T11:29:08.911Z
-    lastUpdated: 2026-03-15T11:29:11.524Z
+    lastUpdated: 2026-03-25T01:40:05.083Z
     source: built-in
     npmPackage: null
     repoUrl: null
   - name: tea
     version: 1.7.0
     installDate: 2026-03-15T11:29:10.643Z
-    lastUpdated: 2026-03-15T11:29:12.063Z
+    lastUpdated: 2026-03-25T01:40:05.217Z
     source: external
     npmPackage: bmad-method-test-architecture-enterprise
     repoUrl: https://github.com/bmad-code-org/bmad-method-test-architecture-enterprise
+  - name: wds
+    version: 0.3.0
+    installDate: 2026-03-25T01:39:57.377Z
+    lastUpdated: 2026-03-25T01:40:05.992Z
+    source: external
+    npmPackage: bmad-method-wds-expansion
+    repoUrl: https://github.com/bmad-code-org/bmad-method-wds-expansion
+  - name: bmb
+    version: 1.1.0
+    installDate: 2026-03-25T01:39:59.296Z
+    lastUpdated: 2026-03-25T01:40:06.126Z
+    source: external
+    npmPackage: bmad-builder
+    repoUrl: https://github.com/bmad-code-org/bmad-builder
 ides:
   - claude-code
