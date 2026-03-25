@@ -133,7 +133,29 @@ Where `{architecture_level_context}` is:
 
 Wait for the subagent to complete.
 
-### 3d: Verify
+### 3d: Ensure Commit
+
+Quick-dev should have committed, but verify. If the worktree has uncommitted changes:
+
+```bash
+cd {worktree_base}/story-N.M
+git status --porcelain
+```
+
+If dirty, stage and commit:
+```bash
+git add -A
+git commit -m "$(cat <<'EOF'
+feat(epic-N): Story N.M — [story title]
+
+FRs: [FR numbers]
+
+Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
+EOF
+)"
+```
+
+### 3e: Verify
 
 ```bash
 cd {worktree_base}/story-N.M
@@ -145,7 +167,7 @@ bun run verify
 - **[S] Skip** — skip this story, mark as skipped, continue
 - **[X] Exit** — stop epic cycle, leave worktree for manual work
 
-### 3e: Party-Mode Review (COMPLEX only)
+### 3f: Party-Mode Review (COMPLEX only)
 
 If story is scored **Complex**, spawn a party-mode review subagent:
 
@@ -166,7 +188,7 @@ Wait for review. If any BLOCK findings:
 
 If only WARN or OK, auto-continue.
 
-### 3f: Merge Story into Epic Branch
+### 3g: Merge Story into Epic Branch
 
 ```bash
 cd {project-root}
@@ -181,17 +203,25 @@ git worktree remove {worktree_base}/story-N.M
 git branch -d story/N.M-[story-title-kebab]
 ```
 
-Report: `Story N.M [SIMPLE|MEDIUM|COMPLEX] done. [files changed] files. Next: Story N.{M+1}`
+### 3h: Update Sprint Status
 
-### 3g: Continue to next story
+Update the sprint status file to reflect story completion:
+
+Find the sprint status file at `{project-root}/_bmad-output/implementation-artifacts/sprint-status*.yaml` (or `.yml`). Update Story N.M status to `done` with the commit hash and date.
+
+If the sprint status file doesn't exist, skip this step.
+
+Report: `Story N.M [SIMPLE|MEDIUM|COMPLEX] done. [files changed] files. Sprint status updated. Next: Story N.{M+1}`
+
+### 3i: Continue to next story
 
 Loop back to 3a. Continue until all stories complete or user exits.
 
 ---
 
-## Step 4: Epic Complete — Party-Mode Review (ALWAYS)
+## Step 4: Epic Complete
 
-After all stories are merged, always run a full epic review:
+After all stories are merged into the epic branch:
 
 ```bash
 cd {project-root}
@@ -199,64 +229,25 @@ git checkout epic/N-[epic-title-kebab]
 bun run verify
 ```
 
-Spawn party-mode review subagent:
-
-```
-/bmad-party-mode Review the complete implementation of Epic N.
-Diff: run `git diff main..epic/N-[branch]`
-Winston: architecture compliance — crate boundaries, no leaked business logic, effect pattern completeness.
-Amelia: code quality — cross-story consistency, shared patterns, test coverage gaps.
-Quinn: test coverage — all FRs have test coverage, edge cases for critical paths.
-Bob: story completeness — all ACs met, no scope creep, no missing stories.
-Report: list findings as BLOCK, WARN, or OK. Recommend ship-readiness.
-```
-
-Present findings. If BLOCK findings exist, offer to create fix stories and re-enter the loop.
-
-## Step 5: Ship Decision
+**Update sprint status** — mark Epic N as complete in the sprint status file.
 
 **Present epic summary:**
 ```
-Epic N: [title] — COMPLETE
+Epic N: [title] — ALL STORIES MERGED
 
 Stories: [completed] done, [skipped] skipped
 Complexity: [X simple, Y medium, Z complex]
 Total files changed: [count]
 FRs covered: [list]
 Verify: [pass/fail]
-Party review: [ship-ready / N blocks]
 ```
 
-**Options:**
-```
-[P] Push epic branch and create PR to main
-[R] Run bmad-code-review for additional static analysis
-[F] Fix — re-enter story loop for fix stories
-[X] Exit — epic branch ready for manual review
-```
+**Suggest next steps (user handles manually):**
+- `bmad-code-review` — full review of epic diff vs main
+- `bmad-retrospective` — post-epic retro for lessons learned
+- Push epic branch + create PR when ready
 
-### If P (Push + PR):
-```bash
-git push -u origin epic/N-[epic-title-kebab]
-gh pr create --title "Epic N: [title]" --body "$(cat <<'EOF'
-## Summary
-[Epic goal]
-
-## Stories
-- [x] N.1: [title] (simple)
-- [x] N.2: [title] (medium)
-...
-
-## FRs Covered
-[FR list]
-
-## Review
-Party-mode review: [ship-ready / findings summary]
-
-Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
-EOF
-)"
-```
+Workflow complete. HALT.
 
 ---
 
