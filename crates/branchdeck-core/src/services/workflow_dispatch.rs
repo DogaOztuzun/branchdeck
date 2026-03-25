@@ -1,4 +1,4 @@
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 
 use crate::models::workflow::{
     DispatchEffect, DispatchPlan, TriggerContext, TriggerEvent, WorkflowDef,
@@ -17,7 +17,8 @@ pub fn plan_dispatch(
     event: &TriggerEvent,
     repo_path: &str,
 ) -> DispatchPlan {
-    let matches = registry.match_workflows(event);
+    let mut matches = registry.match_workflows(event);
+    matches.sort_by_key(|d| d.config.name.clone());
 
     if matches.is_empty() {
         debug!("No workflow matched trigger event kind={}", event.kind);
@@ -52,7 +53,8 @@ fn build_dispatch_plan(
     let mut effects = Vec::new();
 
     let (worktree_branch, worktree_suffix) = derive_worktree_info(event, &workflow_name);
-    let worktree_path = format!("{repo_path}/.branchdeck/worktrees/{worktree_suffix}");
+    let safe_suffix = sanitize_path_component(&worktree_suffix);
+    let worktree_path = format!("{repo_path}/.branchdeck/worktrees/{safe_suffix}");
 
     // 1. Create worktree
     effects.push(DispatchEffect::CreateWorktree {
@@ -62,7 +64,10 @@ fn build_dispatch_plan(
     });
 
     // 2. Write context from event data
-    let context_json = serde_json::to_string_pretty(&event.context).unwrap_or_default();
+    let context_json = serde_json::to_string_pretty(&event.context).unwrap_or_else(|e| {
+        error!("Failed to serialize trigger context: {e}");
+        String::new()
+    });
     effects.push(DispatchEffect::WriteContext {
         worktree_path: worktree_path.clone(),
         context_file: ".branchdeck/context.json".to_string(),
@@ -108,6 +113,13 @@ fn build_dispatch_plan(
         workflow_name,
         effects,
     }
+}
+
+/// Sanitize a path component by removing traversal sequences and path separators.
+fn sanitize_path_component(s: &str) -> String {
+    s.replace("..", "")
+        .replace(['/', '\\'], "-")
+        .replace('\0', "")
 }
 
 /// Derive worktree branch name and path suffix from trigger event context.

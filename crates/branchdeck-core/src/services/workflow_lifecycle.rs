@@ -279,7 +279,8 @@ pub fn compute_backoff_delay(retry: &RetryDef, attempt: u32) -> u64 {
     match retry.backoff {
         BackoffStrategy::Fixed => retry.base_delay_ms,
         BackoffStrategy::Exponential => {
-            retry.base_delay_ms.saturating_mul(1u64.wrapping_shl(attempt))
+            let shift = attempt.min(63);
+            retry.base_delay_ms.saturating_mul(1u64 << shift)
         }
     }
 }
