@@ -1180,7 +1180,7 @@ async fn handle_event(
             };
             execute_effects(effects, orchestrator, run_manager, emitter, Some(event_bus)).await;
         }
-        Event::RunComplete { tab_id, .. } => {
+        Event::RunComplete { tab_id, status, .. } => {
             let (key, worktree) = {
                 let orch = orchestrator.lock().await;
                 match find_pr_key_by_tab_id(&orch, tab_id) {
@@ -1196,7 +1196,18 @@ async fn handle_event(
                 }
             };
 
-            let outcome = determine_session_outcome(&worktree);
+            // Issue workflows (key contains #i) don't produce analysis.json.
+            // Treat successful completion as FixCompleted, failure as NoOutput.
+            let is_issue_workflow = key.contains("#i");
+            let outcome = if is_issue_workflow {
+                if status == "success" {
+                    SessionOutcome::FixCompleted
+                } else {
+                    SessionOutcome::NoOutput
+                }
+            } else {
+                determine_session_outcome(&worktree)
+            };
             let effects = {
                 let mut orch = orchestrator.lock().await;
                 apply_session_end(&mut orch, &key, outcome, now_ms())
@@ -1241,6 +1252,15 @@ async fn handle_event(
             let registry = crate::services::workflow::WorkflowRegistry::scan(&search_dirs);
 
             for trigger in &trigger_events {
+                // Respect concurrency limit
+                {
+                    let orch = orchestrator.lock().await;
+                    let running_count = u32::try_from(orch.running.len()).unwrap_or(u32::MAX);
+                    if running_count >= orch.config.max_concurrent {
+                        debug!("Orchestrator: at concurrency limit, deferring issue dispatch");
+                        break;
+                    }
+                }
                 let plan = crate::services::workflow_dispatch::plan_dispatch(
                     &registry, trigger, &repo_path,
                 );
@@ -1270,6 +1290,7 @@ async fn handle_event(
                 } = &trigger.context
                 {
                     let key = issue_key(r, *number);
+                    let issue_branch = format!("workflow/{}-issue-{}", plan.workflow_name, number);
                     if let Some((worktree_path, tab_id)) = result {
                         let mut orch = orchestrator.lock().await;
                         orch.running.insert(
@@ -1280,8 +1301,8 @@ async fn handle_event(
                                 tab_id,
                                 started_at: crate::models::agent::now_ms(),
                                 attempt: 1,
-                                branch: String::new(),
-                                base_branch: String::new(),
+                                branch: issue_branch,
+                                base_branch: "main".to_string(),
                             },
                         );
                     } else {

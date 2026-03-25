@@ -66,32 +66,43 @@ fn publish_changes(
     last_state: &mut HashMap<String, Vec<IssueSummary>>,
 ) {
     for (repo, issues) in current {
-        let has_new = match last_state.get(repo) {
-            Some(prev) => has_new_issues(prev, issues),
-            None => !issues.is_empty(),
+        if issues.is_empty() {
+            continue;
+        }
+
+        let changed = match last_state.get(repo) {
+            Some(prev) => has_changes(prev, issues),
+            None => true,
         };
 
-        if has_new {
+        if changed {
             info!(
-                "Issue poller: new issues detected for {repo} ({} total)",
+                "Issue poller: issue changes detected for {repo} ({} total)",
                 issues.len()
             );
-            let receivers = event_bus.publish(Event::IssueDetected {
-                repo: repo.clone(),
-                issues: issues.clone(),
-                ts: now_ms(),
-            });
-            if receivers == 0 {
-                debug!("Issue poller: no subscribers received event for {repo}");
-            }
+        }
+
+        // Always publish when there are open issues — the orchestrator's
+        // claimed/completed sets handle dedup. This ensures unclaimed issues
+        // (e.g., after a failed dispatch) are retried on the next poll.
+        let receivers = event_bus.publish(Event::IssueDetected {
+            repo: repo.clone(),
+            issues: issues.clone(),
+            ts: now_ms(),
+        });
+        if receivers == 0 {
+            debug!("Issue poller: no subscribers received event for {repo}");
         }
     }
 
     last_state.clone_from(current);
 }
 
-/// Check if there are any issues in `current` not present in `prev`.
-fn has_new_issues(prev: &[IssueSummary], current: &[IssueSummary]) -> bool {
+/// Check if the issue set changed (different numbers or count).
+fn has_changes(prev: &[IssueSummary], current: &[IssueSummary]) -> bool {
+    if prev.len() != current.len() {
+        return true;
+    }
     for issue in current {
         if !prev.iter().any(|p| p.number == issue.number) {
             return true;
@@ -118,31 +129,31 @@ mod tests {
     }
 
     #[test]
-    fn test_has_new_issues_empty_prev() {
+    fn test_has_changes_empty_prev() {
         let prev = vec![];
         let current = vec![make_issue(1, "r")];
-        assert!(has_new_issues(&prev, &current));
+        assert!(has_changes(&prev, &current));
     }
 
     #[test]
-    fn test_has_new_issues_same() {
+    fn test_has_changes_same() {
         let prev = vec![make_issue(1, "r")];
         let current = vec![make_issue(1, "r")];
-        assert!(!has_new_issues(&prev, &current));
+        assert!(!has_changes(&prev, &current));
     }
 
     #[test]
-    fn test_has_new_issues_new_added() {
+    fn test_has_changes_new_added() {
         let prev = vec![make_issue(1, "r")];
         let current = vec![make_issue(1, "r"), make_issue(2, "r")];
-        assert!(has_new_issues(&prev, &current));
+        assert!(has_changes(&prev, &current));
     }
 
     #[test]
-    fn test_has_new_issues_none_new_even_if_removed() {
+    fn test_has_changes_detects_removal() {
         let prev = vec![make_issue(1, "r"), make_issue(2, "r")];
         let current = vec![make_issue(1, "r")];
-        assert!(!has_new_issues(&prev, &current));
+        assert!(has_changes(&prev, &current));
     }
 
     #[test]
