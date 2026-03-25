@@ -20,7 +20,7 @@ impl KnowledgeService {
         let service = Arc::clone(self);
         let mut rx = event_bus.subscribe();
         let token = service.shutdown_token().clone();
-        tauri::async_runtime::spawn(async move {
+        tokio::spawn(async move {
             loop {
                 tokio::select! {
                     result = rx.recv() => match result {
@@ -405,7 +405,7 @@ impl KnowledgeService {
     pub fn start_sona_tick(self: &Arc<Self>) {
         let service = Arc::clone(self);
         let token = self.shutdown_token().clone();
-        tauri::async_runtime::spawn(async move {
+        tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
             interval.tick().await; // skip immediate first tick — no trajectories yet
             loop {

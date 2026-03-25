@@ -13,44 +13,26 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+branchdeck-core = { path = "../crates/branchdeck-core" }
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-global-shortcut = "2"
+tauri-plugin-log = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-git2 = "0.20"
-portable-pty = "0.9"
 tokio = { version = "1", features = ["full"] }
-thiserror = "2"
-dirs = "6"
-sha2 = "0.10"
-uuid = { version = "1", features = ["v4"] }
 log = "0.4"
-tauri-plugin-log = "2"
-octocrab = "0.44"
-chrono = { version = "0.4.44", features = ["clock"] }
-yaml-front-matter = "0.1"
-notify-debouncer-mini = "0.7"
-notify = "8"
-
-# Knowledge service (feature-gated)
-rvf-runtime = { version = "0.2", optional = true }
-fastembed = { version = "5", optional = true }
-bincode = { version = "2", optional = true }
-tokio-util = { version = "0.7", features = ["rt"], optional = true }
-
-# SONA learning engine (feature-gated)
-ruvector-sona = { version = "0.1", optional = true, features = ["serde-support"] }
 
 [features]
 default = ["knowledge"]
-knowledge = ["dep:rvf-runtime", "dep:fastembed", "dep:bincode", "dep:tokio-util"]
-sona = ["dep:ruvector-sona", "knowledge"]
+knowledge = ["branchdeck-core/knowledge"]
+sona = ["branchdeck-core/sona", "knowledge"]
 
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json"] }
 tempfile = "3.27.0"
+git2 = "0.20"
 
 [lints.rust]
 unsafe_code = "deny"
@@ -59,4 +41,3 @@ unsafe_code = "deny"
 unwrap_used = "warn"
 expect_used = "warn"
 pedantic = { level = "warn", priority = -1 }
-

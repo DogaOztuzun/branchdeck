@@ -1,18 +1,19 @@
 use crate::services::event_bus::EventBus;
+use crate::traits::{self, EventEmitter};
 use log::{debug, error, info, warn};
-use tauri::{AppHandle, Emitter};
+use std::sync::Arc;
 use tokio::sync::broadcast::error::RecvError;
 
-pub fn start(app_handle: AppHandle, event_bus: &EventBus) {
+pub fn start(emitter: Arc<dyn EventEmitter>, event_bus: &EventBus) {
     let mut rx = event_bus.subscribe();
 
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         debug!("Event bridge started, forwarding EventBus to frontend");
 
         loop {
             match rx.recv().await {
                 Ok(event) => {
-                    if let Err(e) = app_handle.emit("agent:event", &event) {
+                    if let Err(e) = traits::emit(emitter.as_ref(), "agent:event", &event) {
                         error!("Failed to emit agent:event to frontend: {e}");
                     }
                 }

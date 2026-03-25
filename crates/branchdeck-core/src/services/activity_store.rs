@@ -143,7 +143,7 @@ impl ActivityStore {
     pub fn start_subscriber(self: &Arc<Self>, event_bus: &EventBus) {
         let store = Arc::clone(self);
         let mut rx = event_bus.subscribe();
-        tauri::async_runtime::spawn(async move {
+        tokio::spawn(async move {
             loop {
                 match rx.recv().await {
                     Ok(event) => store.handle_event(event).await,
@@ -161,7 +161,7 @@ impl ActivityStore {
 
     pub fn start_gc(self: &Arc<Self>, ttl_ms: EpochMs) {
         let store = Arc::clone(self);
-        tauri::async_runtime::spawn(async move {
+        tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(60));
             loop {
                 interval.tick().await;

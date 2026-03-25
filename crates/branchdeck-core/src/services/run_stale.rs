@@ -1,8 +1,8 @@
 use crate::models::run::{PendingPermission, PermissionResponseMsg, RunInfo, RunStatus};
 use crate::services::run_state;
+use crate::traits::{self, EventEmitter};
 use log::{error, warn};
 use std::collections::HashMap;
-use tauri::Emitter;
 use tokio::io::AsyncWriteExt;
 use tokio::process::ChildStdin;
 
@@ -40,11 +40,11 @@ pub fn check_run_stale(last_activity_ms: u64, now_ms: u64) -> bool {
 /// If timed out, sends an auto-deny to the sidecar, removes from the map,
 /// and resets the run status to Running if no permissions remain.
 #[allow(clippy::implicit_hasher)]
-pub async fn check_permission_timeout<R: tauri::Runtime>(
+pub async fn check_permission_timeout(
     pending_permissions: &mut HashMap<String, PendingPermission>,
     active_run: &mut Option<RunInfo>,
     mut stdin: Option<&mut ChildStdin>,
-    app_handle: &tauri::AppHandle<R>,
+    emitter: &dyn EventEmitter,
 ) {
     if pending_permissions.is_empty() {
         return;
@@ -85,7 +85,7 @@ pub async fn check_permission_timeout<R: tauri::Runtime>(
         if let Some(ref mut run) = active_run {
             run.status = RunStatus::Running;
             run_state::save_run_state(&run.task_path, run);
-            if let Err(e) = app_handle.emit("run:status_changed", &*run) {
+            if let Err(e) = traits::emit(emitter, "run:status_changed", &*run) {
                 error!("Failed to emit run:status_changed after permission timeout: {e}");
             }
         }

@@ -2,8 +2,8 @@ use crate::models::agent::{self, Event};
 use crate::models::run::{PendingPermission, RunInfo, RunStatus};
 use crate::models::task::TaskStatus;
 use crate::services::{event_bus::EventBus, run_state, task};
+use crate::traits::{self, EventEmitter};
 use log::error;
-use tauri::Emitter;
 
 /// Side effects produced by pure state transition functions.
 ///
@@ -28,11 +28,7 @@ pub enum RunEffect {
 }
 
 /// Execute a list of side effects. Each arm is one line — no logic here.
-pub fn execute_effects<R: tauri::Runtime>(
-    effects: Vec<RunEffect>,
-    app_handle: &tauri::AppHandle<R>,
-    event_bus: &EventBus,
-) {
+pub fn execute_effects(effects: Vec<RunEffect>, emitter: &dyn EventEmitter, event_bus: &EventBus) {
     for effect in effects {
         match effect {
             RunEffect::UpdateTaskStatus(ref path, status) => {
@@ -52,12 +48,12 @@ pub fn execute_effects<R: tauri::Runtime>(
                 task::capture_run_artifacts(task_path, status, started_at);
             }
             RunEffect::EmitStatusChanged(ref info) => {
-                if let Err(e) = app_handle.emit("run:status_changed", info) {
+                if let Err(e) = traits::emit(emitter, "run:status_changed", info) {
                     error!("Failed to emit run:status_changed: {e}");
                 }
             }
             RunEffect::EmitPermissionRequest(ref pending) => {
-                if let Err(e) = app_handle.emit("run:permission_request", pending) {
+                if let Err(e) = traits::emit(emitter, "run:permission_request", pending) {
                     error!("Failed to emit run:permission_request: {e}");
                 }
             }

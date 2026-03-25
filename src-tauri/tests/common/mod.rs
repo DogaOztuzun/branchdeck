@@ -2,6 +2,24 @@
 
 use branchdeck_lib::models::run::{RunInfo, RunStatus};
 
+/// No-op emitter for tests that don't need real event emission.
+pub struct NoopEmitter;
+
+impl branchdeck_lib::traits::EventEmitter for NoopEmitter {
+    fn emit_raw(
+        &self,
+        _event: &str,
+        _payload: serde_json::Value,
+    ) -> Result<(), branchdeck_lib::error::AppError> {
+        Ok(())
+    }
+}
+
+/// Create a test-only `Arc<dyn EventEmitter>`.
+pub fn test_emitter() -> std::sync::Arc<dyn branchdeck_lib::traits::EventEmitter> {
+    std::sync::Arc::new(NoopEmitter)
+}
+
 /// Canonical task.md YAML content — single source of truth for all test files.
 pub fn valid_task_md() -> String {
     base_task_md("created", 0, Some(42))

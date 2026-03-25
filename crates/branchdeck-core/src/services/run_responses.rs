@@ -1,8 +1,8 @@
 use crate::models::run::{PendingPermission, RunInfo, SidecarResponse};
 use crate::services::event_bus::EventBus;
 use crate::services::run_effects::{self, execute_effects};
+use crate::traits::{self, EventEmitter};
 use log::{error, info, warn};
-use tauri::Emitter;
 
 use super::run_manager::now_epoch_ms;
 
@@ -23,46 +23,43 @@ pub fn session_matches(active_run: Option<&RunInfo>, response_session_id: Option
 }
 
 /// Handle a `SessionStarted` response from the sidecar.
-pub fn handle_session_started<R: tauri::Runtime>(
+pub fn handle_session_started(
     active_run: &mut Option<RunInfo>,
     session_id: &String,
-    app_handle: &tauri::AppHandle<R>,
+    emitter: &dyn EventEmitter,
     event_bus: &EventBus,
 ) {
     if let Some(ref mut run) = active_run {
         info!("Run session started: {session_id}");
         let effects = run_effects::apply_session_started(run, session_id);
-        execute_effects(effects, app_handle, event_bus);
+        execute_effects(effects, emitter, event_bus);
     }
 }
 
 /// Handle a `RunStep`, `AssistantText`, or `ToolCall` response from the sidecar.
 /// Direct emit — no state transition, no effect abstraction needed.
-pub fn handle_run_step<R: tauri::Runtime>(
-    response: &SidecarResponse,
-    app_handle: &tauri::AppHandle<R>,
-) {
-    if let Err(e) = app_handle.emit("run:step", response) {
+pub fn handle_run_step(response: &SidecarResponse, emitter: &dyn EventEmitter) {
+    if let Err(e) = traits::emit(emitter, "run:step", response) {
         error!("Failed to emit run:step: {e}");
     }
 }
 
 /// Handle a `RunComplete` response from the sidecar.
 #[allow(clippy::implicit_hasher)]
-pub fn handle_run_complete<R: tauri::Runtime>(
+pub fn handle_run_complete(
     active_run: &mut Option<RunInfo>,
     started_at_epoch_ms: &mut u64,
     last_activity_ms: &mut u64,
     pending_permissions: &mut std::collections::HashMap<String, PendingPermission>,
     cost_usd: Option<&f64>,
-    app_handle: &tauri::AppHandle<R>,
+    emitter: &dyn EventEmitter,
     event_bus: &EventBus,
 ) {
     if let Some(ref mut run) = active_run {
         let now = now_epoch_ms();
         let effects = run_effects::apply_run_complete(run, cost_usd, *started_at_epoch_ms, now);
         info!("Run completed successfully, cost: ${:.4}", run.cost_usd);
-        execute_effects(effects, app_handle, event_bus);
+        execute_effects(effects, emitter, event_bus);
     }
     if !pending_permissions.is_empty() {
         warn!(
@@ -78,13 +75,13 @@ pub fn handle_run_complete<R: tauri::Runtime>(
 
 /// Handle a `PermissionRequest` response from the sidecar.
 #[allow(clippy::implicit_hasher)]
-pub fn handle_permission_request<R: tauri::Runtime>(
+pub fn handle_permission_request(
     active_run: &mut Option<RunInfo>,
     pending_permissions: &mut std::collections::HashMap<String, PendingPermission>,
     tool: Option<&String>,
     command: Option<&String>,
     tool_use_id: &str,
-    app_handle: &tauri::AppHandle<R>,
+    emitter: &dyn EventEmitter,
     event_bus: &EventBus,
 ) {
     let Some(ref mut run) = active_run else {
@@ -96,12 +93,12 @@ pub fn handle_permission_request<R: tauri::Runtime>(
     let (pending, effects) =
         run_effects::apply_permission_request(run, tool, command, tool_use_id, now);
     pending_permissions.insert(tool_use_id.to_owned(), pending);
-    execute_effects(effects, app_handle, event_bus);
+    execute_effects(effects, emitter, event_bus);
 }
 
 /// Handle a `RunError` response from the sidecar.
 #[allow(clippy::too_many_arguments, clippy::implicit_hasher)]
-pub fn handle_run_error<R: tauri::Runtime>(
+pub fn handle_run_error(
     active_run: &mut Option<RunInfo>,
     started_at_epoch_ms: &mut u64,
     last_activity_ms: &mut u64,
@@ -109,7 +106,7 @@ pub fn handle_run_error<R: tauri::Runtime>(
     err_msg: &str,
     status: &str,
     cost_usd: Option<&f64>,
-    app_handle: &tauri::AppHandle<R>,
+    emitter: &dyn EventEmitter,
     event_bus: &EventBus,
 ) {
     if let Some(ref mut run) = active_run {
@@ -117,7 +114,7 @@ pub fn handle_run_error<R: tauri::Runtime>(
         error!("Run failed: {err_msg}");
         let effects =
             run_effects::apply_run_error(run, status, cost_usd, *started_at_epoch_ms, now);
-        execute_effects(effects, app_handle, event_bus);
+        execute_effects(effects, emitter, event_bus);
     }
     if !pending_permissions.is_empty() {
         warn!(

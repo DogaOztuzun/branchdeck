@@ -2,8 +2,9 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 use log::{debug, error, info};
-use tauri::Emitter;
 use tokio::time::{interval, Duration};
+
+use crate::traits::{self, EventEmitter};
 
 use crate::models::agent::{now_ms, Event};
 use crate::models::github::PrSummary;
@@ -18,24 +19,24 @@ pub type DiscoveredPrsState = Arc<RwLock<HashMap<String, Vec<PrSummary>>>>;
 /// Start the PR poller as a background tokio task.
 /// Polls GitHub PRs for all managed repos on an interval,
 /// publishes `PrStatusChanged` events when state changes,
-/// and emits `pr:discovered` Tauri events for the frontend.
-pub fn start_pr_poller<R: tauri::Runtime + 'static>(
+/// and emits `pr:discovered` events for the frontend.
+pub fn start_pr_poller(
     event_bus: Arc<EventBus>,
     repo_paths: Vec<String>,
     discovered_prs: DiscoveredPrsState,
-    app_handle: tauri::AppHandle<R>,
+    emitter: Arc<dyn EventEmitter>,
 ) {
-    tauri::async_runtime::spawn(async move {
-        poll_loop(&event_bus, &repo_paths, &discovered_prs, &app_handle).await;
+    tokio::spawn(async move {
+        poll_loop(&event_bus, &repo_paths, &discovered_prs, emitter.as_ref()).await;
     });
     info!("PR poller started (interval={POLL_INTERVAL_SECS}s)");
 }
 
-async fn poll_loop<R: tauri::Runtime>(
+async fn poll_loop(
     event_bus: &EventBus,
     repo_paths: &[String],
     discovered_prs: &DiscoveredPrsState,
-    app_handle: &tauri::AppHandle<R>,
+    emitter: &dyn EventEmitter,
 ) {
     let mut ticker = interval(Duration::from_secs(POLL_INTERVAL_SECS));
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -66,7 +67,7 @@ async fn poll_loop<R: tauri::Runtime>(
                     "PR poller: emitting pr:discovered ({} PRs)",
                     all_prs_flat.len()
                 );
-                if let Err(e) = app_handle.emit("pr:discovered", &all_prs_flat) {
+                if let Err(e) = traits::emit(emitter, "pr:discovered", &all_prs_flat) {
                     error!("Failed to emit pr:discovered: {e}");
                 }
             }

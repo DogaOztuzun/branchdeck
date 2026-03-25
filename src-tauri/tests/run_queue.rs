@@ -11,10 +11,17 @@ use branchdeck_lib::services::run_manager::{QueuedRun, RunManager};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+mod common;
+
 /// Helper: create a `RunManager` with no real sidecar.
 fn make_run_manager() -> RunManager {
     let event_bus = Arc::new(EventBus::new());
-    RunManager::new(PathBuf::from("/nonexistent"), event_bus)
+    RunManager::new(
+        PathBuf::from("/nonexistent"),
+        event_bus,
+        common::test_emitter(),
+        13370,
+    )
 }
 
 // ─── Empty queue initially ───

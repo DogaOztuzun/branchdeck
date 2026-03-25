@@ -4,12 +4,12 @@ use crate::models::run::{
 };
 use crate::models::task::TaskStatus;
 use crate::services::{run_effects, run_responses, run_stale, run_state, task};
+use crate::traits::{self, EventEmitter};
 use log::{debug, error, info, warn};
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::Emitter;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin};
 use tokio::sync::Mutex;
@@ -68,6 +68,10 @@ pub struct RunManager {
     pending_permissions: std::collections::HashMap<String, PendingPermission>,
     /// `EventBus` for publishing `RunComplete` events to `KnowledgeService`.
     event_bus: Arc<crate::services::event_bus::EventBus>,
+    /// Transport-agnostic event emitter (replaces `AppHandle`).
+    emitter: Arc<dyn EventEmitter>,
+    /// Port for the hook receiver (passed to sidecar on launch/resume).
+    hook_port: u16,
     /// Sequential queue for batch runs.
     run_queue: VecDeque<QueuedRun>,
     /// Counts for queue progress tracking.
@@ -82,6 +86,8 @@ impl RunManager {
     pub fn new(
         sidecar_path: PathBuf,
         event_bus: Arc<crate::services::event_bus::EventBus>,
+        emitter: Arc<dyn EventEmitter>,
+        hook_port: u16,
     ) -> Self {
         Self {
             process: None,
@@ -92,6 +98,8 @@ impl RunManager {
             started_at_epoch_ms: 0,
             pending_permissions: std::collections::HashMap::new(),
             event_bus,
+            emitter,
+            hook_port,
             run_queue: VecDeque::new(),
             queue_completed: 0,
             queue_failed: 0,
@@ -104,11 +112,7 @@ impl RunManager {
     /// # Errors
     ///
     /// Returns `SidecarError` if the Node.js process cannot be spawned.
-    fn ensure_sidecar<R: tauri::Runtime>(
-        &mut self,
-        app_handle: tauri::AppHandle<R>,
-        state: RunManagerState,
-    ) -> Result<(), AppError> {
+    fn ensure_sidecar(&mut self, state: RunManagerState) -> Result<(), AppError> {
         if let Some(ref mut child) = self.process {
             match child.try_wait() {
                 Ok(Some(status)) => {
@@ -157,7 +161,8 @@ impl RunManager {
 
         // Spawn reader task for stdout
         let reader = BufReader::new(child_stdout);
-        start_stdout_reader(state, app_handle, reader);
+        let emitter = Arc::clone(&self.emitter);
+        start_stdout_reader(state, emitter, reader);
 
         info!("Sidecar spawned in {:?}", start.elapsed());
         Ok(())
@@ -187,13 +192,13 @@ impl RunManager {
     /// Check if the active run is stale (no activity for the stale threshold).
     /// If stale, marks the run as failed with a "stalled" reason.
     /// Also checks for permission request timeouts.
-    pub async fn check_stale<R: tauri::Runtime>(&mut self, app_handle: &tauri::AppHandle<R>) {
+    pub async fn check_stale(&mut self) {
         if self.active_run.is_none() {
             return;
         }
 
         if run_stale::check_run_stale(self.last_activity_ms, now_epoch_ms()) {
-            self.mark_run_failed_with_reason(app_handle, "stalled: no heartbeat for 120s");
+            self.mark_run_failed_with_reason("stalled: no heartbeat for 120s");
             return;
         }
 
@@ -201,20 +206,18 @@ impl RunManager {
             &mut self.pending_permissions,
             &mut self.active_run,
             self.stdin.as_mut(),
-            app_handle,
+            self.emitter.as_ref(),
         )
         .await;
     }
 
     /// Update the active run from a sidecar response.
     /// Dispatches to handler functions in `run_responses`.
-    pub fn handle_response<R: tauri::Runtime>(
-        &mut self,
-        response: &SidecarResponse,
-        app_handle: &tauri::AppHandle<R>,
-    ) {
+    pub fn handle_response(&mut self, response: &SidecarResponse) {
         // Update activity timestamp on every response (heartbeat or real)
         self.update_activity();
+
+        let emitter = self.emitter.as_ref();
 
         match response {
             SidecarResponse::Heartbeat { session_id } => {
@@ -228,7 +231,7 @@ impl RunManager {
                 run_responses::handle_session_started(
                     &mut self.active_run,
                     session_id,
-                    app_handle,
+                    emitter,
                     &self.event_bus,
                 );
             }
@@ -239,7 +242,7 @@ impl RunManager {
                     warn!("Ignoring run step with mismatched session_id: {session_id:?}");
                     return;
                 }
-                run_responses::handle_run_step(response, app_handle);
+                run_responses::handle_run_step(response, emitter);
             }
             SidecarResponse::RunComplete {
                 cost_usd,
@@ -256,7 +259,7 @@ impl RunManager {
                     &mut self.last_activity_ms,
                     &mut self.pending_permissions,
                     cost_usd.as_ref(),
-                    app_handle,
+                    emitter,
                     &self.event_bus,
                 );
             }
@@ -276,7 +279,7 @@ impl RunManager {
                     tool.as_ref(),
                     command.as_ref(),
                     tool_use_id,
-                    app_handle,
+                    emitter,
                     &self.event_bus,
                 );
             }
@@ -298,7 +301,7 @@ impl RunManager {
                     err_msg,
                     status,
                     cost_usd.as_ref(),
-                    app_handle,
+                    emitter,
                     &self.event_bus,
                 );
             }
@@ -306,21 +309,17 @@ impl RunManager {
     }
 
     /// Mark the active run as failed (used when sidecar crashes).
-    pub fn mark_run_failed<R: tauri::Runtime>(&mut self, app_handle: &tauri::AppHandle<R>) {
-        self.mark_run_failed_with_reason(app_handle, "sidecar crash");
+    pub fn mark_run_failed(&mut self) {
+        self.mark_run_failed_with_reason("sidecar crash");
     }
 
     /// Mark the active run as failed with a specific reason.
-    pub fn mark_run_failed_with_reason<R: tauri::Runtime>(
-        &mut self,
-        app_handle: &tauri::AppHandle<R>,
-        reason: &str,
-    ) {
+    pub fn mark_run_failed_with_reason(&mut self, reason: &str) {
         if let Some(ref mut run) = self.active_run {
             let now = now_epoch_ms();
             warn!("Marking active run as failed: {reason}");
             let effects = run_effects::apply_mark_failed(run, self.started_at_epoch_ms, now);
-            run_effects::execute_effects(effects, app_handle, &self.event_bus);
+            run_effects::execute_effects(effects, self.emitter.as_ref(), &self.event_bus);
         }
         self.active_run = None;
         self.process = None;
@@ -335,7 +334,7 @@ impl RunManager {
     /// If there is an active run, kills the sidecar child process,
     /// marks the run as failed, and updates task.md. Keeps run.json
     /// with `session_id` so the user can manually resume later.
-    pub fn shutdown<R: tauri::Runtime>(&mut self, app_handle: &tauri::AppHandle<R>) {
+    pub fn shutdown(&mut self) {
         if self.active_run.is_none() {
             debug!("Shutdown: no active run to clean up");
             return;
@@ -350,7 +349,7 @@ impl RunManager {
         }
 
         // Mark run as failed (saves run.json with session_id for resume)
-        self.mark_run_failed(app_handle);
+        self.mark_run_failed();
         info!("Shutdown: cleaned up active run");
     }
 
@@ -535,9 +534,8 @@ impl RunManager {
 /// Returns `RunError` if a run is already active.
 /// Returns `TaskNotFound` if the task file does not exist.
 /// Returns `SidecarError` if the sidecar cannot be spawned or written to.
-pub async fn launch_run<R: tauri::Runtime>(
+pub async fn launch_run(
     state: RunManagerState,
-    app_handle: tauri::AppHandle<R>,
     task_path: &str,
     worktree_path: &str,
     options: LaunchOptions,
@@ -562,14 +560,15 @@ pub async fn launch_run<R: tauri::Runtime>(
     })?;
     crate::services::task::parse_task_md(&content, task_path)?;
 
-    manager.ensure_sidecar(app_handle.clone(), Arc::clone(&state))?;
+    manager.ensure_sidecar(Arc::clone(&state))?;
 
     let tab_id = uuid::Uuid::new_v4().to_string();
+    let hook_port = manager.hook_port;
     let request = SidecarRequest::LaunchRun {
         task_path: task_path.to_owned(),
         worktree: worktree_path.to_owned(),
         options,
-        hook_port: crate::HOOK_RECEIVER_PORT,
+        hook_port,
         tab_id: tab_id.clone(),
     };
 
@@ -596,7 +595,7 @@ pub async fn launch_run<R: tauri::Runtime>(
 
     info!("Launched run for task {task_path}");
 
-    if let Err(e) = app_handle.emit("run:status_changed", &run_info) {
+    if let Err(e) = traits::emit(manager.emitter.as_ref(), "run:status_changed", &run_info) {
         error!("Failed to emit run:status_changed event: {e}");
     }
 
@@ -613,9 +612,8 @@ pub async fn launch_run<R: tauri::Runtime>(
 /// Returns `RunError` if a run is already active or the task is not failed/cancelled.
 /// Returns `TaskNotFound` if the task file does not exist.
 /// Returns `SidecarError` if the sidecar cannot be spawned or written to.
-pub async fn retry_run<R: tauri::Runtime>(
+pub async fn retry_run(
     state: RunManagerState,
-    app_handle: tauri::AppHandle<R>,
     task_path: &str,
     worktree_path: &str,
 ) -> Result<RunInfo, AppError> {
@@ -638,7 +636,7 @@ pub async fn retry_run<R: tauri::Runtime>(
         max_budget_usd: None,
         permission_mode: None,
     };
-    launch_run(state, app_handle, task_path, worktree_path, options).await
+    launch_run(state, task_path, worktree_path, options).await
 }
 
 /// Resume a failed or cancelled run by continuing its previous SDK session.
@@ -652,9 +650,8 @@ pub async fn retry_run<R: tauri::Runtime>(
 /// or no `session_id` is available to resume.
 /// Returns `TaskNotFound` if the task file does not exist.
 /// Returns `SidecarError` if the sidecar cannot be spawned or written to.
-pub async fn resume_run<R: tauri::Runtime>(
+pub async fn resume_run(
     state: RunManagerState,
-    app_handle: tauri::AppHandle<R>,
     task_path: &str,
     worktree_path: &str,
 ) -> Result<RunInfo, AppError> {
@@ -690,9 +687,10 @@ pub async fn resume_run<R: tauri::Runtime>(
         return Err(AppError::TaskNotFound(task_path.to_owned()));
     }
 
-    manager.ensure_sidecar(app_handle.clone(), Arc::clone(&state))?;
+    manager.ensure_sidecar(Arc::clone(&state))?;
 
     let tab_id = uuid::Uuid::new_v4().to_string();
+    let hook_port = manager.hook_port;
     let request = SidecarRequest::ResumeRun {
         task_path: task_path.to_owned(),
         worktree: worktree_path.to_owned(),
@@ -702,7 +700,7 @@ pub async fn resume_run<R: tauri::Runtime>(
             max_budget_usd: None,
             permission_mode: None,
         },
-        hook_port: crate::HOOK_RECEIVER_PORT,
+        hook_port,
         tab_id: tab_id.clone(),
     };
 
@@ -733,7 +731,7 @@ pub async fn resume_run<R: tauri::Runtime>(
 
     info!("Resumed run for task {task_path}");
 
-    if let Err(e) = app_handle.emit("run:status_changed", &run_info) {
+    if let Err(e) = traits::emit(manager.emitter.as_ref(), "run:status_changed", &run_info) {
         error!("Failed to emit run:status_changed event: {e}");
     }
 
@@ -742,12 +740,15 @@ pub async fn resume_run<R: tauri::Runtime>(
 
 /// Spawn a tokio task that reads stdout lines from the sidecar,
 /// parses them, and calls `handle_response` / `mark_run_failed` directly.
-fn start_stdout_reader<R: tauri::Runtime>(
+fn start_stdout_reader(
     state: RunManagerState,
-    app_handle: tauri::AppHandle<R>,
+    emitter: Arc<dyn EventEmitter>,
     reader: BufReader<tokio::process::ChildStdout>,
 ) {
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
+        // Keep emitter alive for advance_queue calls — it's used via the locked manager,
+        // but we need the Arc to live for the duration of this task.
+        let _emitter = emitter;
         let mut lines = reader.lines();
         loop {
             match lines.next_line().await {
@@ -766,19 +767,14 @@ fn start_stdout_reader<R: tauri::Runtime>(
                             let should_advance = {
                                 let mut manager = state.lock().await;
                                 let was_active = manager.active_run.is_some();
-                                manager.handle_response(&response, &app_handle);
+                                manager.handle_response(&response);
                                 let still_active = manager.active_run.is_some();
                                 let queue_nonempty = !manager.run_queue.is_empty();
                                 is_terminal && was_active && !still_active && queue_nonempty
                             };
 
                             if should_advance {
-                                if let Err(e) = advance_queue(
-                                    Arc::clone(&state),
-                                    app_handle.clone(),
-                                    is_complete,
-                                )
-                                .await
+                                if let Err(e) = advance_queue(Arc::clone(&state), is_complete).await
                                 {
                                     error!("Queue advance failed: {e}");
                                 }
@@ -794,13 +790,11 @@ fn start_stdout_reader<R: tauri::Runtime>(
                     warn!("Sidecar stdout closed (process exited)");
                     let has_queue = {
                         let mut manager = state.lock().await;
-                        manager.mark_run_failed(&app_handle);
+                        manager.mark_run_failed();
                         !manager.run_queue.is_empty()
                     };
                     if has_queue {
-                        if let Err(e) =
-                            advance_queue(Arc::clone(&state), app_handle.clone(), false).await
-                        {
+                        if let Err(e) = advance_queue(Arc::clone(&state), false).await {
                             error!("Queue advance after sidecar death failed: {e}");
                         }
                     }
@@ -810,13 +804,11 @@ fn start_stdout_reader<R: tauri::Runtime>(
                     error!("Error reading sidecar stdout: {e}");
                     let has_queue = {
                         let mut manager = state.lock().await;
-                        manager.mark_run_failed(&app_handle);
+                        manager.mark_run_failed();
                         !manager.run_queue.is_empty()
                     };
                     if has_queue {
-                        if let Err(e) =
-                            advance_queue(Arc::clone(&state), app_handle.clone(), false).await
-                        {
+                        if let Err(e) = advance_queue(Arc::clone(&state), false).await {
                             error!("Queue advance after read error failed: {e}");
                         }
                     }
@@ -832,9 +824,8 @@ fn start_stdout_reader<R: tauri::Runtime>(
 /// # Errors
 ///
 /// Returns `RunError` if a run is already active (and no queue advancement is possible).
-pub async fn batch_launch<R: tauri::Runtime>(
+pub async fn batch_launch(
     state: RunManagerState,
-    app_handle: tauri::AppHandle<R>,
     pairs: Vec<(String, String)>,
 ) -> Result<QueueStatus, AppError> {
     let mut manager = state.lock().await;
@@ -868,7 +859,6 @@ pub async fn batch_launch<R: tauri::Runtime>(
             };
             launch_run(
                 Arc::clone(&state),
-                app_handle,
                 &next.task_path,
                 &next.worktree_path,
                 options,
@@ -888,18 +878,14 @@ pub async fn batch_launch<R: tauri::Runtime>(
 /// # Errors
 ///
 /// Returns `AppError` if the next run cannot be launched.
-pub async fn advance_queue<R: tauri::Runtime>(
-    state: RunManagerState,
-    app_handle: tauri::AppHandle<R>,
-    succeeded: bool,
-) -> Result<(), AppError> {
+pub async fn advance_queue(state: RunManagerState, succeeded: bool) -> Result<(), AppError> {
     let next = {
         let mut manager = state.lock().await;
         manager.record_queue_completion(succeeded);
 
         // Emit queue status update
         let queue_status = manager.get_queue_status();
-        if let Err(e) = app_handle.emit("run:queue_status", &queue_status) {
+        if let Err(e) = traits::emit(manager.emitter.as_ref(), "run:queue_status", &queue_status) {
             error!("Failed to emit queue status: {e}");
         }
 
@@ -930,7 +916,6 @@ pub async fn advance_queue<R: tauri::Runtime>(
         };
         if let Err(e) = launch_run(
             Arc::clone(&state),
-            app_handle,
             &next.task_path,
             &next.worktree_path,
             options,
@@ -960,9 +945,8 @@ pub async fn advance_queue<R: tauri::Runtime>(
 /// # Errors
 ///
 /// Returns `AppError` if the first run cannot be launched.
-pub async fn enqueue_run<R: tauri::Runtime>(
+pub async fn enqueue_run(
     state: RunManagerState,
-    app_handle: tauri::AppHandle<R>,
     task_path: &str,
     worktree_path: &str,
     options: LaunchOptions,
@@ -984,7 +968,6 @@ pub async fn enqueue_run<R: tauri::Runtime>(
     if let Some(next) = next_to_launch {
         launch_run(
             Arc::clone(&state),
-            app_handle,
             &next.task_path,
             &next.worktree_path,
             options,
@@ -1004,6 +987,13 @@ pub type RunManagerState = Arc<Mutex<RunManager>>;
 pub fn create_run_manager_state(
     sidecar_path: PathBuf,
     event_bus: Arc<crate::services::event_bus::EventBus>,
+    emitter: Arc<dyn EventEmitter>,
+    hook_port: u16,
 ) -> RunManagerState {
-    Arc::new(Mutex::new(RunManager::new(sidecar_path, event_bus)))
+    Arc::new(Mutex::new(RunManager::new(
+        sidecar_path,
+        event_bus,
+        emitter,
+        hook_port,
+    )))
 }

@@ -10,7 +10,6 @@ use tauri::{Emitter, Manager, State};
 #[allow(clippy::needless_pass_by_value)]
 pub async fn launch_run_cmd(
     run_manager: State<'_, RunManagerState>,
-    app_handle: tauri::AppHandle,
     task_path: String,
     worktree_path: String,
     max_turns: Option<u32>,
@@ -22,7 +21,7 @@ pub async fn launch_run_cmd(
         permission_mode: None,
     };
     let state = Arc::clone(&run_manager);
-    run_manager::launch_run(state, app_handle, &task_path, &worktree_path, options).await
+    run_manager::launch_run(state, &task_path, &worktree_path, options).await
 }
 
 #[tauri::command]
@@ -49,24 +48,22 @@ pub fn recover_runs_cmd(worktree_paths: Vec<String>) -> Vec<RunInfo> {
 #[allow(clippy::needless_pass_by_value)]
 pub async fn retry_run_cmd(
     run_manager: State<'_, RunManagerState>,
-    app_handle: tauri::AppHandle,
     task_path: String,
     worktree_path: String,
 ) -> Result<RunInfo, AppError> {
     let state = Arc::clone(&run_manager);
-    run_manager::retry_run(state, app_handle, &task_path, &worktree_path).await
+    run_manager::retry_run(state, &task_path, &worktree_path).await
 }
 
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)]
 pub async fn resume_run_cmd(
     run_manager: State<'_, RunManagerState>,
-    app_handle: tauri::AppHandle,
     task_path: String,
     worktree_path: String,
 ) -> Result<RunInfo, AppError> {
     let state = Arc::clone(&run_manager);
-    run_manager::resume_run(state, app_handle, &task_path, &worktree_path).await
+    run_manager::resume_run(state, &task_path, &worktree_path).await
 }
 
 #[tauri::command]
@@ -97,14 +94,8 @@ pub async fn shepherd_pr_cmd(
             max_budget_usd: None,
             permission_mode: None,
         };
-        if let Err(e) = run_manager::launch_run(
-            state,
-            app_handle,
-            &result.task.path,
-            &result.worktree_path,
-            options,
-        )
-        .await
+        if let Err(e) =
+            run_manager::launch_run(state, &result.task.path, &result.worktree_path, options).await
         {
             // Return the shepherd result even on launch failure so the frontend
             // knows a worktree/task was created and can offer manual launch.
@@ -121,11 +112,10 @@ pub async fn shepherd_pr_cmd(
 #[allow(clippy::needless_pass_by_value)]
 pub async fn batch_launch_cmd(
     run_manager: State<'_, RunManagerState>,
-    app_handle: tauri::AppHandle,
     pairs: Vec<(String, String)>,
 ) -> Result<QueueStatus, AppError> {
     let state = Arc::clone(&run_manager);
-    run_manager::batch_launch(state, app_handle, pairs).await
+    run_manager::batch_launch(state, pairs).await
 }
 
 #[tauri::command]

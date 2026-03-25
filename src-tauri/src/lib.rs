@@ -1,11 +1,15 @@
 mod commands;
-mod error;
-pub mod models;
-pub mod services;
+mod tauri_emitter;
 
 use std::sync::{Arc, Mutex};
-use tauri::{Emitter, Manager};
+use tauri::Manager;
 use tauri_plugin_log::{Target, TargetKind};
+
+// Re-export core modules so commands can use `crate::models`, `crate::services`, `crate::error`
+pub use branchdeck_core::error;
+pub use branchdeck_core::models;
+pub use branchdeck_core::services;
+pub use branchdeck_core::traits;
 
 pub const HOOK_RECEIVER_PORT: u16 = 13_370;
 const ACTIVITY_GC_TTL_MS: u64 = 300_000; // 5 minutes
@@ -34,12 +38,7 @@ fn init_agent_config() -> commands::agent::AgentMonitorConfig {
 }
 
 /// Scan all worktrees for stale `run.json` files from a previous session.
-///
-/// Active runs (Starting/Running/Blocked) are marked failed and their
-/// task.md is updated. Terminal runs (Succeeded/Failed/Cancelled) just
-/// have their run.json deleted. Emits `task:updated` events so the
-/// frontend picks up corrected task statuses.
-fn recover_stale_runs(app_handle: &tauri::AppHandle) {
+fn recover_stale_runs(emitter: &Arc<dyn traits::EventEmitter>) {
     let config = match services::config::load_global_config() {
         Ok(c) => c,
         Err(e) => {
@@ -85,27 +84,22 @@ fn recover_stale_runs(app_handle: &tauri::AppHandle) {
                     run_info.task_path
                 );
 
-                // Update task.md to failed status
                 services::task::update_task_status(
                     &run_info.task_path,
                     models::task::TaskStatus::Failed,
                 );
 
-                // Emit a task:updated event so the frontend refreshes
-                emit_task_updated(app_handle, &run_info.task_path);
+                emit_task_updated(emitter, &run_info.task_path);
 
-                // Emit a run:status_changed with failed status
                 let mut failed_run = run_info.clone();
                 failed_run.status = models::run::RunStatus::Failed;
-                if let Err(e) = app_handle.emit("run:status_changed", &failed_run) {
+                if let Err(e) = traits::emit(emitter.as_ref(), "run:status_changed", &failed_run) {
                     log::error!("Recovery: failed to emit run:status_changed: {e}");
                 }
 
-                // Clean up run.json
                 services::run_state::delete_run_state(&run_info.task_path);
             }
             models::run::RunStatus::Failed | models::run::RunStatus::Cancelled => {
-                // Keep run.json — it contains the session_id needed for resume_run
                 log::debug!(
                     "Recovery: keeping run state for resumable task {}",
                     run_info.task_path
@@ -122,17 +116,15 @@ fn recover_stale_runs(app_handle: &tauri::AppHandle) {
     }
 }
 
-/// Emit a `task:updated` event by re-reading the task file.
-fn emit_task_updated(app_handle: &tauri::AppHandle, task_path: &str) {
-    // Derive worktree path from task path (strip .branchdeck/task.md)
+fn emit_task_updated(emitter: &Arc<dyn traits::EventEmitter>, task_path: &str) {
     let wt_path = std::path::Path::new(task_path)
-        .parent() // .branchdeck/
-        .and_then(std::path::Path::parent); // worktree root
+        .parent()
+        .and_then(std::path::Path::parent);
 
     if let Some(wt) = wt_path {
         match services::task::get_task(&wt.display().to_string()) {
             Ok(task_info) => {
-                if let Err(e) = app_handle.emit("task:updated", &task_info) {
+                if let Err(e) = traits::emit(emitter.as_ref(), "task:updated", &task_info) {
                     log::error!("Recovery: failed to emit task:updated: {e}");
                 }
             }
@@ -143,26 +135,21 @@ fn emit_task_updated(app_handle: &tauri::AppHandle, task_path: &str) {
     }
 }
 
-fn start_stale_checker(app: &tauri::App) {
-    let run_state: services::run_manager::RunManagerState = app
-        .state::<services::run_manager::RunManagerState>()
-        .inner()
-        .clone();
-    let app_handle = app.handle().clone();
-    tauri::async_runtime::spawn(async move {
+fn start_stale_checker(run_state: services::run_manager::RunManagerState) {
+    tokio::spawn(async move {
         let mut interval =
             tokio::time::interval(std::time::Duration::from_secs(STALE_CHECK_INTERVAL_SECS));
         loop {
             interval.tick().await;
             let mut manager = run_state.lock().await;
-            manager.check_stale(&app_handle).await;
+            manager.check_stale().await;
         }
     });
     log::info!("Stale run checker started (interval: {STALE_CHECK_INTERVAL_SECS}s)");
 }
 
 fn setup_agent_monitoring(
-    app: &tauri::App,
+    emitter: &Arc<dyn traits::EventEmitter>,
     event_bus: &Arc<services::event_bus::EventBus>,
     activity_store: &Arc<services::activity_store::ActivityStore>,
 ) {
@@ -171,11 +158,11 @@ fn setup_agent_monitoring(
 
     let receiver_bus = Arc::clone(event_bus);
     let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         services::hook_receiver::start(receiver_bus, HOOK_RECEIVER_PORT, ready_tx).await;
     });
 
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         match ready_rx.await {
             Ok(Ok(port)) => log::info!("Agent monitoring: hook receiver ready on port {port}"),
             Ok(Err(e)) => log::warn!("Agent monitoring disabled: {e}"),
@@ -183,7 +170,7 @@ fn setup_agent_monitoring(
         }
     });
 
-    services::event_bridge::start(app.handle().clone(), event_bus);
+    services::event_bridge::start(Arc::clone(emitter), event_bus);
     log::info!("Agent monitoring: event bridge started");
 }
 
@@ -208,6 +195,7 @@ pub fn run() {
                 ])
                 .level(log::LevelFilter::Info)
                 .level_for("branchdeck_lib", log::LevelFilter::Debug)
+                .level_for("branchdeck_core", log::LevelFilter::Debug)
                 .build(),
         )
         .manage(Mutex::new(services::terminal::TerminalService::new()))
@@ -216,6 +204,10 @@ pub fn run() {
         .manage(init_agent_config())
         .manage(services::task_watcher::create_watcher_state())
         .setup(move |app| {
+            // Create the EventEmitter from the Tauri AppHandle
+            let emitter: Arc<dyn traits::EventEmitter> =
+                Arc::new(tauri_emitter::TauriEmitter(app.handle().clone()));
+
             let dev_path = || {
                 std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                     .parent()
@@ -225,8 +217,6 @@ pub fn run() {
             let sidecar_path = app.path().resource_dir().map_or_else(
                 |_| dev_path(),
                 |dir| {
-                    // Tauri v2 bundles resources flat in production, so try
-                    // the flat path first, then the dev subdirectory layout.
                     let flat = dir.join("agent-bridge.js");
                     if flat.exists() {
                         flat
@@ -236,7 +226,6 @@ pub fn run() {
                 },
             );
 
-            // If the resource-dir resolved path doesn't exist, fall back to dev path
             let sidecar_path = if sidecar_path.exists() {
                 sidecar_path
             } else {
@@ -251,15 +240,19 @@ pub fn run() {
             app.manage(services::run_manager::create_run_manager_state(
                 sidecar_path,
                 Arc::clone(&event_bus),
+                Arc::clone(&emitter),
+                HOOK_RECEIVER_PORT,
             ));
             app.manage(Arc::clone(&event_bus));
+
+            // Store emitter in managed state for commands that need it
+            app.manage(Arc::clone(&emitter));
 
             // Orchestrator state
             let orchestrator_state = services::orchestrator::create_orchestrator_state(
                 models::orchestrator::OrchestratorConfig::default(),
             );
 
-            // Populate repo_paths mapping (owner/repo → filesystem path)
             let repo_paths = services::config::load_global_config()
                 .map(|c| c.repos)
                 .unwrap_or_default();
@@ -282,9 +275,13 @@ pub fn run() {
                 std::sync::Arc::new(std::sync::RwLock::new(std::collections::HashMap::new()));
             app.manage(discovered_prs.clone());
 
-            recover_stale_runs(app.handle());
-            setup_agent_monitoring(app, &event_bus, &activity_store);
-            start_stale_checker(app);
+            recover_stale_runs(&emitter);
+            setup_agent_monitoring(&emitter, &event_bus, &activity_store);
+            start_stale_checker(
+                app.state::<services::run_manager::RunManagerState>()
+                    .inner()
+                    .clone(),
+            );
 
             // Start orchestrator event loop
             let rm_state: services::run_manager::RunManagerState = app
@@ -295,7 +292,7 @@ pub fn run() {
                 orchestrator_state,
                 Arc::clone(&event_bus),
                 rm_state,
-                app.handle().clone(),
+                Arc::clone(&emitter),
             );
 
             // Start PR poller
@@ -303,7 +300,7 @@ pub fn run() {
                 Arc::clone(&event_bus),
                 repo_paths,
                 discovered_prs,
-                app.handle().clone(),
+                Arc::clone(&emitter),
             );
 
             // Knowledge service initialization
@@ -324,10 +321,10 @@ pub fn run() {
                                 if mcp_sidecar.exists() {
                                     let mcp_ks = Arc::clone(&knowledge_service);
                                     let (mcp_tx, mcp_rx) = tokio::sync::oneshot::channel();
-                                    tauri::async_runtime::spawn(async move {
+                                    tokio::spawn(async move {
                                         services::knowledge_mcp::start(mcp_ks, mcp_tx).await;
                                     });
-                                    tauri::async_runtime::spawn(async move {
+                                    tokio::spawn(async move {
                                         match mcp_rx.await {
                                             Ok(Ok(port)) => {
                                                 log::info!(
@@ -451,13 +448,11 @@ pub fn run() {
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
-                // Shut down RunManager: kill sidecar, mark active run failed, keep run.json for resume
                 if let Some(run_state) =
                     window.try_state::<services::run_manager::RunManagerState>()
                 {
-                    let app_handle = window.app_handle();
                     match run_state.try_lock() {
-                        Ok(mut manager) => manager.shutdown(app_handle),
+                        Ok(mut manager) => manager.shutdown(),
                         Err(_) => {
                             log::warn!(
                                 "Shutdown: RunManager lock contended, sidecar may not be killed"
@@ -466,13 +461,11 @@ pub fn run() {
                     }
                 }
 
-                // Clean up MCP config from settings.json
                 #[cfg(feature = "knowledge")]
                 if let Err(e) = services::hook_config::remove_mcp_config() {
                     log::warn!("Failed to remove MCP config on shutdown: {e}");
                 }
 
-                // Close knowledge stores (persists embed queue, extracts SONA patterns)
                 #[cfg(feature = "knowledge")]
                 if let Some(knowledge) =
                     window.try_state::<Arc<services::knowledge::KnowledgeService>>()
@@ -484,7 +477,6 @@ pub fn run() {
                     log::info!("Knowledge service closed on shutdown");
                 }
 
-                // Close all terminal sessions
                 if let Some(state) =
                     window.try_state::<Mutex<services::terminal::TerminalService>>()
                 {

@@ -1,6 +1,8 @@
 use crate::error::AppError;
 use crate::models::task::{TaskInfo, TaskType};
 use crate::services::task_watcher::TaskWatcherState;
+use crate::traits::EventEmitter;
+use std::sync::Arc;
 use tauri::State;
 
 #[tauri::command]
@@ -38,11 +40,11 @@ pub fn list_tasks_cmd(worktree_paths: Vec<String>) -> Result<Vec<TaskInfo>, AppE
 #[tauri::command]
 pub async fn start_task_watcher(
     watcher: State<'_, TaskWatcherState>,
-    app_handle: tauri::AppHandle,
+    emitter: State<'_, Arc<dyn EventEmitter>>,
     worktree_paths: Vec<String>,
 ) -> Result<(), AppError> {
     let mut w = watcher.lock().await;
-    w.start(&app_handle, &worktree_paths)
+    w.start(Arc::clone(&emitter), &worktree_paths)
 }
 
 #[tauri::command]

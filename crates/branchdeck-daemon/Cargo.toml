@@ -1,0 +1,8 @@
+[package]
+name = "branchdeck-daemon"
+version = "0.2.0"
+edition = "2021"
+description = "Standalone daemon for Branchdeck — HTTP + WebSocket API (future)"
+
+[dependencies]
+branchdeck-core = { path = "../branchdeck-core" }

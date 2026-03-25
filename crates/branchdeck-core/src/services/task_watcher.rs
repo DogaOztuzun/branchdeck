@@ -1,12 +1,12 @@
 use crate::error::AppError;
 use crate::services::task;
+use crate::traits::{self, EventEmitter};
 use log::{debug, error, info, trace, warn};
 use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
-use tauri::Emitter;
 use tokio::sync::Mutex;
 
 const TASK_DIR: &str = ".branchdeck";
@@ -36,15 +36,14 @@ impl TaskWatcher {
     /// # Errors
     ///
     /// Returns `TaskWatchError` if the file watcher cannot be created.
-    pub fn start<R: tauri::Runtime>(
+    pub fn start(
         &mut self,
-        app_handle: &tauri::AppHandle<R>,
+        emitter: Arc<dyn EventEmitter>,
         worktree_paths: &[String],
     ) -> Result<(), AppError> {
         // Stop any existing watcher first
         self.stop();
 
-        let handle = app_handle.clone();
         let cache: ContentCache = Arc::new(StdMutex::new(HashMap::new()));
 
         let mut debouncer = new_debouncer(
@@ -55,10 +54,10 @@ impl TaskWatcher {
                         for event in events {
                             if event.kind == DebouncedEventKind::Any {
                                 let path = event.path.clone();
-                                let h = handle.clone();
+                                let e = Arc::clone(&emitter);
                                 let c = Arc::clone(&cache);
-                                tauri::async_runtime::spawn(async move {
-                                    handle_file_change(&h, &path, &c);
+                                tokio::spawn(async move {
+                                    handle_file_change(e.as_ref(), &path, &c);
                                 });
                             }
                         }
@@ -167,11 +166,7 @@ fn content_hash(content: &str) -> u64 {
     hasher.finish()
 }
 
-fn handle_file_change<R: tauri::Runtime>(
-    handle: &tauri::AppHandle<R>,
-    path: &Path,
-    cache: &ContentCache,
-) {
+fn handle_file_change(emitter: &dyn EventEmitter, path: &Path, cache: &ContentCache) {
     let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     if file_name != TASK_FILE {
         return;
@@ -207,7 +202,7 @@ fn handle_file_change<R: tauri::Runtime>(
     match task::parse_task_md(&content, &path_str) {
         Ok(task_info) => {
             debug!("Emitting task:updated for {}", path.display());
-            if let Err(e) = handle.emit("task:updated", &task_info) {
+            if let Err(e) = traits::emit(emitter, "task:updated", &task_info) {
                 error!("Failed to emit task:updated event: {e}");
             }
         }

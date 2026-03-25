@@ -1,5 +1,6 @@
+use std::sync::Arc;
+
 use log::{debug, error, info};
-use tauri::Emitter;
 
 use crate::models::agent::EpochMs;
 use crate::models::github::PrSummary;
@@ -7,6 +8,7 @@ use crate::models::orchestrator::{
     is_pr_eligible, pr_key, LifecycleEvent, LifecycleStatus, Orchestrator, OrchestratorEffect,
     RetryEntry, RunningEntry, SessionOutcome,
 };
+use crate::traits::{self, EventEmitter};
 
 // --- Retry backoff constants ---
 
@@ -616,7 +618,7 @@ pub fn find_pr_key_by_tab_id(state: &Orchestrator, tab_id: &str) -> Option<Strin
         .map(|e| e.pr_key.clone())
 }
 
-// --- Impure functions (file I/O, Tauri interaction) ---
+// --- Impure functions (file I/O, event emission) ---
 
 /// Determine session outcome by reading analysis.json from the worktree.
 #[derive(serde::Deserialize)]
@@ -646,7 +648,7 @@ pub fn determine_session_outcome(worktree_path: &str) -> SessionOutcome {
 }
 
 /// Default PR shepherd skill content.
-const DEFAULT_SKILL: &str = include_str!("../../../.claude/skills/pr-shepherd/SKILL.md");
+const DEFAULT_SKILL: &str = include_str!("../../../../.claude/skills/pr-shepherd/SKILL.md");
 
 /// Deploy the PR shepherd skill file into a worktree if not already present.
 fn deploy_skill_file(worktree_path: &str) {
@@ -826,14 +828,13 @@ fn worktree_needs_create(worktree_path: &str, expected_branch: &str) -> bool {
 }
 
 /// Execute the `DispatchSession` effect: create worktree, deploy files, enqueue run.
-async fn execute_dispatch<R: tauri::Runtime>(
+async fn execute_dispatch(
     key: &str,
     worktree_path: &str,
     pr_context: &crate::models::orchestrator::PrContext,
     attempt: u32,
     orchestrator: &OrchestratorState,
     run_manager: &crate::services::run_manager::RunManagerState,
-    app_handle: &tauri::AppHandle<R>,
 ) {
     use crate::models::agent::now_ms;
 
@@ -908,8 +909,7 @@ async fn execute_dispatch<R: tauri::Runtime>(
         permission_mode: Some("bypassPermissions".to_string()),
     };
     match crate::services::run_manager::enqueue_run(
-        std::sync::Arc::clone(run_manager),
-        app_handle.clone(),
+        Arc::clone(run_manager),
         &task_path,
         worktree_path,
         launch_options,
@@ -945,12 +945,12 @@ async fn execute_dispatch<R: tauri::Runtime>(
 
 /// Execute orchestrator effects. Thin executor — dispatches to services.
 #[allow(clippy::too_many_lines)]
-pub async fn execute_effects<R: tauri::Runtime>(
+pub async fn execute_effects(
     effects: Vec<OrchestratorEffect>,
     orchestrator: &OrchestratorState,
     run_manager: &crate::services::run_manager::RunManagerState,
-    app_handle: &tauri::AppHandle<R>,
-    event_bus: Option<&std::sync::Arc<crate::services::event_bus::EventBus>>,
+    emitter: &Arc<dyn EventEmitter>,
+    event_bus: Option<&Arc<crate::services::event_bus::EventBus>>,
 ) {
     for effect in effects {
         match effect {
@@ -967,7 +967,6 @@ pub async fn execute_effects<R: tauri::Runtime>(
                     attempt,
                     orchestrator,
                     run_manager,
-                    app_handle,
                 )
                 .await;
             }
@@ -1035,7 +1034,7 @@ pub async fn execute_effects<R: tauri::Runtime>(
                         event.session_id = Some(entry.tab_id.clone());
                     }
                 }
-                if let Err(e) = app_handle.emit("lifecycle:updated", &event) {
+                if let Err(e) = traits::emit(emitter.as_ref(), "lifecycle:updated", &event) {
                     error!("Failed to emit lifecycle:updated: {e}");
                 }
             }
@@ -1051,33 +1050,32 @@ pub async fn execute_effects<R: tauri::Runtime>(
 }
 
 /// Type alias for orchestrator managed state.
-pub type OrchestratorState = std::sync::Arc<tokio::sync::Mutex<Orchestrator>>;
+pub type OrchestratorState = Arc<tokio::sync::Mutex<Orchestrator>>;
 
 /// Create orchestrator managed state.
 #[must_use]
 pub fn create_orchestrator_state(
     config: crate::models::orchestrator::OrchestratorConfig,
 ) -> OrchestratorState {
-    std::sync::Arc::new(tokio::sync::Mutex::new(Orchestrator::new(config)))
+    Arc::new(tokio::sync::Mutex::new(Orchestrator::new(config)))
 }
 
 /// Start the orchestrator event loop as a background tokio task.
 /// Subscribes to `EventBus` and routes events to pure state machine functions.
-pub fn start_orchestrator<R: tauri::Runtime + 'static>(
+pub fn start_orchestrator(
     orchestrator: OrchestratorState,
-    event_bus: std::sync::Arc<crate::services::event_bus::EventBus>,
+    event_bus: Arc<crate::services::event_bus::EventBus>,
     run_manager: crate::services::run_manager::RunManagerState,
-    app_handle: tauri::AppHandle<R>,
+    emitter: Arc<dyn EventEmitter>,
 ) {
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         let mut rx = event_bus.subscribe();
         info!("Orchestrator event loop started");
 
         loop {
             match rx.recv().await {
                 Ok(event) => {
-                    handle_event(&event, &orchestrator, &run_manager, &app_handle, &event_bus)
-                        .await;
+                    handle_event(&event, &orchestrator, &run_manager, &emitter, &event_bus).await;
                 }
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
                     error!("Orchestrator event loop lagged by {n} events");
@@ -1092,12 +1090,12 @@ pub fn start_orchestrator<R: tauri::Runtime + 'static>(
 }
 
 /// Route a single event to the appropriate pure function, then execute effects.
-async fn handle_event<R: tauri::Runtime>(
+async fn handle_event(
     event: &crate::models::agent::Event,
     orchestrator: &OrchestratorState,
     run_manager: &crate::services::run_manager::RunManagerState,
-    app_handle: &tauri::AppHandle<R>,
-    event_bus: &std::sync::Arc<crate::services::event_bus::EventBus>,
+    emitter: &Arc<dyn EventEmitter>,
+    event_bus: &Arc<crate::services::event_bus::EventBus>,
 ) {
     use crate::models::agent::{now_ms, Event};
 
@@ -1111,14 +1109,7 @@ async fn handle_event<R: tauri::Runtime>(
                 effects.extend(apply_reconciliation(&mut orch, repo, prs));
                 effects
             };
-            execute_effects(
-                effects,
-                orchestrator,
-                run_manager,
-                app_handle,
-                Some(event_bus),
-            )
-            .await;
+            execute_effects(effects, orchestrator, run_manager, emitter, Some(event_bus)).await;
         }
         Event::RunComplete { tab_id, .. } => {
             let (key, worktree) = {
@@ -1141,14 +1132,7 @@ async fn handle_event<R: tauri::Runtime>(
                 let mut orch = orchestrator.lock().await;
                 apply_session_end(&mut orch, &key, outcome, now_ms())
             };
-            execute_effects(
-                effects,
-                orchestrator,
-                run_manager,
-                app_handle,
-                Some(event_bus),
-            )
-            .await;
+            execute_effects(effects, orchestrator, run_manager, emitter, Some(event_bus)).await;
         }
         Event::RetryDue {
             pr_key: key,
@@ -1160,14 +1144,7 @@ async fn handle_event<R: tauri::Runtime>(
                 orch.retry_timers.remove(key);
                 apply_retry_due(&mut orch, key, worktree_path, now_ms())
             };
-            execute_effects(
-                effects,
-                orchestrator,
-                run_manager,
-                app_handle,
-                Some(event_bus),
-            )
-            .await;
+            execute_effects(effects, orchestrator, run_manager, emitter, Some(event_bus)).await;
         }
         _ => {} // Other events not handled by orchestrator
     }
