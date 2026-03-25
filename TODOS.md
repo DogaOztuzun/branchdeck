@@ -2,6 +2,34 @@
 
 Deferred work tracked from design reviews and implementation sessions.
 
+## SAT: Scenario-driven AI Testing
+
+### POC Complete (2026-03-25)
+
+Full pipeline validated: generate → run → score → fix → re-score (72 → 88, +16). 3 real app issues found.
+
+- [x] **Phase 1: sat-generate** — 20 scenarios, 3 personas, bash validation, resume-on-crash. Commit `edb0462`.
+- [x] **Phase 2: sat-run** — WebDriver bridge via tauri-driver + WebdriverIO + xvfb-run. 73% step pass rate. Commits `3205610`, `1777b54`.
+- [x] **Phase 2 spike** — tauri-driver + WebKitWebDriver works on Linux. /chrome approach rejected (no Tauri IPC outside webview).
+- [x] **Phase 3: sat-score** — Persona-lens scoring, issue classification (app/runner/scenario), learnings update. Commit `fbebb30`.
+- [x] **Resume-on-crash logic** — Implemented in sat-generate skill.
+- [x] **Bash-based YAML validation** — Implemented in sat-generate skill.
+
+### Deferred (iteration, not proof)
+
+- [ ] **`/sat` orchestrator** — Wire generate → run → score into one command. ~15 min. Blocked by: nothing.
+- [ ] **Step interpreter improvements** — Push 73% → 90%+ pass rate. Add Kobalte component handling, compound step splitting, content-aware verification. Blocked by: nothing.
+- [ ] **Persona-specific app state setup** — Newcomer persona implies fresh state (no repos). Runner needs precondition setup per persona. Blocked by: nothing.
+- [ ] **Scenario ID stability across regenerations** — learnings.yaml references scenario IDs. Need deterministic IDs or matching logic for learning continuity. Blocked by: nothing.
+- [ ] **CI integration** — Run SAT in GitHub Actions via `claude-code-action`. Blocked by: orchestrator.
+- [ ] **Scenario preconditions** — add-first-repository scenario assumes empty workspace but test env has repos. Scenarios need `## Preconditions` section. Blocked by: nothing.
+
+### App issues found by SAT
+
+- [ ] **Empty state onboarding** (medium) — "Add Repository" button at sidebar bottom has low visual weight. No guidance for first-time users.
+- [ ] **No auto-terminal on worktree click** (medium) — Clicking a worktree shows "No terminal open" instead of auto-opening a shell.
+- [ ] **Disabled button without explanation** (low) — Create Worktree button disabled when input empty, no tooltip explains why.
+
 ## Phase 2: Daemon Extraction (from eng review 2026-03-20)
 
 ### Deferred to post-Steps 1-3

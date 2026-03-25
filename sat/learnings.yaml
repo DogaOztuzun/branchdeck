@@ -1,0 +1,32 @@
+fixed_issues: []
+
+false_positives:
+  - pattern: "disabled button no explanation"
+    scenario_id: create-worktree-from-sidebar
+    reason: "Screenshot shows 'Enter a worktree name to continue' hint text next to disabled button. Previous run incorrectly flagged this."
+    added: run-20260325-004131
+
+weak_areas:
+  - area: onboarding-empty-state
+    description: No empty state guidance for first-time users — Add Repository button has low visibility
+    first_seen: run-20260324-235809
+    issue_count: 1
+  - area: worktree-post-creation
+    description: No auto-terminal when clicking a worktree after creation — user must manually open terminal
+    first_seen: run-20260324-235809
+    issue_count: 1
+  - area: context-menu-completeness
+    description: Right-click repo context menu only has Checkout Branch and Close Project — missing worktree creation
+    first_seen: run-20260325-004131
+    issue_count: 1
+
+scenario_feedback:
+  - scenario_id: add-first-repository
+    quality: bad
+    reason: Scenario assumes empty workspace but test environment has repos loaded. Step 1 is uninterpretable by runner. Needs pre-condition setup or redesign for populated workspace.
+  - scenario_id: create-worktree-from-sidebar
+    quality: good
+    reason: Found real app issues (no auto-terminal, incomplete context menu). Modal design is better than previously reported — disabled button has proper explanation text. Runner struggled with custom components but scenario design is solid.
+  - scenario_id: open-terminal-tabs
+    quality: good
+    reason: Core terminal tab flow works well. Dropdown menu is functional. Step 8 still needs splitting into discrete actions but overall scenario validates the right things.

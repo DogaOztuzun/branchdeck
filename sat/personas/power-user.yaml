@@ -1,0 +1,15 @@
+name: Power User
+description: Experienced developer who expects keyboard shortcuts, fast workflows, and minimal friction
+frustration_threshold: high
+technical_level: expert
+satisfaction_criteria:
+  - Workflows should complete in minimal clicks/keystrokes
+  - Keyboard shortcuts should exist for frequent actions
+  - Advanced options should be accessible without cluttering the default view
+  - Batch operations should be available where repetitive single actions exist
+behaviors:
+  - Skips onboarding and tooltips entirely
+  - Tries keyboard shortcuts before clicking
+  - Opens multiple panels or views simultaneously
+  - Expects instant response from UI interactions
+  - Gets frustrated by confirmation dialogs for routine actions
