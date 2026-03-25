@@ -69,10 +69,7 @@ pub enum LifecycleEffect {
 /// Check all outcomes in order and return the first match.
 /// Pure function: checks conditions against input data, no I/O.
 #[must_use]
-pub fn check_outcomes(
-    def: &WorkflowDef,
-    input: &OutcomeInput,
-) -> OutcomeResult {
+pub fn check_outcomes(def: &WorkflowDef, input: &OutcomeInput) -> OutcomeResult {
     for outcome in &def.config.outcomes {
         if detector_matches(outcome, input) {
             debug!(
@@ -108,12 +105,10 @@ fn detector_matches(outcome: &OutcomeDef, input: &OutcomeInput) -> bool {
             std::path::Path::new(&full_path).exists()
         }
         OutcomeDetector::PrCreated => input.pr_created,
-        OutcomeDetector::CiPassing => {
-            input
-                .ci_status
-                .as_deref()
-                .is_some_and(|s| s == "SUCCESS" || s == "PASSING")
-        }
+        OutcomeDetector::CiPassing => input
+            .ci_status
+            .as_deref()
+            .is_some_and(|s| s == "SUCCESS" || s == "PASSING"),
         OutcomeDetector::RunFailed => input.run_status == RunOutcomeStatus::Failed,
         OutcomeDetector::Custom => false,
     }
@@ -158,8 +153,7 @@ pub fn apply_outcome(
             });
         }
         OutcomeAction::Retry => {
-            let retry_effects =
-                apply_retry(def, input, attempt);
+            let retry_effects = apply_retry(def, input, attempt);
             effects.extend(retry_effects);
         }
         OutcomeAction::Review => {
@@ -194,11 +188,7 @@ pub fn apply_outcome(
 }
 
 /// Apply retry logic per the workflow's retry policy.
-fn apply_retry(
-    def: &WorkflowDef,
-    input: &OutcomeInput,
-    attempt: u32,
-) -> Vec<LifecycleEffect> {
+fn apply_retry(def: &WorkflowDef, input: &OutcomeInput, attempt: u32) -> Vec<LifecycleEffect> {
     let mut effects = Vec::new();
 
     let Some(retry) = &def.config.retry else {
@@ -230,12 +220,18 @@ fn apply_retry(
         effects.push(LifecycleEffect::EmitLifecycleEvent {
             workflow_name: input.workflow_name.clone(),
             status: status_name,
-            detail: format!("Max retries exhausted ({attempt}/{max})", max = retry.max_attempts),
+            detail: format!(
+                "Max retries exhausted ({attempt}/{max})",
+                max = retry.max_attempts
+            ),
         });
         effects.push(LifecycleEffect::MarkFailed {
             workflow_name: input.workflow_name.clone(),
             worktree_path: input.worktree_path.clone(),
-            reason: format!("Max retries exhausted ({attempt}/{max})", max = retry.max_attempts),
+            reason: format!(
+                "Max retries exhausted ({attempt}/{max})",
+                max = retry.max_attempts
+            ),
         });
     } else {
         let delay_ms = compute_backoff_delay(retry, attempt);
@@ -439,7 +435,11 @@ mod tests {
         let effects = apply_outcome(&def, &outcome, &input, 1);
         assert!(effects.iter().any(|e| matches!(
             e,
-            LifecycleEffect::ScheduleRetry { attempt: 2, delay_ms: 2000, .. }
+            LifecycleEffect::ScheduleRetry {
+                attempt: 2,
+                delay_ms: 2000,
+                ..
+            }
         )));
         assert!(effects.iter().any(|e| matches!(
             e,

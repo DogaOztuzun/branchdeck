@@ -1139,6 +1139,7 @@ pub fn start_orchestrator(
 }
 
 /// Route a single event to the appropriate pure function, then execute effects.
+#[allow(clippy::too_many_lines)]
 async fn handle_event(
     event: &crate::models::agent::Event,
     orchestrator: &OrchestratorState,
@@ -1221,22 +1222,50 @@ async fn handle_event(
             let registry = crate::services::workflow::WorkflowRegistry::scan(&search_dirs);
 
             for trigger in &trigger_events {
-                let plan =
-                    crate::services::workflow_dispatch::plan_dispatch(&registry, trigger, &repo_path);
+                let plan = crate::services::workflow_dispatch::plan_dispatch(
+                    &registry, trigger, &repo_path,
+                );
                 if plan.workflow_name.is_empty() {
                     debug!(
                         "No workflow matched issue trigger for {repo}: {:?}",
                         trigger.context
                     );
-                } else {
-                    info!(
-                        "Issue trigger matched workflow {:?} for {repo}",
-                        plan.workflow_name
-                    );
-                    // Effects will be executed by Story 2.3 (Agent Dispatch & PR Detection).
-                    // For now, log the dispatch plan.
-                    for effect in &plan.effects {
-                        info!("  dispatch effect: {effect:?}");
+                    continue;
+                }
+
+                info!(
+                    "Issue trigger matched workflow {:?} for {repo}",
+                    plan.workflow_name
+                );
+
+                // Execute the dispatch plan
+                let result = crate::services::workflow_dispatch::execute_dispatch_plan(
+                    &plan,
+                    run_manager,
+                    emitter,
+                )
+                .await;
+
+                if let Some((worktree_path, tab_id)) = result {
+                    // Extract issue key from trigger context for tracking
+                    if let TriggerContext::GithubIssue {
+                        repo: r, number, ..
+                    } = &trigger.context
+                    {
+                        let key = issue_key(r, *number);
+                        let mut orch = orchestrator.lock().await;
+                        orch.running.insert(
+                            key.clone(),
+                            RunningEntry {
+                                pr_key: key.clone(),
+                                worktree_path: worktree_path.clone(),
+                                tab_id,
+                                started_at: crate::models::agent::now_ms(),
+                                attempt: 1,
+                                branch: String::new(),
+                                base_branch: String::new(),
+                            },
+                        );
                     }
                 }
             }

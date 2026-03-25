@@ -168,7 +168,11 @@ pub fn default_search_dirs(repo_path: &str) -> Vec<PathBuf> {
     }
 
     // Project-local
-    dirs.push(PathBuf::from(repo_path).join(".branchdeck").join("workflows"));
+    dirs.push(
+        PathBuf::from(repo_path)
+            .join(".branchdeck")
+            .join("workflows"),
+    );
 
     dirs
 }
@@ -193,7 +197,10 @@ impl WorkflowRegistry {
 
         for dir in search_dirs {
             if !dir.is_dir() {
-                debug!("Workflow search dir does not exist, skipping: {}", dir.display());
+                debug!(
+                    "Workflow search dir does not exist, skipping: {}",
+                    dir.display()
+                );
                 continue;
             }
 
@@ -228,7 +235,11 @@ impl WorkflowRegistry {
                                     workflow_file.display()
                                 );
                             }
-                            debug!("Loaded workflow '{}' from {}", name, workflow_file.display());
+                            debug!(
+                                "Loaded workflow '{}' from {}",
+                                name,
+                                workflow_file.display()
+                            );
                             workflows.insert(name, def);
                         } else {
                             let error_msgs: Vec<String> =
