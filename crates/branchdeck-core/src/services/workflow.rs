@@ -35,8 +35,22 @@ pub fn parse_workflow_file(path: &Path) -> Result<WorkflowDef, AppError> {
 /// # Errors
 /// Returns `AppError::Workflow` if the frontmatter is malformed or missing.
 pub fn parse_workflow_md(content: &str) -> Result<WorkflowDef, AppError> {
-    let document: yaml_front_matter::Document<WorkflowConfig> =
-        YamlFrontMatter::parse(content).map_err(|e| {
+    // Pre-check: content must start with `---` frontmatter delimiter
+    let trimmed = content.trim_start();
+    if !trimmed.starts_with("---") {
+        return Err(AppError::Workflow(
+            "workflow file must start with YAML frontmatter (---). See docs/specs/workflow-schema.md".into(),
+        ));
+    }
+    // Check for closing delimiter
+    if trimmed.match_indices("---").count() < 2 {
+        return Err(AppError::Workflow(
+            "workflow file has unclosed frontmatter — missing closing ---".into(),
+        ));
+    }
+
+    let document: yaml_front_matter::Document<WorkflowConfig> = YamlFrontMatter::parse(content)
+        .map_err(|e| {
             error!("Failed to parse workflow frontmatter: {e}");
             AppError::Workflow(format!("frontmatter parse error: {e}"))
         })?;
@@ -122,7 +136,10 @@ pub fn validate_workflow_def(def: &WorkflowDef) -> Vec<ValidationError> {
     }
 
     if errors.is_empty() {
-        debug!("Workflow definition '{}' validated successfully", config.name);
+        debug!(
+            "Workflow definition '{}' validated successfully",
+            config.name
+        );
     }
 
     errors

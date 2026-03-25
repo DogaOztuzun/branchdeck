@@ -214,12 +214,8 @@ pub enum OutcomeAction {
 }
 
 impl OutcomeAction {
-    pub const ALL: &[OutcomeAction] = &[
-        Self::Complete,
-        Self::Retry,
-        Self::Review,
-        Self::CustomState,
-    ];
+    pub const ALL: &[OutcomeAction] =
+        &[Self::Complete, Self::Retry, Self::Review, Self::CustomState];
 
     #[must_use]
     pub fn as_str(self) -> &'static str {

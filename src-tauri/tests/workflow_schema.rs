@@ -317,35 +317,27 @@ fn round_trip_frontmatter() {
         assert_eq!(a.next, b.next);
         assert_eq!(a.path, b.path);
     }
+    // Verify all four lifecycle fields survive round-trip
+    let lc1 = def.config.lifecycle.as_ref().unwrap();
+    let lc2 = def2.config.lifecycle.as_ref().unwrap();
+    assert_eq!(lc2.dispatched, lc1.dispatched);
+    assert_eq!(lc2.complete, lc1.complete);
+    assert_eq!(lc2.failed, lc1.failed);
+    assert_eq!(lc2.retrying, lc1.retrying);
+
+    // Verify filter survives round-trip
+    assert!(def2.config.tracker.filter.is_some());
     assert_eq!(
         def2.config
-            .lifecycle
+            .tracker
+            .filter
             .as_ref()
-            .and_then(|l| l.dispatched.as_deref()),
+            .and_then(|f| f.get("ci_status")),
         def.config
-            .lifecycle
+            .tracker
+            .filter
             .as_ref()
-            .and_then(|l| l.dispatched.as_deref())
-    );
-    assert_eq!(
-        def2.config
-            .lifecycle
-            .as_ref()
-            .and_then(|l| l.failed.as_deref()),
-        def.config
-            .lifecycle
-            .as_ref()
-            .and_then(|l| l.failed.as_deref())
-    );
-    assert_eq!(
-        def2.config
-            .lifecycle
-            .as_ref()
-            .and_then(|l| l.retrying.as_deref()),
-        def.config
-            .lifecycle
-            .as_ref()
-            .and_then(|l| l.retrying.as_deref())
+            .and_then(|f| f.get("ci_status"))
     );
     assert_eq!(
         def2.config.retry.as_ref().map(|r| r.max_attempts),
@@ -414,4 +406,61 @@ You are working on a Linear ticket {{ issue.identifier }}.
     );
     assert!(def.config.hooks.as_ref().unwrap().after_create.is_some());
     assert!(def.prompt.contains("Linear ticket"));
+}
+
+#[test]
+fn reject_no_frontmatter() {
+    let md = "Just some markdown without frontmatter.";
+    let err = parse_workflow_md(md).expect_err("should fail without frontmatter");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("must start with YAML frontmatter"),
+        "should give clear error: {msg}"
+    );
+}
+
+#[test]
+fn reject_unclosed_frontmatter() {
+    let md = "---\nname: test\ntracker:\n  kind: manual\n\nsome prompt without closing";
+    let err = parse_workflow_md(md).expect_err("should fail with unclosed frontmatter");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("unclosed frontmatter"),
+        "should give clear error: {msg}"
+    );
+}
+
+#[test]
+fn validate_nan_budget() {
+    let md =
+        "---\nname: test\ntracker:\n  kind: manual\nagent:\n  max_budget_usd: .nan\n---\nprompt\n";
+    let def = parse_workflow_md(md).expect("should parse");
+    let errors = validate_workflow_def(&def);
+    assert!(
+        errors.iter().any(|e| e.field == "agent.max_budget_usd"),
+        "should error on NaN budget: {errors:?}"
+    );
+}
+
+#[test]
+fn validate_inf_budget() {
+    let md =
+        "---\nname: test\ntracker:\n  kind: manual\nagent:\n  max_budget_usd: .inf\n---\nprompt\n";
+    let def = parse_workflow_md(md).expect("should parse");
+    let errors = validate_workflow_def(&def);
+    assert!(
+        errors.iter().any(|e| e.field == "agent.max_budget_usd"),
+        "should error on infinite budget: {errors:?}"
+    );
+}
+
+#[test]
+fn validate_whitespace_description() {
+    let md = "---\nname: test\ndescription: \"   \"\ntracker:\n  kind: manual\n---\nprompt\n";
+    let def = parse_workflow_md(md).expect("should parse");
+    let errors = validate_workflow_def(&def);
+    assert!(
+        errors.iter().any(|e| e.field == "description"),
+        "should error on whitespace description: {errors:?}"
+    );
 }
