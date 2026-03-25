@@ -1265,13 +1265,12 @@ async fn handle_event(
                 )
                 .await;
 
-                if let Some((worktree_path, tab_id)) = result {
-                    // Extract issue key from trigger context for tracking
-                    if let TriggerContext::GithubIssue {
-                        repo: r, number, ..
-                    } = &trigger.context
-                    {
-                        let key = issue_key(r, *number);
+                if let TriggerContext::GithubIssue {
+                    repo: r, number, ..
+                } = &trigger.context
+                {
+                    let key = issue_key(r, *number);
+                    if let Some((worktree_path, tab_id)) = result {
                         let mut orch = orchestrator.lock().await;
                         orch.running.insert(
                             key.clone(),
@@ -1285,6 +1284,11 @@ async fn handle_event(
                                 base_branch: String::new(),
                             },
                         );
+                    } else {
+                        // Dispatch failed — unclaim so the issue can be retried next poll
+                        error!("Dispatch failed for issue {key}, unclaiming");
+                        let mut orch = orchestrator.lock().await;
+                        orch.claimed.remove(&key);
                     }
                 }
             }
