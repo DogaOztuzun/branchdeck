@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::sync::Arc;
 
 use log::{debug, error, info};
@@ -665,7 +666,7 @@ fn deploy_skill_file(worktree_path: &str) {
         return;
     }
 
-    if let Err(e) = std::fs::write(&skill_path, DEFAULT_SKILL) {
+    if let Err(e) = crate::util::write_atomic(Path::new(&skill_path), DEFAULT_SKILL.as_bytes()) {
         error!("Failed to write skill file {skill_path}: {e}");
         return;
     }
@@ -684,7 +685,7 @@ fn write_pr_context(worktree_path: &str, pr_context: &crate::models::orchestrato
     let path = format!("{dir}/pr-context.json");
     match serde_json::to_string_pretty(pr_context) {
         Ok(json) => {
-            if let Err(e) = std::fs::write(&path, json) {
+            if let Err(e) = crate::util::write_atomic(Path::new(&path), json.as_bytes()) {
                 error!("Failed to write pr-context.json: {e}");
             }
         }
@@ -720,7 +721,7 @@ fn create_orchestrator_task(
         number = pr_context.number,
     );
 
-    if let Err(e) = std::fs::write(&task_path, &content) {
+    if let Err(e) = crate::util::write_atomic(Path::new(&task_path), content.as_bytes()) {
         error!("Failed to write orchestrator task: {e}");
     }
 

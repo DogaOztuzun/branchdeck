@@ -1,5 +1,6 @@
 use crate::error::AppError;
 use crate::models::task::{TaskFrontmatter, TaskInfo, TaskScope, TaskStatus, TaskType};
+use crate::util::write_atomic;
 use git2::Repository;
 use log::{debug, error, info};
 use std::fmt::Write as _;
@@ -35,7 +36,7 @@ pub fn update_task_status(task_path: &str, new_status: TaskStatus) {
         return;
     };
 
-    if let Err(e) = std::fs::write(task_path, updated) {
+    if let Err(e) = write_atomic(Path::new(task_path), updated.as_bytes()) {
         error!("Failed to write updated task status to {task_path}: {e}");
     } else {
         debug!("Updated task status to {status_str} in {task_path}");
@@ -91,7 +92,7 @@ pub fn increment_run_count(task_path: &str) {
         return;
     };
 
-    if let Err(e) = std::fs::write(task_path, updated) {
+    if let Err(e) = write_atomic(Path::new(task_path), updated.as_bytes()) {
         error!("Failed to write updated run-count to {task_path}: {e}");
     } else {
         debug!("Incremented run-count in {task_path}");
@@ -440,7 +441,7 @@ fn append_artifacts_section(content: &str, task_path: &str, block: &str) {
         format!("{content}\n## Artifacts\n{block}")
     };
 
-    if let Err(e) = std::fs::write(task_path, updated) {
+    if let Err(e) = write_atomic(Path::new(task_path), updated.as_bytes()) {
         error!("Artifact capture: failed to write to {task_path}: {e}");
     }
 }

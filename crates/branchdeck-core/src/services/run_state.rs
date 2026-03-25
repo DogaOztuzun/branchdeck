@@ -30,7 +30,7 @@ pub fn save_run_state(task_path: &str, run_info: &RunInfo) {
         }
     };
 
-    if let Err(e) = std::fs::write(&file_path, json) {
+    if let Err(e) = crate::util::write_atomic(&file_path, json.as_bytes()) {
         error!("Failed to write run state to {}: {e}", file_path.display());
     } else {
         debug!("Saved run state to {}", file_path.display());

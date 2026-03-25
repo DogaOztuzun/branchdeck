@@ -110,7 +110,7 @@ pub fn save_global_config(config: &GlobalConfig) -> Result<(), AppError> {
     let path = config_dir()?.join("config.json");
     let contents =
         serde_json::to_string_pretty(config).map_err(|e| AppError::Config(e.to_string()))?;
-    std::fs::write(&path, contents)?;
+    crate::util::write_atomic(&path, contents.as_bytes())?;
     info!("Saved global config to {}", path.display());
     Ok(())
 }
@@ -144,7 +144,7 @@ pub fn save_repo_config(repo_path: &str, config: &RepoConfig) -> Result<(), AppE
     let path = repo_config_path(repo_path)?;
     let contents =
         serde_json::to_string_pretty(config).map_err(|e| AppError::Config(e.to_string()))?;
-    std::fs::write(&path, contents)?;
+    crate::util::write_atomic(&path, contents.as_bytes())?;
     info!("Saved repo config for {repo_path:?}");
     Ok(())
 }

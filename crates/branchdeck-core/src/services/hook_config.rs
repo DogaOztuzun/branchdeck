@@ -45,7 +45,7 @@ pub fn ensure_notify_script() -> Result<PathBuf, AppError> {
     }
 
     let script_path = hooks_dir.join("notify.sh");
-    std::fs::write(&script_path, NOTIFY_SCRIPT).map_err(|e| {
+    crate::util::write_atomic(&script_path, NOTIFY_SCRIPT.as_bytes()).map_err(|e| {
         error!(
             "Failed to write notify script {}: {e}",
             script_path.display()
@@ -346,25 +346,12 @@ fn load_settings(path: &Path) -> Result<serde_json::Value, AppError> {
 }
 
 fn atomic_write_json(path: &Path, value: &serde_json::Value) -> Result<(), AppError> {
-    let tmp_path = path.with_extension("json.tmp");
     let contents = serde_json::to_string_pretty(value).map_err(|e| {
         error!("Failed to serialize settings JSON: {e}");
         AppError::Agent(e.to_string())
     })?;
 
-    std::fs::write(&tmp_path, contents).map_err(|e| {
-        error!("Failed to write {}: {e}", tmp_path.display());
-        e
-    })?;
-
-    std::fs::rename(&tmp_path, path).map_err(|e| {
-        error!(
-            "Failed to rename {} -> {}: {e}",
-            tmp_path.display(),
-            path.display()
-        );
-        e
-    })?;
+    crate::util::write_atomic(path, contents.as_bytes())?;
 
     debug!("Atomic write to {}", path.display());
     Ok(())
