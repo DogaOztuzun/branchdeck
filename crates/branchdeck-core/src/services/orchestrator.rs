@@ -165,6 +165,7 @@ pub fn apply_issue_event(
                 repo: issue.repo_name.clone(),
                 number: issue.number,
                 title: issue.title.clone(),
+                body: issue.body.clone(),
                 labels: issue.labels.clone(),
             },
         });

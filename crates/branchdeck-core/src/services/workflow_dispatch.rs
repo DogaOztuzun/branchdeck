@@ -185,6 +185,7 @@ mod tests {
                 repo: "owner/repo".to_string(),
                 number: 42,
                 title: "Fix the bug".to_string(),
+                body: Some("The login button is broken on the dashboard.".to_string()),
                 labels: vec![label.to_string()],
             },
         }
@@ -242,6 +243,40 @@ mod tests {
             DispatchEffect::EnqueueRun { allowed_directories, .. }
             if allowed_directories.len() == 1
         )));
+    }
+
+    #[test]
+    fn plan_dispatch_issue_context_includes_body() {
+        let registry = build_registry(&[make_issue_workflow()]);
+        let event = make_issue_event("agent:implement");
+
+        let plan = plan_dispatch(&registry, &event, "/tmp/repo");
+
+        let context_effect = plan.effects.iter().find(|e| {
+            matches!(
+                e,
+                DispatchEffect::WriteContext {
+                    context_file, ..
+                } if context_file == ".branchdeck/context.json"
+            )
+        });
+        assert!(context_effect.is_some(), "WriteContext effect must exist");
+
+        if let Some(DispatchEffect::WriteContext { content, .. }) = context_effect {
+            assert!(content.contains("Fix the bug"), "context must include title");
+            assert!(
+                content.contains("login button is broken"),
+                "context must include body"
+            );
+            assert!(
+                content.contains("agent:implement"),
+                "context must include labels"
+            );
+            assert!(
+                content.contains("owner/repo"),
+                "context must include repo"
+            );
+        }
     }
 
     #[test]
