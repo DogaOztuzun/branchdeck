@@ -387,3 +387,238 @@ pub struct SatRunResult {
     /// Per-scenario trajectories.
     pub trajectories: Vec<SatTrajectory>,
 }
+
+// ===========================================================================
+// Scoring types (Story 3.3)
+// ===========================================================================
+
+/// Configuration for the SAT scoring service.
+#[derive(Debug, Clone)]
+pub struct SatScoreConfig {
+    /// Root directory of the project (where `sat/` lives).
+    pub project_root: PathBuf,
+    /// Path to runs directory (default: `sat/runs/`).
+    pub runs_dir: PathBuf,
+    /// Path to personas directory (default: `sat/personas/`).
+    pub personas_dir: PathBuf,
+    /// Path to learnings file (default: `sat/learnings.yaml`).
+    pub learnings_path: PathBuf,
+    /// Budget constraints for LLM scoring.
+    pub budget: ScoringBudget,
+}
+
+impl SatScoreConfig {
+    /// Create a config with standard defaults for a project root.
+    #[must_use]
+    pub fn new(project_root: PathBuf) -> Self {
+        let runs_dir = project_root.join("sat/runs");
+        let personas_dir = project_root.join("sat/personas");
+        let learnings_path = project_root.join("sat/learnings.yaml");
+        Self {
+            project_root,
+            runs_dir,
+            personas_dir,
+            learnings_path,
+            budget: ScoringBudget::default(),
+        }
+    }
+}
+
+/// Budget constraints for LLM-based scoring.
+///
+/// Tracks token usage and cost to enforce the $5-15 budget cap
+/// for 10-20 scenarios (NFR6).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ScoringBudget {
+    /// Maximum cost in dollars for the entire scoring run.
+    pub max_cost_dollars: f64,
+    /// Cost per 1K input tokens (model-specific).
+    pub input_cost_per_1k: f64,
+    /// Cost per 1K output tokens (model-specific).
+    pub output_cost_per_1k: f64,
+    /// Accumulated input tokens so far.
+    pub input_tokens_used: u64,
+    /// Accumulated output tokens so far.
+    pub output_tokens_used: u64,
+}
+
+impl Default for ScoringBudget {
+    fn default() -> Self {
+        Self {
+            max_cost_dollars: 15.0,
+            // Claude Sonnet 3.5 pricing as reasonable defaults
+            input_cost_per_1k: 0.003,
+            output_cost_per_1k: 0.015,
+            input_tokens_used: 0,
+            output_tokens_used: 0,
+        }
+    }
+}
+
+/// Confidence level for a finding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConfidenceLevel {
+    High,
+    Medium,
+    Low,
+}
+
+impl std::fmt::Display for ConfidenceLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::High => f.write_str("high"),
+            Self::Medium => f.write_str("medium"),
+            Self::Low => f.write_str("low"),
+        }
+    }
+}
+
+/// Category for a scored finding.
+///
+/// Extends `FailureCategory` with an additional `Scenario` variant
+/// to distinguish bad tests from real bugs and runner artifacts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FindingCategory {
+    /// Real application bug.
+    App,
+    /// Runner/infrastructure artifact (`WebDriver`, `tauri-driver`).
+    Runner,
+    /// Bad test scenario (unreliable or poorly defined steps).
+    Scenario,
+}
+
+impl std::fmt::Display for FindingCategory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::App => f.write_str("app"),
+            Self::Runner => f.write_str("runner"),
+            Self::Scenario => f.write_str("scenario"),
+        }
+    }
+}
+
+/// A single finding from SAT scoring — an issue discovered during evaluation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SatFinding {
+    /// Which scenario produced this finding.
+    pub scenario_id: String,
+    /// Step number where the issue was observed (0 = overall scenario).
+    pub step_number: u32,
+    /// Human-readable summary of the issue.
+    pub summary: String,
+    /// Detailed description of what went wrong.
+    pub detail: String,
+    /// Classification: app bug, runner artifact, or bad scenario.
+    pub category: FindingCategory,
+    /// How confident the LLM judge is in this classification.
+    pub confidence: ConfidenceLevel,
+    /// Evidence references (screenshot paths, step text, etc.).
+    #[serde(default)]
+    pub evidence: Vec<String>,
+    /// Suggested severity (1 = critical, 5 = cosmetic).
+    pub severity: u8,
+}
+
+/// Per-scenario satisfaction score produced by LLM-as-judge evaluation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SatScenarioScore {
+    /// Scenario ID.
+    pub scenario_id: String,
+    /// Persona name associated with the scenario.
+    pub persona: String,
+    /// Overall satisfaction score (0-100).
+    pub score: u32,
+    /// Breakdown of the score by dimension.
+    pub dimensions: SatScoreDimensions,
+    /// LLM's reasoning for the score.
+    pub reasoning: String,
+    /// Findings (issues) discovered in this scenario.
+    pub findings: Vec<SatFinding>,
+}
+
+/// Score dimensions — different aspects of user satisfaction.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SatScoreDimensions {
+    /// Did the feature work as expected? (0-100)
+    pub functionality: u32,
+    /// Was the experience smooth and responsive? (0-100)
+    pub usability: u32,
+    /// Was feedback clear and errors recoverable? (0-100)
+    pub error_handling: u32,
+    /// Did performance meet expectations? (0-100)
+    pub performance: u32,
+}
+
+/// Token usage for a single LLM scoring call.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct TokenUsage {
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+}
+
+/// Full scoring result for a SAT run.
+/// Written atomically to `sat/runs/run-{id}/scores.json`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SatScoreResult {
+    /// Run ID that was scored.
+    pub run_id: String,
+    /// ISO 8601 timestamp when scoring started.
+    pub scored_at: String,
+    /// Per-scenario scores.
+    pub scenario_scores: Vec<SatScenarioScore>,
+    /// Aggregate score across all scenarios (weighted average).
+    pub aggregate_score: u32,
+    /// All findings across all scenarios.
+    pub all_findings: Vec<SatFinding>,
+    /// Summary counts by finding category.
+    pub finding_counts: FindingCounts,
+    /// Total token usage for the scoring run.
+    pub token_usage: TokenUsage,
+    /// Estimated cost in dollars.
+    pub estimated_cost_dollars: f64,
+}
+
+/// Summary counts of findings by category.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct FindingCounts {
+    pub app: usize,
+    pub runner: usize,
+    pub scenario: usize,
+    pub total: usize,
+}
+
+/// A learning entry for `sat/learnings.yaml` — accumulated knowledge from scoring.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SatLearning {
+    /// ISO 8601 timestamp when the learning was recorded.
+    pub recorded_at: String,
+    /// Run ID that produced this learning.
+    pub run_id: String,
+    /// Scenario ID (if per-scenario).
+    #[serde(default)]
+    pub scenario_id: Option<String>,
+    /// Category of the finding.
+    pub category: FindingCategory,
+    /// Confidence level.
+    pub confidence: ConfidenceLevel,
+    /// Human-readable summary.
+    pub summary: String,
+}
+
+/// Top-level structure of `sat/learnings.yaml`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SatLearningsFile {
+    #[serde(default)]
+    pub learnings: Vec<SatLearning>,
+}

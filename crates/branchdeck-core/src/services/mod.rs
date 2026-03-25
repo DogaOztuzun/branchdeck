@@ -22,6 +22,7 @@ pub mod run_stale;
 pub mod run_state;
 pub mod sat_execute;
 pub mod sat_generate;
+pub mod sat_score;
 pub mod shepherd;
 pub mod task;
 pub mod task_watcher;
