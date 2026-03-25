@@ -44,6 +44,9 @@ pub enum AppError {
     #[error("Workflow error: {0}")]
     Workflow(String),
 
+    #[error("SAT error: {0}")]
+    Sat(String),
+
     #[error("Event emit error: {0}")]
     Emit(String),
 }

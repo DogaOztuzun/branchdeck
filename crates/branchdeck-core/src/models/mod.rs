@@ -13,4 +13,5 @@ pub mod knowledge;
 pub mod orchestrator;
 pub mod run;
 pub mod task;
+pub mod sat;
 pub mod workflow;
