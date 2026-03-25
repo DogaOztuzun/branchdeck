@@ -32,6 +32,7 @@ sona = ["branchdeck-core/sona", "knowledge"]
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json"] }
 tempfile = "3.27.0"
+serde_yaml = "0.9"
 git2 = "0.20"
 
 [lints.rust]

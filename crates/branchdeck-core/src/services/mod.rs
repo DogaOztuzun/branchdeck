@@ -23,3 +23,4 @@ pub mod shepherd;
 pub mod task;
 pub mod task_watcher;
 pub mod terminal;
+pub mod workflow;

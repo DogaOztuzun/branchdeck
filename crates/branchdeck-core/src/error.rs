@@ -40,6 +40,9 @@ pub enum AppError {
 
     #[error("Knowledge error: {0}")]
     Knowledge(String),
+
+    #[error("Workflow error: {0}")]
+    Workflow(String),
 }
 
 // Tauri requires Serialize for error types returned from commands
