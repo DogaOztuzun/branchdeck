@@ -2,7 +2,7 @@ use crate::error::AppError;
 use crate::models::github::{PrFilter, PrSummary};
 use crate::models::PrInfo;
 use crate::services::github;
-use git2::Repository;
+use branchdeck_core::git2::Repository;
 use log::{debug, error};
 use std::path::PathBuf;
 

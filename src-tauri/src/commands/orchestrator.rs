@@ -7,6 +7,7 @@ use crate::services::event_bus::EventBusState;
 use crate::services::orchestrator::{self as orch_service, OrchestratorState};
 use crate::services::pr_poller::DiscoveredPrsState;
 use crate::services::run_manager::RunManagerState;
+use crate::traits::EventEmitter;
 use log::{debug, error, info};
 use std::sync::Arc;
 use tauri::State;
@@ -17,7 +18,7 @@ pub async fn relaunch_pr_cmd(
     orchestrator: State<'_, OrchestratorState>,
     run_manager: State<'_, RunManagerState>,
     event_bus: State<'_, EventBusState>,
-    app_handle: tauri::AppHandle,
+    emitter: State<'_, Arc<dyn EventEmitter>>,
     pr_key: String,
     worktree_path: String,
 ) -> Result<(), AppError> {
@@ -33,14 +34,8 @@ pub async fn relaunch_pr_cmd(
 
     let orch_state = Arc::clone(&orchestrator);
     let rm_state = Arc::clone(&run_manager);
-    orch_service::execute_effects(
-        effects,
-        &orch_state,
-        &rm_state,
-        &app_handle,
-        Some(&event_bus),
-    )
-    .await;
+    orch_service::execute_effects(effects, &orch_state, &rm_state, &emitter, Some(&event_bus))
+        .await;
 
     info!("Relaunched PR {pr_key}");
     Ok(())
@@ -52,7 +47,7 @@ pub async fn skip_pr_cmd(
     orchestrator: State<'_, OrchestratorState>,
     run_manager: State<'_, RunManagerState>,
     event_bus: State<'_, EventBusState>,
-    app_handle: tauri::AppHandle,
+    emitter: State<'_, Arc<dyn EventEmitter>>,
     pr_key: String,
 ) -> Result<(), AppError> {
     let effects = {
@@ -62,14 +57,8 @@ pub async fn skip_pr_cmd(
 
     let orch_state = Arc::clone(&orchestrator);
     let rm_state = Arc::clone(&run_manager);
-    orch_service::execute_effects(
-        effects,
-        &orch_state,
-        &rm_state,
-        &app_handle,
-        Some(&event_bus),
-    )
-    .await;
+    orch_service::execute_effects(effects, &orch_state, &rm_state, &emitter, Some(&event_bus))
+        .await;
 
     info!("Skipped PR {pr_key}");
     Ok(())
@@ -150,7 +139,7 @@ pub async fn orchestrator_shepherd_pr_cmd(
     orchestrator: State<'_, OrchestratorState>,
     run_manager: State<'_, RunManagerState>,
     event_bus: State<'_, EventBusState>,
-    app_handle: tauri::AppHandle,
+    emitter: State<'_, Arc<dyn EventEmitter>>,
     repo_path: String,
     pr_number: u64,
 ) -> Result<(), AppError> {
@@ -214,14 +203,8 @@ pub async fn orchestrator_shepherd_pr_cmd(
 
     let orch_state = Arc::clone(&orchestrator);
     let rm_state = Arc::clone(&run_manager);
-    orch_service::execute_effects(
-        effects,
-        &orch_state,
-        &rm_state,
-        &app_handle,
-        Some(&event_bus),
-    )
-    .await;
+    orch_service::execute_effects(effects, &orch_state, &rm_state, &emitter, Some(&event_bus))
+        .await;
 
     Ok(())
 }

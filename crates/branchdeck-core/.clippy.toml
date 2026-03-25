@@ -1,0 +1,3 @@
+disallowed-methods = [
+    { path = "std::fs::write", reason = "Use branchdeck_core::util::write_atomic() for crash-safe writes" },
+]
