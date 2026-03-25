@@ -1,4 +1,5 @@
 use crate::error::AppError;
+use std::io::Write;
 use std::path::Path;
 
 /// Atomically write `content` to `path` using a tmp-then-rename pattern.
@@ -6,13 +7,15 @@ use std::path::Path;
 /// # Errors
 ///
 /// Returns `AppError::Io` if writing the temp file or renaming fails.
+#[allow(clippy::disallowed_methods)] // This IS the atomic replacement for std::fs::write
 pub fn write_atomic(path: &Path, content: &[u8]) -> Result<(), AppError> {
     let tmp = path.with_extension("tmp");
-    // Ensure parent directory exists
     if let Some(parent) = tmp.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    std::fs::write(&tmp, content)?;
+    let mut file = std::fs::File::create(&tmp)?;
+    file.write_all(content)?;
+    file.sync_all()?;
     std::fs::rename(&tmp, path)?;
     Ok(())
 }

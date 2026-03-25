@@ -18,13 +18,13 @@ pub trait EventEmitter: Send + Sync {
 ///
 /// # Errors
 ///
-/// Returns `AppError::Config` if serialization fails or the emitter rejects the event.
+/// Returns `AppError::Emit` if serialization fails or the emitter rejects the event.
 pub fn emit<T: serde::Serialize>(
     emitter: &dyn EventEmitter,
     event: &str,
     payload: &T,
 ) -> Result<(), AppError> {
     let value = serde_json::to_value(payload)
-        .map_err(|e| AppError::Config(format!("Event serialize error: {e}")))?;
+        .map_err(|e| AppError::Emit(format!("Event serialize error: {e}")))?;
     emitter.emit_raw(event, value)
 }

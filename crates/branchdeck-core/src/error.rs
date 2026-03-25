@@ -43,6 +43,9 @@ pub enum AppError {
 
     #[error("Workflow error: {0}")]
     Workflow(String),
+
+    #[error("Event emit error: {0}")]
+    Emit(String),
 }
 
 // Tauri requires Serialize for error types returned from commands

@@ -206,7 +206,7 @@ pub fn run() {
         .setup(move |app| {
             // Create the EventEmitter from the Tauri AppHandle
             let emitter: Arc<dyn traits::EventEmitter> =
-                Arc::new(tauri_emitter::TauriEmitter(app.handle().clone()));
+                Arc::new(tauri_emitter::TauriEmitter::new(app.handle().clone()));
 
             let dev_path = || {
                 std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))

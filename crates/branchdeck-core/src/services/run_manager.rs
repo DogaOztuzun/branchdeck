@@ -161,8 +161,7 @@ impl RunManager {
 
         // Spawn reader task for stdout
         let reader = BufReader::new(child_stdout);
-        let emitter = Arc::clone(&self.emitter);
-        start_stdout_reader(state, emitter, reader);
+        start_stdout_reader(state, reader);
 
         info!("Sidecar spawned in {:?}", start.elapsed());
         Ok(())
@@ -742,13 +741,9 @@ pub async fn resume_run(
 /// parses them, and calls `handle_response` / `mark_run_failed` directly.
 fn start_stdout_reader(
     state: RunManagerState,
-    emitter: Arc<dyn EventEmitter>,
     reader: BufReader<tokio::process::ChildStdout>,
 ) {
     tokio::spawn(async move {
-        // Keep emitter alive for advance_queue calls — it's used via the locked manager,
-        // but we need the Arc to live for the duration of this task.
-        let _emitter = emitter;
         let mut lines = reader.lines();
         loop {
             match lines.next_line().await {
