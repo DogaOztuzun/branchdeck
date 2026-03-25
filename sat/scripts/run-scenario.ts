@@ -486,6 +486,11 @@ describe('SAT Scenario Run', () => {
       process.memoryUsage().heapUsed / 1024 / 1024,
     );
 
+    // If no steps ran (e.g., app failed to load in before() hook), mark as failed
+    if (trajectory.steps.length === 0) {
+      trajectory.status = 'execution_failed';
+    }
+
     // Write trajectory
     fs.mkdirSync(path.dirname(trajectoryPath), { recursive: true });
     fs.writeFileSync(trajectoryPath, JSON.stringify(trajectory, null, 2));

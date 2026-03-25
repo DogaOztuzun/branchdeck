@@ -59,6 +59,10 @@ export const config: WebdriverIO.Config = {
     tauriDriver = spawn(driverPath, [], {
       stdio: [null, process.stdout, process.stderr],
     });
+    tauriDriver.on('error', (err) => {
+      console.error(`tauri-driver failed to start: ${err.message}`);
+      process.exit(1);
+    });
   },
 
   afterSession: () => {
