@@ -53,7 +53,7 @@ fn build_dispatch_plan(
     let mut effects = Vec::new();
 
     let (worktree_branch, worktree_suffix) = derive_worktree_info(event, &workflow_name);
-    let safe_suffix = sanitize_path_component(&worktree_suffix);
+    let safe_suffix = crate::services::git::sanitize_worktree_name(&worktree_suffix);
     let worktree_path = format!("{repo_path}/.branchdeck/worktrees/{safe_suffix}");
 
     // 1. Create worktree
@@ -113,13 +113,6 @@ fn build_dispatch_plan(
         workflow_name,
         effects,
     }
-}
-
-/// Sanitize a path component by removing traversal sequences and path separators.
-fn sanitize_path_component(s: &str) -> String {
-    s.replace("..", "")
-        .replace(['/', '\\'], "-")
-        .replace('\0', "")
 }
 
 /// Derive worktree branch name and path suffix from trigger event context.

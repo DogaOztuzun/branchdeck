@@ -294,9 +294,11 @@ fn matches_trigger(def: &WorkflowDef, event: &TriggerEvent) -> bool {
     match &event.context {
         TriggerContext::GithubIssue { labels, .. } => {
             if let Some(label_filter) = filter.get("label") {
-                if let Some(label_str) = label_filter.as_str() {
-                    return labels.iter().any(|l| l == label_str);
-                }
+                let Some(label_str) = label_filter.as_str() else {
+                    warn!("Filter 'label' has non-string value, rejecting match");
+                    return false;
+                };
+                return labels.iter().any(|l| l == label_str);
             }
             true
         }
@@ -306,19 +308,21 @@ fn matches_trigger(def: &WorkflowDef, event: &TriggerEvent) -> bool {
             ..
         } => {
             if let Some(ci_filter) = filter.get("ci_status") {
-                if let Some(ci_str) = ci_filter.as_str() {
-                    let matches = ci_status.as_deref() == Some(ci_str);
-                    if !matches {
-                        return false;
-                    }
+                let Some(ci_str) = ci_filter.as_str() else {
+                    warn!("Filter 'ci_status' has non-string value, rejecting match");
+                    return false;
+                };
+                if ci_status.as_deref() != Some(ci_str) {
+                    return false;
                 }
             }
             if let Some(review_filter) = filter.get("review_decision") {
-                if let Some(review_str) = review_filter.as_str() {
-                    let matches = review_decision.as_deref() == Some(review_str);
-                    if !matches {
-                        return false;
-                    }
+                let Some(review_str) = review_filter.as_str() else {
+                    warn!("Filter 'review_decision' has non-string value, rejecting match");
+                    return false;
+                };
+                if review_decision.as_deref() != Some(review_str) {
+                    return false;
                 }
             }
             true
