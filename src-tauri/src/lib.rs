@@ -276,32 +276,38 @@ pub fn run() {
             app.manage(discovered_prs.clone());
 
             recover_stale_runs(&emitter);
-            setup_agent_monitoring(&emitter, &event_bus, &activity_store);
-            start_stale_checker(
-                app.state::<services::run_manager::RunManagerState>()
-                    .inner()
-                    .clone(),
-            );
 
-            // Start orchestrator event loop
+            // All background services use tokio::spawn internally, which requires
+            // a tokio runtime context. Tauri's setup closure runs synchronously
+            // before the runtime is entered, so we launch them via
+            // tauri::async_runtime::spawn to bridge into the runtime.
             let rm_state: services::run_manager::RunManagerState = app
                 .state::<services::run_manager::RunManagerState>()
                 .inner()
                 .clone();
-            services::orchestrator::start_orchestrator(
-                orchestrator_state,
-                Arc::clone(&event_bus),
-                rm_state,
-                Arc::clone(&emitter),
-            );
-
-            // Start PR poller
-            services::pr_poller::start_pr_poller(
-                Arc::clone(&event_bus),
-                repo_paths,
-                discovered_prs,
-                Arc::clone(&emitter),
-            );
+            {
+                let emitter = Arc::clone(&emitter);
+                let event_bus = Arc::clone(&event_bus);
+                let activity_store = Arc::clone(&activity_store);
+                let stale_rm = Arc::clone(&rm_state);
+                let orch_rm = Arc::clone(&rm_state);
+                tauri::async_runtime::spawn(async move {
+                    setup_agent_monitoring(&emitter, &event_bus, &activity_store);
+                    start_stale_checker(stale_rm);
+                    services::orchestrator::start_orchestrator(
+                        orchestrator_state,
+                        Arc::clone(&event_bus),
+                        orch_rm,
+                        Arc::clone(&emitter),
+                    );
+                    services::pr_poller::start_pr_poller(
+                        event_bus,
+                        repo_paths,
+                        discovered_prs,
+                        emitter,
+                    );
+                });
+            }
 
             // Knowledge service initialization
             #[cfg(feature = "knowledge")]
@@ -311,48 +317,61 @@ pub fn run() {
                         match services::knowledge::KnowledgeService::new(&config_dir) {
                             Ok(knowledge_service) => {
                                 let knowledge_service = Arc::new(knowledge_service);
-                                knowledge_service.start_subscriber(&event_bus);
-                                #[cfg(feature = "sona")]
-                                knowledge_service.start_sona_tick();
                                 app.manage(Arc::clone(&knowledge_service));
 
-                                // Start MCP TCP endpoint and configure settings.json
+                                // Defer subscriber/MCP startup to async context
+                                let ks = Arc::clone(&knowledge_service);
+                                let ks_bus = Arc::clone(&event_bus);
                                 let mcp_sidecar = sidecar_dir.join("knowledge-mcp.js");
-                                if mcp_sidecar.exists() {
-                                    let mcp_ks = Arc::clone(&knowledge_service);
-                                    let (mcp_tx, mcp_rx) = tokio::sync::oneshot::channel();
-                                    tokio::spawn(async move {
-                                        services::knowledge_mcp::start(mcp_ks, mcp_tx).await;
-                                    });
-                                    tokio::spawn(async move {
-                                        match mcp_rx.await {
-                                            Ok(Ok(port)) => {
-                                                log::info!(
-                                                    "Knowledge MCP endpoint ready on port {port}"
-                                                );
-                                                if let Err(e) =
-                                                    services::hook_config::install_mcp_config(
-                                                        port,
-                                                        &mcp_sidecar,
-                                                    )
-                                                {
-                                                    log::warn!("Failed to install MCP config: {e}");
+                                tauri::async_runtime::spawn(async move {
+                                    ks.start_subscriber(&ks_bus);
+                                    #[cfg(feature = "sona")]
+                                    ks.start_sona_tick();
+
+                                    if mcp_sidecar.exists() {
+                                        let mcp_ks = Arc::clone(&ks);
+                                        let (mcp_tx, mcp_rx) =
+                                            tokio::sync::oneshot::channel();
+                                        tokio::spawn(async move {
+                                            services::knowledge_mcp::start(mcp_ks, mcp_tx)
+                                                .await;
+                                        });
+                                        tokio::spawn(async move {
+                                            match mcp_rx.await {
+                                                Ok(Ok(port)) => {
+                                                    log::info!(
+                                                        "Knowledge MCP endpoint ready on port {port}"
+                                                    );
+                                                    if let Err(e) =
+                                                        services::hook_config::install_mcp_config(
+                                                            port,
+                                                            &mcp_sidecar,
+                                                        )
+                                                    {
+                                                        log::warn!(
+                                                            "Failed to install MCP config: {e}"
+                                                        );
+                                                    }
+                                                }
+                                                Ok(Err(e)) => {
+                                                    log::warn!(
+                                                        "Knowledge MCP endpoint failed: {e}"
+                                                    );
+                                                }
+                                                Err(_) => {
+                                                    log::warn!(
+                                                        "Knowledge MCP startup channel dropped"
+                                                    );
                                                 }
                                             }
-                                            Ok(Err(e)) => {
-                                                log::warn!("Knowledge MCP endpoint failed: {e}");
-                                            }
-                                            Err(_) => {
-                                                log::warn!("Knowledge MCP startup channel dropped");
-                                            }
-                                        }
-                                    });
-                                } else {
-                                    log::warn!(
-                                        "knowledge-mcp.js not found at {}, skipping MCP config",
-                                        mcp_sidecar.display()
-                                    );
-                                }
+                                        });
+                                    } else {
+                                        log::warn!(
+                                            "knowledge-mcp.js not found at {}, skipping MCP config",
+                                            mcp_sidecar.display()
+                                        );
+                                    }
+                                });
 
                                 log::info!("Knowledge service initialized");
                             }
