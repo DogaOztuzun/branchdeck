@@ -2,21 +2,33 @@
 
 Deferred work tracked from design reviews and implementation sessions.
 
-## SAT: Scenario-driven AI Testing (from eng review 2026-03-24)
+## SAT: Scenario-driven AI Testing
 
-### Phase 1 (implement during skill creation)
+### POC Complete (2026-03-25)
 
-- [ ] **Resume-on-crash logic** — Skill checks sat/scenarios/ and .sat-state.yaml before starting. If status is 'generating' with N scenarios written, resume from next batch instead of replacing. Without this, batch-of-5 crash safety is meaningless. Blocked by: nothing.
-- [ ] **Bash-based YAML validation** — Self-check step uses a bash command (e.g., extracting frontmatter and parsing) instead of Claude re-reading its own output. Same-model validation catches nothing the model already missed. Blocked by: nothing.
+Full pipeline validated: generate → run → score → fix → re-score (72 → 88, +16). 3 real app issues found.
 
-### Phase 2 (defer to sat-run.md)
+- [x] **Phase 1: sat-generate** — 20 scenarios, 3 personas, bash validation, resume-on-crash. Commit `edb0462`.
+- [x] **Phase 2: sat-run** — WebDriver bridge via tauri-driver + WebdriverIO + xvfb-run. 73% step pass rate. Commits `3205610`, `1777b54`.
+- [x] **Phase 2 spike** — tauri-driver + WebKitWebDriver works on Linux. /chrome approach rejected (no Tauri IPC outside webview).
+- [x] **Phase 3: sat-score** — Persona-lens scoring, issue classification (app/runner/scenario), learnings update. Commit `fbebb30`.
+- [x] **Resume-on-crash logic** — Implemented in sat-generate skill.
+- [x] **Bash-based YAML validation** — Implemented in sat-generate skill.
 
-- [ ] **Pre-Phase-2 spike: /chrome + Tauri webview** — Verify Claude Code /chrome can navigate localhost:1420, click elements, and read page state in Tauri's webview. If it can't, Phase 2 needs alternative browser approach. Blocked by: Phase 1 complete.
-- [ ] **Persona-specific app state setup** — Newcomer persona implies fresh state (no repos). Power user implies populated state. Runner needs to set up different app states before executing scenarios for different personas. Phase 1 scenarios should include preconditions in Context section. Blocked by: Phase 1 complete.
+### Deferred (iteration, not proof)
 
-### Phase 3 (defer to sat-score.md)
+- [ ] **`/sat` orchestrator** — Wire generate → run → score into one command. ~15 min. Blocked by: nothing.
+- [ ] **Step interpreter improvements** — Push 73% → 90%+ pass rate. Add Kobalte component handling, compound step splitting, content-aware verification. Blocked by: nothing.
+- [ ] **Persona-specific app state setup** — Newcomer persona implies fresh state (no repos). Runner needs precondition setup per persona. Blocked by: nothing.
+- [ ] **Scenario ID stability across regenerations** — learnings.yaml references scenario IDs. Need deterministic IDs or matching logic for learning continuity. Blocked by: nothing.
+- [ ] **CI integration** — Run SAT in GitHub Actions via `claude-code-action`. Blocked by: orchestrator.
+- [ ] **Scenario preconditions** — add-first-repository scenario assumes empty workspace but test env has repos. Scenarios need `## Preconditions` section. Blocked by: nothing.
 
-- [ ] **Scenario ID stability across regenerations** — learnings.yaml references scenario IDs. If IDs change when titles change, learnings become orphaned. Need deterministic IDs or ID matching logic for learning continuity. Blocked by: Phase 2 complete.
+### App issues found by SAT
+
+- [ ] **Empty state onboarding** (medium) — "Add Repository" button at sidebar bottom has low visual weight. No guidance for first-time users.
+- [ ] **No auto-terminal on worktree click** (medium) — Clicking a worktree shows "No terminal open" instead of auto-opening a shell.
+- [ ] **Disabled button without explanation** (low) — Create Worktree button disabled when input empty, no tooltip explains why.
 
 ## Phase 2: Daemon Extraction (from eng review 2026-03-20)
 
