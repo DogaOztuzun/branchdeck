@@ -1,10 +1,17 @@
 //! Tests for WorkflowDef schema parsing and validation.
 //!
-//! Story 1.2: WorkflowDef Schema Spec & Model (revised — markdown + YAML frontmatter format).
+//! Story 1.2: `WorkflowDef` Schema Spec & Model (revised — markdown + YAML frontmatter format).
 //! Covers: valid definition, minimal def, missing required fields, unknown enum values,
 //! outcome validation, retry validation, round-trip, all tracker kinds.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::uninlined_format_args,
+    clippy::doc_markdown,
+    clippy::disallowed_methods,
+    clippy::needless_raw_string_hashes
+)]
 
 use branchdeck_lib::models::workflow::{
     BackoffStrategy, OutcomeAction, OutcomeDetector, TrackerKind,
