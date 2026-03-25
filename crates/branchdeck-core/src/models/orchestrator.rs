@@ -212,6 +212,8 @@ pub struct Orchestrator {
     pub retry_timers: std::collections::HashMap<String, tokio::task::JoinHandle<()>>,
     /// Completed lifecycle events — gives frontend timestamp visibility for Done section
     pub completed_lifecycles: std::collections::HashMap<String, LifecycleEvent>,
+    /// Cached workflow registry for trigger matching (loaded at init from all repo paths)
+    pub registry: Option<crate::services::workflow::WorkflowRegistry>,
 }
 
 impl std::fmt::Debug for Orchestrator {
@@ -242,6 +244,7 @@ impl Orchestrator {
             repo_paths: std::collections::HashMap::new(),
             retry_timers: std::collections::HashMap::new(),
             completed_lifecycles: std::collections::HashMap::new(),
+            registry: None,
         }
     }
 }

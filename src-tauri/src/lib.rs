@@ -266,6 +266,7 @@ pub fn run() {
                             .insert(format!("{owner}/{repo}"), repo_path.clone());
                     }
                 }
+                services::orchestrator::load_registry(&mut orch);
             }
 
             app.manage(orchestrator_state.clone());

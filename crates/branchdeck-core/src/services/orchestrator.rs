@@ -68,7 +68,24 @@ pub fn apply_pr_event(
             continue;
         }
 
-        if !is_pr_eligible(pr, &state.config) {
+        // Use workflow registry for trigger matching if available, fallback to hardcoded eligibility
+        let eligible = if let Some(registry) = &state.registry {
+            let trigger = TriggerEvent {
+                kind: TrackerKind::GithubPr,
+                context: TriggerContext::GithubPr {
+                    repo: pr.repo_name.clone(),
+                    number: pr.number,
+                    branch: pr.branch.clone(),
+                    base_branch: pr.base_branch.clone(),
+                    ci_status: pr.ci_status.clone(),
+                    review_decision: pr.review_decision.clone(),
+                },
+            };
+            !registry.match_workflows(&trigger).is_empty()
+        } else {
+            is_pr_eligible(pr, &state.config)
+        };
+        if !eligible {
             continue;
         }
 
@@ -975,6 +992,7 @@ async fn execute_dispatch(
         max_turns: None,
         max_budget_usd,
         permission_mode: Some("bypassPermissions".to_string()),
+        allowed_directories: vec![worktree_path.to_string()],
     };
     match crate::services::run_manager::enqueue_run(
         Arc::clone(run_manager),
@@ -1128,6 +1146,21 @@ pub fn create_orchestrator_state(
     Arc::new(tokio::sync::Mutex::new(Orchestrator::new(config)))
 }
 
+/// Load the workflow registry from all configured repo paths and cache it.
+/// Call this after `repo_paths` have been populated.
+pub fn load_registry(state: &mut Orchestrator) {
+    let mut all_dirs = Vec::new();
+    for repo_path in state.repo_paths.values() {
+        all_dirs.extend(crate::services::workflow::default_search_dirs(repo_path));
+    }
+    let registry = crate::services::workflow::WorkflowRegistry::scan(&all_dirs);
+    info!(
+        "Orchestrator: loaded workflow registry with {} workflow(s)",
+        registry.len()
+    );
+    state.registry = Some(registry);
+}
+
 /// Start the orchestrator event loop as a background tokio task.
 /// Subscribes to `EventBus` and routes events to pure state machine functions.
 pub fn start_orchestrator(
@@ -1236,10 +1269,12 @@ async fn handle_event(
                 return;
             }
 
-            // Get repo path for workflow dispatch
-            let repo_path = {
+            // Get repo path and cached registry for workflow dispatch
+            let (repo_path, registry) = {
                 let orch = orchestrator.lock().await;
-                orch.repo_paths.get(repo).cloned()
+                let rp = orch.repo_paths.get(repo).cloned();
+                let reg = orch.registry.clone();
+                (rp, reg)
             };
 
             let Some(repo_path) = repo_path else {
@@ -1247,9 +1282,11 @@ async fn handle_event(
                 return;
             };
 
-            // Load workflow registry and dispatch each trigger
-            let search_dirs = crate::services::workflow::default_search_dirs(&repo_path);
-            let registry = crate::services::workflow::WorkflowRegistry::scan(&search_dirs);
+            // Use cached registry, fall back to fresh scan
+            let registry = registry.unwrap_or_else(|| {
+                let dirs = crate::services::workflow::default_search_dirs(&repo_path);
+                crate::services::workflow::WorkflowRegistry::scan(&dirs)
+            });
 
             for trigger in &trigger_events {
                 // Respect concurrency limit
@@ -1292,6 +1329,7 @@ async fn handle_event(
                     let key = issue_key(r, *number);
                     let issue_branch = format!("workflow/{}-issue-{}", plan.workflow_name, number);
                     if let Some((worktree_path, tab_id)) = result {
+                        let now = crate::models::agent::now_ms();
                         let mut orch = orchestrator.lock().await;
                         orch.running.insert(
                             key.clone(),
@@ -1299,12 +1337,27 @@ async fn handle_event(
                                 pr_key: key.clone(),
                                 worktree_path: worktree_path.clone(),
                                 tab_id,
-                                started_at: crate::models::agent::now_ms(),
+                                started_at: now,
                                 attempt: 1,
                                 branch: issue_branch,
                                 base_branch: "main".to_string(),
                             },
                         );
+                        drop(orch);
+
+                        // Emit lifecycle event for issue dispatch
+                        let event = LifecycleEvent {
+                            pr_key: key.clone(),
+                            worktree_path,
+                            status: LifecycleStatus::Running,
+                            attempt: 1,
+                            started_at: now,
+                            session_id: None,
+                        };
+                        if let Err(e) = traits::emit(emitter.as_ref(), "lifecycle:updated", &event)
+                        {
+                            error!("Failed to emit lifecycle:updated for issue {key}: {e}");
+                        }
                     } else {
                         // Dispatch failed — unclaim so the issue can be retried next poll
                         error!("Dispatch failed for issue {key}, unclaiming");

@@ -187,7 +187,7 @@ pub async fn execute_dispatch_plan(
                 worktree_path,
                 task_path,
                 max_budget_usd,
-                allowed_directories: _,
+                allowed_directories,
             } => {
                 // Create the task.md file
                 let task_content = format!(
@@ -210,6 +210,7 @@ pub async fn execute_dispatch_plan(
                     max_turns: None,
                     max_budget_usd: *max_budget_usd,
                     permission_mode: Some("bypassPermissions".to_string()),
+                    allowed_directories: allowed_directories.clone(),
                 };
 
                 match crate::services::run_manager::enqueue_run(
