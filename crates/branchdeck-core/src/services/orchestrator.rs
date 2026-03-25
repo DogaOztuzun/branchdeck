@@ -700,7 +700,8 @@ pub fn determine_session_outcome(worktree_path: &str) -> SessionOutcome {
 const DEFAULT_SKILL: &str = include_str!("../../../../.claude/skills/pr-shepherd/SKILL.md");
 
 /// Deploy the PR shepherd skill file into a worktree if not already present.
-fn deploy_skill_file(worktree_path: &str) {
+fn deploy_skill_file(worktree_path: &str, skill_content: Option<&str>) {
+    let content = skill_content.unwrap_or(DEFAULT_SKILL);
     let skill_dir = format!("{worktree_path}/.claude/skills/pr-shepherd");
     let skill_path = format!("{skill_dir}/SKILL.md");
 
@@ -714,7 +715,7 @@ fn deploy_skill_file(worktree_path: &str) {
         return;
     }
 
-    if let Err(e) = crate::util::write_atomic(Path::new(&skill_path), DEFAULT_SKILL.as_bytes()) {
+    if let Err(e) = crate::util::write_atomic(Path::new(&skill_path), content.as_bytes()) {
         error!("Failed to write skill file {skill_path}: {e}");
         return;
     }
@@ -877,6 +878,7 @@ fn worktree_needs_create(worktree_path: &str, expected_branch: &str) -> bool {
 }
 
 /// Execute the `DispatchSession` effect: create worktree, deploy files, enqueue run.
+#[allow(clippy::too_many_lines)]
 async fn execute_dispatch(
     key: &str,
     worktree_path: &str,
@@ -949,12 +951,29 @@ async fn execute_dispatch(
 
     let worktree_path = effective_path.as_str();
     write_pr_context(worktree_path, pr_context);
-    deploy_skill_file(worktree_path);
+
+    // Look up the pr-shepherd workflow definition for skill content and config
+    let repo_fs_path = {
+        let orch = orchestrator.lock().await;
+        orch.repo_paths.get(&pr_context.repo).cloned()
+    };
+    let workflow_def = repo_fs_path.as_ref().and_then(|rp| {
+        let dirs = crate::services::workflow::default_search_dirs(rp);
+        let registry = crate::services::workflow::WorkflowRegistry::scan(&dirs);
+        registry.get_workflow("pr-shepherd").cloned()
+    });
+
+    let skill_content = workflow_def.as_ref().map(|def| def.prompt.as_str());
+    deploy_skill_file(worktree_path, skill_content);
     let task_path = create_orchestrator_task(worktree_path, key, pr_context);
 
+    let max_budget_usd = workflow_def
+        .as_ref()
+        .and_then(|def| def.config.agent.as_ref())
+        .and_then(|a| a.max_budget_usd);
     let launch_options = crate::models::run::LaunchOptions {
         max_turns: None,
-        max_budget_usd: None,
+        max_budget_usd,
         permission_mode: Some("bypassPermissions".to_string()),
     };
     match crate::services::run_manager::enqueue_run(

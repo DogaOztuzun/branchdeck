@@ -157,7 +157,8 @@ pub fn validate_workflow_def(def: &WorkflowDef) -> Vec<ValidationError> {
 ///
 /// Order (later overrides earlier):
 /// 1. Global: `~/.config/branchdeck/workflows/`
-/// 2. Project-local: `{repo_path}/.branchdeck/workflows/`
+/// 2. Project-root: `{repo_path}/workflows/`
+/// 3. Project-local: `{repo_path}/.branchdeck/workflows/`
 #[must_use]
 pub fn default_search_dirs(repo_path: &str) -> Vec<PathBuf> {
     let mut dirs = Vec::new();
@@ -167,7 +168,10 @@ pub fn default_search_dirs(repo_path: &str) -> Vec<PathBuf> {
         dirs.push(config_dir.join("branchdeck").join("workflows"));
     }
 
-    // Project-local
+    // Project-root (tracked in git)
+    dirs.push(PathBuf::from(repo_path).join("workflows"));
+
+    // Project-local (may be gitignored)
     dirs.push(
         PathBuf::from(repo_path)
             .join(".branchdeck")
