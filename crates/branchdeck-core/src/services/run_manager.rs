@@ -739,10 +739,7 @@ pub async fn resume_run(
 
 /// Spawn a tokio task that reads stdout lines from the sidecar,
 /// parses them, and calls `handle_response` / `mark_run_failed` directly.
-fn start_stdout_reader(
-    state: RunManagerState,
-    reader: BufReader<tokio::process::ChildStdout>,
-) {
+fn start_stdout_reader(state: RunManagerState, reader: BufReader<tokio::process::ChildStdout>) {
     tokio::spawn(async move {
         let mut lines = reader.lines();
         loop {
