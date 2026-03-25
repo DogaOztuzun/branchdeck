@@ -24,3 +24,5 @@ pub mod task;
 pub mod task_watcher;
 pub mod terminal;
 pub mod workflow;
+pub mod workflow_dispatch;
+pub mod workflow_lifecycle;

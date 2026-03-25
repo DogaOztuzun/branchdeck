@@ -283,3 +283,89 @@ impl std::fmt::Display for BackoffStrategy {
         f.write_str(self.as_str())
     }
 }
+
+// === Trigger Events (incoming events that match to workflows) ===
+
+/// An incoming event that may trigger a workflow.
+/// Carries the trigger type and context data for filter matching.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct TriggerEvent {
+    pub kind: TrackerKind,
+    pub context: TriggerContext,
+}
+
+/// Context data carried by a trigger event.
+/// Each variant corresponds to a `TrackerKind`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "type")]
+pub enum TriggerContext {
+    GithubIssue {
+        repo: String,
+        number: u64,
+        title: String,
+        labels: Vec<String>,
+    },
+    GithubPr {
+        repo: String,
+        number: u64,
+        branch: String,
+        base_branch: String,
+        ci_status: Option<String>,
+        review_decision: Option<String>,
+    },
+    Manual {
+        workflow_name: String,
+        #[serde(default)]
+        params: HashMap<String, serde_json::Value>,
+    },
+    PostMerge {
+        repo: String,
+        pr_number: u64,
+        branch: String,
+    },
+}
+
+// === Dispatch types (effects produced by trigger matching + dispatch) ===
+
+/// Effects produced by workflow dispatch (pure function output).
+/// Executed by the imperative shell (`RunManager`, filesystem, events).
+#[derive(Debug, Clone)]
+pub enum DispatchEffect {
+    CreateWorktree {
+        repo_path: String,
+        branch: String,
+        worktree_path: String,
+    },
+    WriteContext {
+        worktree_path: String,
+        context_file: String,
+        content: String,
+    },
+    DeploySkill {
+        worktree_path: String,
+        skill_content: String,
+    },
+    EnqueueRun {
+        worktree_path: String,
+        task_path: String,
+        max_budget_usd: Option<f64>,
+        allowed_directories: Vec<String>,
+    },
+    EmitWorkflowEvent {
+        workflow_name: String,
+        status: String,
+        detail: String,
+    },
+    LogNoMatch {
+        event_kind: TrackerKind,
+        detail: String,
+    },
+}
+
+/// Result of matching a trigger event to a workflow and preparing dispatch.
+#[derive(Debug, Clone)]
+pub struct DispatchPlan {
+    pub workflow_name: String,
+    pub effects: Vec<DispatchEffect>,
+}

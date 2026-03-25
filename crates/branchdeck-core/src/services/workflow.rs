@@ -5,7 +5,9 @@ use log::{debug, error, warn};
 use yaml_front_matter::YamlFrontMatter;
 
 use crate::error::AppError;
-use crate::models::workflow::{OutcomeDetector, WorkflowConfig, WorkflowDef};
+use crate::models::workflow::{
+    OutcomeDetector, TriggerContext, TriggerEvent, WorkflowConfig, WorkflowDef,
+};
 
 #[derive(Debug, Clone)]
 pub struct ValidationError {
@@ -254,5 +256,73 @@ impl WorkflowRegistry {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.workflows.is_empty()
+    }
+
+    /// Find all workflows whose trigger type matches the event, applying filter criteria.
+    ///
+    /// Returns workflows in no guaranteed order. If multiple workflows match,
+    /// all are returned (caller decides how to handle — typically first match wins).
+    #[must_use]
+    pub fn match_workflows(&self, event: &TriggerEvent) -> Vec<&WorkflowDef> {
+        self.workflows
+            .values()
+            .filter(|def| matches_trigger(def, event))
+            .collect()
+    }
+}
+
+// === Trigger matching logic ===
+
+/// Check if a workflow definition's trigger matches an incoming event.
+/// Compares tracker kind and applies filter criteria from the workflow def.
+fn matches_trigger(def: &WorkflowDef, event: &TriggerEvent) -> bool {
+    // Kind must match
+    if def.config.tracker.kind != event.kind {
+        return false;
+    }
+
+    // For manual triggers, match by workflow name
+    if let TriggerContext::Manual { workflow_name, .. } = &event.context {
+        return def.config.name == *workflow_name;
+    }
+
+    // Apply filter criteria if defined
+    let Some(filter) = &def.config.tracker.filter else {
+        return true; // No filter = match all events of this kind
+    };
+
+    match &event.context {
+        TriggerContext::GithubIssue { labels, .. } => {
+            if let Some(label_filter) = filter.get("label") {
+                if let Some(label_str) = label_filter.as_str() {
+                    return labels.iter().any(|l| l == label_str);
+                }
+            }
+            true
+        }
+        TriggerContext::GithubPr {
+            ci_status,
+            review_decision,
+            ..
+        } => {
+            if let Some(ci_filter) = filter.get("ci_status") {
+                if let Some(ci_str) = ci_filter.as_str() {
+                    let matches = ci_status.as_deref() == Some(ci_str);
+                    if !matches {
+                        return false;
+                    }
+                }
+            }
+            if let Some(review_filter) = filter.get("review_decision") {
+                if let Some(review_str) = review_filter.as_str() {
+                    let matches = review_decision.as_deref() == Some(review_str);
+                    if !matches {
+                        return false;
+                    }
+                }
+            }
+            true
+        }
+        TriggerContext::PostMerge { .. } | TriggerContext::Manual { .. } => true,
     }
 }
