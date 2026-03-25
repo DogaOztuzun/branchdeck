@@ -266,6 +266,7 @@ pub fn run() {
                             .insert(format!("{owner}/{repo}"), repo_path.clone());
                     }
                 }
+                services::orchestrator::load_registry(&mut orch);
             }
 
             app.manage(orchestrator_state.clone());
@@ -299,6 +300,10 @@ pub fn run() {
                         Arc::clone(&event_bus),
                         orch_rm,
                         Arc::clone(&emitter),
+                    );
+                    services::issue_poller::start_issue_poller(
+                        Arc::clone(&event_bus),
+                        repo_paths.clone(),
                     );
                     services::pr_poller::start_pr_poller(
                         event_bus,

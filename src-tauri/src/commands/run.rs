@@ -19,6 +19,7 @@ pub async fn launch_run_cmd(
         max_turns,
         max_budget_usd,
         permission_mode: None,
+        allowed_directories: Vec::new(),
     };
     let state = Arc::clone(&run_manager);
     run_manager::launch_run(state, &task_path, &worktree_path, options).await
@@ -93,6 +94,7 @@ pub async fn shepherd_pr_cmd(
             max_turns: None,
             max_budget_usd: None,
             permission_mode: None,
+            allowed_directories: Vec::new(),
         };
         if let Err(e) =
             run_manager::launch_run(state, &result.task.path, &result.worktree_path, options).await

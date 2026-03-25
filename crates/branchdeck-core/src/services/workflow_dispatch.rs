@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use log::{debug, error, info, warn};
 
 use crate::models::workflow::{
@@ -44,11 +46,7 @@ pub fn plan_dispatch(
 
 /// Build the full dispatch plan for a matched workflow + event.
 /// Pure function: returns effects, no I/O.
-fn build_dispatch_plan(
-    def: &WorkflowDef,
-    event: &TriggerEvent,
-    repo_path: &str,
-) -> DispatchPlan {
+fn build_dispatch_plan(def: &WorkflowDef, event: &TriggerEvent, repo_path: &str) -> DispatchPlan {
     let workflow_name = def.config.name.clone();
     let mut effects = Vec::new();
 
@@ -115,6 +113,157 @@ fn build_dispatch_plan(
     }
 }
 
+/// Execute a `DispatchPlan`'s effects: create worktree, write context, deploy skill, enqueue run.
+///
+/// Returns the worktree path and `tab_id` if a run was successfully enqueued,
+/// or `None` if the plan had no enqueue effect or dispatch failed.
+#[allow(clippy::too_many_lines)]
+pub async fn execute_dispatch_plan(
+    plan: &DispatchPlan,
+    run_manager: &crate::services::run_manager::RunManagerState,
+    emitter: &Arc<dyn crate::traits::EventEmitter>,
+) -> Option<(String, String)> {
+    let mut worktree_result: Option<(String, String)> = None;
+
+    for effect in &plan.effects {
+        match effect {
+            DispatchEffect::CreateWorktree {
+                repo_path,
+                branch,
+                worktree_path,
+            } => {
+                if std::path::Path::new(worktree_path).exists() {
+                    debug!("Worktree already exists at {worktree_path}, reusing");
+                    continue;
+                }
+
+                match crate::services::git::create_worktree(
+                    std::path::Path::new(repo_path),
+                    worktree_path,
+                    Some(branch),
+                    None, // Use HEAD as base — avoids hardcoding "main" for repos with different defaults
+                ) {
+                    Ok(wt) => info!("Created worktree at {}", wt.path.display()),
+                    Err(e) => {
+                        error!("Failed to create worktree at {worktree_path}: {e}");
+                        return None;
+                    }
+                }
+            }
+            DispatchEffect::WriteContext {
+                worktree_path,
+                context_file,
+                content,
+            } => {
+                let full_path = format!("{worktree_path}/{context_file}");
+                if let Some(parent) = std::path::Path::new(&full_path).parent() {
+                    if let Err(e) = std::fs::create_dir_all(parent) {
+                        error!("Failed to create context dir: {e}");
+                        continue;
+                    }
+                }
+                if let Err(e) =
+                    crate::util::write_atomic(std::path::Path::new(&full_path), content.as_bytes())
+                {
+                    error!("Failed to write context to {full_path}: {e}");
+                }
+            }
+            DispatchEffect::DeploySkill {
+                worktree_path,
+                skill_content,
+            } => {
+                let skill_path = format!("{worktree_path}/.branchdeck/SKILL.md");
+                if let Some(parent) = std::path::Path::new(&skill_path).parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                if let Err(e) = crate::util::write_atomic(
+                    std::path::Path::new(&skill_path),
+                    skill_content.as_bytes(),
+                ) {
+                    error!("Failed to deploy skill to {skill_path}: {e}");
+                }
+            }
+            DispatchEffect::EnqueueRun {
+                worktree_path,
+                task_path,
+                max_budget_usd,
+                allowed_directories,
+            } => {
+                // Create the task.md file
+                let task_content = format!(
+                    "---\nstatus: pending\ncreated_at: {}\n---\n\nWorkflow task for {}\n",
+                    chrono::Utc::now().to_rfc3339(),
+                    plan.workflow_name,
+                );
+                if let Some(parent) = std::path::Path::new(task_path).parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                if let Err(e) = crate::util::write_atomic(
+                    std::path::Path::new(task_path),
+                    task_content.as_bytes(),
+                ) {
+                    error!("Failed to write task to {task_path}: {e}");
+                    continue;
+                }
+
+                let launch_options = crate::models::run::LaunchOptions {
+                    max_turns: None,
+                    max_budget_usd: *max_budget_usd,
+                    permission_mode: Some("bypassPermissions".to_string()),
+                    allowed_directories: allowed_directories.clone(),
+                };
+
+                match crate::services::run_manager::enqueue_run(
+                    Arc::clone(run_manager),
+                    task_path,
+                    worktree_path,
+                    launch_options,
+                )
+                .await
+                {
+                    Ok(_status) => {
+                        let tab_id = crate::services::run_state::load_run_state(worktree_path)
+                            .and_then(|r| r.tab_id)
+                            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+                        info!(
+                            "Enqueued workflow run for '{}' (tab={tab_id})",
+                            plan.workflow_name
+                        );
+                        worktree_result = Some((worktree_path.clone(), tab_id));
+                    }
+                    Err(e) => {
+                        error!(
+                            "Failed to enqueue run for workflow '{}': {e}",
+                            plan.workflow_name
+                        );
+                    }
+                }
+            }
+            DispatchEffect::EmitWorkflowEvent {
+                workflow_name,
+                status,
+                detail,
+            } => {
+                let event_payload = serde_json::json!({
+                    "workflow": workflow_name,
+                    "status": status,
+                    "detail": detail,
+                });
+                if let Err(e) =
+                    crate::traits::emit(emitter.as_ref(), "workflow:status", &event_payload)
+                {
+                    error!("Failed to emit workflow:status: {e}");
+                }
+            }
+            DispatchEffect::LogNoMatch { event_kind, detail } => {
+                debug!("No workflow match for {event_kind}: {detail}");
+            }
+        }
+    }
+
+    worktree_result
+}
+
 /// Derive worktree branch name and path suffix from trigger event context.
 fn derive_worktree_info(event: &TriggerEvent, workflow_name: &str) -> (String, String) {
     match &event.context {
@@ -122,9 +271,9 @@ fn derive_worktree_info(event: &TriggerEvent, workflow_name: &str) -> (String, S
             format!("workflow/{workflow_name}-issue-{number}"),
             format!("{workflow_name}-issue-{number}"),
         ),
-        TriggerContext::GithubPr {
-            number, branch, ..
-        } => (branch.clone(), format!("{workflow_name}-pr-{number}")),
+        TriggerContext::GithubPr { number, branch, .. } => {
+            (branch.clone(), format!("{workflow_name}-pr-{number}"))
+        }
         TriggerContext::Manual {
             workflow_name: name,
             ..
@@ -185,6 +334,7 @@ mod tests {
                 repo: "owner/repo".to_string(),
                 number: 42,
                 title: "Fix the bug".to_string(),
+                body: Some("The login button is broken on the dashboard.".to_string()),
                 labels: vec![label.to_string()],
             },
         }
@@ -242,6 +392,40 @@ mod tests {
             DispatchEffect::EnqueueRun { allowed_directories, .. }
             if allowed_directories.len() == 1
         )));
+    }
+
+    #[test]
+    fn plan_dispatch_issue_context_includes_body() {
+        let registry = build_registry(&[make_issue_workflow()]);
+        let event = make_issue_event("agent:implement");
+
+        let plan = plan_dispatch(&registry, &event, "/tmp/repo");
+
+        let context_effect = plan.effects.iter().find(|e| {
+            matches!(
+                e,
+                DispatchEffect::WriteContext {
+                    context_file, ..
+                } if context_file == ".branchdeck/context.json"
+            )
+        });
+        assert!(context_effect.is_some(), "WriteContext effect must exist");
+
+        if let Some(DispatchEffect::WriteContext { content, .. }) = context_effect {
+            assert!(
+                content.contains("Fix the bug"),
+                "context must include title"
+            );
+            assert!(
+                content.contains("login button is broken"),
+                "context must include body"
+            );
+            assert!(
+                content.contains("agent:implement"),
+                "context must include labels"
+            );
+            assert!(content.contains("owner/repo"), "context must include repo");
+        }
     }
 
     #[test]

@@ -304,6 +304,8 @@ pub enum TriggerContext {
         repo: String,
         number: u64,
         title: String,
+        #[serde(default)]
+        body: Option<String>,
         labels: Vec<String>,
     },
     GithubPr {

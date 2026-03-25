@@ -4,11 +4,12 @@ use std::sync::Arc;
 use log::{debug, error, info};
 
 use crate::models::agent::EpochMs;
-use crate::models::github::PrSummary;
+use crate::models::github::{IssueSummary, PrSummary};
 use crate::models::orchestrator::{
-    is_pr_eligible, pr_key, LifecycleEvent, LifecycleStatus, Orchestrator, OrchestratorEffect,
-    RetryEntry, RunningEntry, SessionOutcome,
+    is_pr_eligible, issue_key, pr_key, LifecycleEvent, LifecycleStatus, Orchestrator,
+    OrchestratorEffect, RetryEntry, RunningEntry, SessionOutcome,
 };
+use crate::models::workflow::{TrackerKind, TriggerContext, TriggerEvent};
 use crate::traits::{self, EventEmitter};
 
 // --- Retry backoff constants ---
@@ -67,7 +68,24 @@ pub fn apply_pr_event(
             continue;
         }
 
-        if !is_pr_eligible(pr, &state.config) {
+        // Use workflow registry for trigger matching if available, fallback to hardcoded eligibility
+        let eligible = if let Some(registry) = &state.registry {
+            let trigger = TriggerEvent {
+                kind: TrackerKind::GithubPr,
+                context: TriggerContext::GithubPr {
+                    repo: pr.repo_name.clone(),
+                    number: pr.number,
+                    branch: pr.branch.clone(),
+                    base_branch: pr.base_branch.clone(),
+                    ci_status: pr.ci_status.clone(),
+                    review_decision: pr.review_decision.clone(),
+                },
+            };
+            !registry.match_workflows(&trigger).is_empty()
+        } else {
+            is_pr_eligible(pr, &state.config)
+        };
+        if !eligible {
             continue;
         }
 
@@ -124,6 +142,53 @@ pub fn apply_pr_event(
     }
 
     effects
+}
+
+/// Handle incoming issue events. Convert to `TriggerEvent` for workflow matching.
+/// Returns trigger events for issues not already claimed.
+/// The actual dispatch is handled by the workflow engine in the executor.
+#[must_use]
+pub fn apply_issue_event(
+    state: &mut Orchestrator,
+    _repo: &str,
+    issues: &[IssueSummary],
+) -> Vec<TriggerEvent> {
+    if !state.config.enabled {
+        return Vec::new();
+    }
+
+    let mut triggers = Vec::new();
+
+    for issue in issues {
+        let key = issue_key(&issue.repo_name, issue.number);
+
+        // Skip if already claimed or completed
+        if state.claimed.contains(&key) || state.completed.contains(&key) {
+            debug!("Orchestrator: issue {key} already tracked, skipping");
+            continue;
+        }
+
+        // Claim to prevent re-triggering
+        state.claimed.insert(key.clone());
+
+        info!(
+            "Orchestrator: issue {key} detected, creating trigger event for {:?}",
+            issue.title
+        );
+
+        triggers.push(TriggerEvent {
+            kind: TrackerKind::GithubIssue,
+            context: TriggerContext::GithubIssue {
+                repo: issue.repo_name.clone(),
+                number: issue.number,
+                title: issue.title.clone(),
+                body: issue.body.clone(),
+                labels: issue.labels.clone(),
+            },
+        });
+    }
+
+    triggers
 }
 
 /// Handle session end. Route based on outcome:
@@ -652,7 +717,8 @@ pub fn determine_session_outcome(worktree_path: &str) -> SessionOutcome {
 const DEFAULT_SKILL: &str = include_str!("../../../../.claude/skills/pr-shepherd/SKILL.md");
 
 /// Deploy the PR shepherd skill file into a worktree if not already present.
-fn deploy_skill_file(worktree_path: &str) {
+fn deploy_skill_file(worktree_path: &str, skill_content: Option<&str>) {
+    let content = skill_content.unwrap_or(DEFAULT_SKILL);
     let skill_dir = format!("{worktree_path}/.claude/skills/pr-shepherd");
     let skill_path = format!("{skill_dir}/SKILL.md");
 
@@ -666,7 +732,7 @@ fn deploy_skill_file(worktree_path: &str) {
         return;
     }
 
-    if let Err(e) = crate::util::write_atomic(Path::new(&skill_path), DEFAULT_SKILL.as_bytes()) {
+    if let Err(e) = crate::util::write_atomic(Path::new(&skill_path), content.as_bytes()) {
         error!("Failed to write skill file {skill_path}: {e}");
         return;
     }
@@ -829,6 +895,7 @@ fn worktree_needs_create(worktree_path: &str, expected_branch: &str) -> bool {
 }
 
 /// Execute the `DispatchSession` effect: create worktree, deploy files, enqueue run.
+#[allow(clippy::too_many_lines)]
 async fn execute_dispatch(
     key: &str,
     worktree_path: &str,
@@ -901,13 +968,31 @@ async fn execute_dispatch(
 
     let worktree_path = effective_path.as_str();
     write_pr_context(worktree_path, pr_context);
-    deploy_skill_file(worktree_path);
+
+    // Look up the pr-shepherd workflow definition for skill content and config
+    let repo_fs_path = {
+        let orch = orchestrator.lock().await;
+        orch.repo_paths.get(&pr_context.repo).cloned()
+    };
+    let workflow_def = repo_fs_path.as_ref().and_then(|rp| {
+        let dirs = crate::services::workflow::default_search_dirs(rp);
+        let registry = crate::services::workflow::WorkflowRegistry::scan(&dirs);
+        registry.get_workflow("pr-shepherd").cloned()
+    });
+
+    let skill_content = workflow_def.as_ref().map(|def| def.prompt.as_str());
+    deploy_skill_file(worktree_path, skill_content);
     let task_path = create_orchestrator_task(worktree_path, key, pr_context);
 
+    let max_budget_usd = workflow_def
+        .as_ref()
+        .and_then(|def| def.config.agent.as_ref())
+        .and_then(|a| a.max_budget_usd);
     let launch_options = crate::models::run::LaunchOptions {
         max_turns: None,
-        max_budget_usd: None,
+        max_budget_usd,
         permission_mode: Some("bypassPermissions".to_string()),
+        allowed_directories: vec![worktree_path.to_string()],
     };
     match crate::services::run_manager::enqueue_run(
         Arc::clone(run_manager),
@@ -1061,6 +1146,21 @@ pub fn create_orchestrator_state(
     Arc::new(tokio::sync::Mutex::new(Orchestrator::new(config)))
 }
 
+/// Load the workflow registry from all configured repo paths and cache it.
+/// Call this after `repo_paths` have been populated.
+pub fn load_registry(state: &mut Orchestrator) {
+    let mut all_dirs = Vec::new();
+    for repo_path in state.repo_paths.values() {
+        all_dirs.extend(crate::services::workflow::default_search_dirs(repo_path));
+    }
+    let registry = crate::services::workflow::WorkflowRegistry::scan(&all_dirs);
+    info!(
+        "Orchestrator: loaded workflow registry with {} workflow(s)",
+        registry.len()
+    );
+    state.registry = Some(registry);
+}
+
 /// Start the orchestrator event loop as a background tokio task.
 /// Subscribes to `EventBus` and routes events to pure state machine functions.
 pub fn start_orchestrator(
@@ -1091,6 +1191,7 @@ pub fn start_orchestrator(
 }
 
 /// Route a single event to the appropriate pure function, then execute effects.
+#[allow(clippy::too_many_lines)]
 async fn handle_event(
     event: &crate::models::agent::Event,
     orchestrator: &OrchestratorState,
@@ -1112,7 +1213,7 @@ async fn handle_event(
             };
             execute_effects(effects, orchestrator, run_manager, emitter, Some(event_bus)).await;
         }
-        Event::RunComplete { tab_id, .. } => {
+        Event::RunComplete { tab_id, status, .. } => {
             let (key, worktree) = {
                 let orch = orchestrator.lock().await;
                 match find_pr_key_by_tab_id(&orch, tab_id) {
@@ -1128,7 +1229,18 @@ async fn handle_event(
                 }
             };
 
-            let outcome = determine_session_outcome(&worktree);
+            // Issue workflows (key contains #i) don't produce analysis.json.
+            // Treat successful completion as FixCompleted, failure as NoOutput.
+            let is_issue_workflow = key.contains("#i");
+            let outcome = if is_issue_workflow {
+                if status == "success" {
+                    SessionOutcome::FixCompleted
+                } else {
+                    SessionOutcome::NoOutput
+                }
+            } else {
+                determine_session_outcome(&worktree)
+            };
             let effects = {
                 let mut orch = orchestrator.lock().await;
                 apply_session_end(&mut orch, &key, outcome, now_ms())
@@ -1146,6 +1258,136 @@ async fn handle_event(
                 apply_retry_due(&mut orch, key, worktree_path, now_ms())
             };
             execute_effects(effects, orchestrator, run_manager, emitter, Some(event_bus)).await;
+        }
+        Event::IssueDetected { repo, issues, .. } => {
+            let trigger_events = {
+                let mut orch = orchestrator.lock().await;
+                apply_issue_event(&mut orch, repo, issues)
+            };
+
+            if trigger_events.is_empty() {
+                return;
+            }
+
+            // Get repo path and cached registry for workflow dispatch
+            let (repo_path, registry) = {
+                let orch = orchestrator.lock().await;
+                let rp = orch.repo_paths.get(repo).cloned();
+                let reg = orch.registry.clone();
+                (rp, reg)
+            };
+
+            let Some(repo_path) = repo_path else {
+                error!("No repo_path mapping for {repo}; cannot dispatch issue workflows");
+                return;
+            };
+
+            // Use cached registry, fall back to fresh scan
+            let registry = registry.unwrap_or_else(|| {
+                let dirs = crate::services::workflow::default_search_dirs(&repo_path);
+                crate::services::workflow::WorkflowRegistry::scan(&dirs)
+            });
+
+            for trigger in &trigger_events {
+                // Respect concurrency limit — unclaim remaining triggers on break
+                {
+                    let orch = orchestrator.lock().await;
+                    let running_count = u32::try_from(orch.running.len()).unwrap_or(u32::MAX);
+                    if running_count >= orch.config.max_concurrent {
+                        debug!("Orchestrator: at concurrency limit, deferring issue dispatch");
+                        // Unclaim all remaining triggers so they retry next poll
+                        drop(orch);
+                        let mut orch = orchestrator.lock().await;
+                        for t in &trigger_events {
+                            if let TriggerContext::GithubIssue {
+                                repo: r, number, ..
+                            } = &t.context
+                            {
+                                orch.claimed.remove(&issue_key(r, *number));
+                            }
+                        }
+                        break;
+                    }
+                }
+                let plan = crate::services::workflow_dispatch::plan_dispatch(
+                    &registry, trigger, &repo_path,
+                );
+                if plan.workflow_name.is_empty() {
+                    debug!(
+                        "No workflow matched issue trigger for {repo}: {:?}",
+                        trigger.context
+                    );
+                    // Unclaim so next poll retries (e.g. after user installs a matching workflow)
+                    if let TriggerContext::GithubIssue {
+                        repo: r, number, ..
+                    } = &trigger.context
+                    {
+                        orchestrator
+                            .lock()
+                            .await
+                            .claimed
+                            .remove(&issue_key(r, *number));
+                    }
+                    continue;
+                }
+
+                info!(
+                    "Issue trigger matched workflow {:?} for {repo}",
+                    plan.workflow_name
+                );
+
+                // Execute the dispatch plan
+                let result = crate::services::workflow_dispatch::execute_dispatch_plan(
+                    &plan,
+                    run_manager,
+                    emitter,
+                )
+                .await;
+
+                if let TriggerContext::GithubIssue {
+                    repo: r, number, ..
+                } = &trigger.context
+                {
+                    let key = issue_key(r, *number);
+                    let issue_branch = format!("workflow/{}-issue-{}", plan.workflow_name, number);
+                    if let Some((worktree_path, tab_id)) = result {
+                        let now = crate::models::agent::now_ms();
+                        let mut orch = orchestrator.lock().await;
+                        orch.running.insert(
+                            key.clone(),
+                            RunningEntry {
+                                pr_key: key.clone(),
+                                worktree_path: worktree_path.clone(),
+                                tab_id,
+                                started_at: now,
+                                attempt: 1,
+                                branch: issue_branch,
+                                base_branch: "main".to_string(),
+                            },
+                        );
+                        drop(orch);
+
+                        // Emit lifecycle event for issue dispatch
+                        let event = LifecycleEvent {
+                            pr_key: key.clone(),
+                            worktree_path,
+                            status: LifecycleStatus::Running,
+                            attempt: 1,
+                            started_at: now,
+                            session_id: None,
+                        };
+                        if let Err(e) = traits::emit(emitter.as_ref(), "lifecycle:updated", &event)
+                        {
+                            error!("Failed to emit lifecycle:updated for issue {key}: {e}");
+                        }
+                    } else {
+                        // Dispatch failed — unclaim so the issue can be retried next poll
+                        error!("Dispatch failed for issue {key}, unclaiming");
+                        let mut orch = orchestrator.lock().await;
+                        orch.claimed.remove(&key);
+                    }
+                }
+            }
         }
         _ => {} // Other events not handled by orchestrator
     }

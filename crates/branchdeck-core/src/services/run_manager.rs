@@ -634,6 +634,7 @@ pub async fn retry_run(
         max_turns: None,
         max_budget_usd: None,
         permission_mode: None,
+        allowed_directories: Vec::new(),
     };
     launch_run(state, task_path, worktree_path, options).await
 }
@@ -698,6 +699,7 @@ pub async fn resume_run(
             max_turns: None,
             max_budget_usd: None,
             permission_mode: None,
+            allowed_directories: Vec::new(),
         },
         hook_port,
         tab_id: tab_id.clone(),
@@ -848,6 +850,7 @@ pub async fn batch_launch(
                 max_turns: None,
                 max_budget_usd: None,
                 permission_mode: None,
+                allowed_directories: Vec::new(),
             };
             launch_run(
                 Arc::clone(&state),
@@ -905,6 +908,7 @@ pub async fn advance_queue(state: RunManagerState, succeeded: bool) -> Result<()
             max_turns: None,
             max_budget_usd: None,
             permission_mode: None,
+            allowed_directories: Vec::new(),
         };
         if let Err(e) = launch_run(
             Arc::clone(&state),
