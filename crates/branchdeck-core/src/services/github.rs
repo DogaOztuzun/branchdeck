@@ -1,5 +1,5 @@
 use crate::error::AppError;
-use crate::models::github::{PrFilter, PrSummary};
+use crate::models::github::{IssueSummary, PrFilter, PrSummary};
 use crate::models::{CheckRunInfo, PrInfo, ReviewInfo};
 use git2::Repository;
 use log::{debug, error, info};
@@ -505,6 +505,93 @@ pub async fn enrich_pr_summary(repo_path: &str, pr: &mut PrSummary) -> Result<()
     }
 
     Ok(())
+}
+
+/// List open issues with a specific label for a single repo.
+///
+/// # Errors
+/// Returns `AppError` on API or git failures.
+pub async fn list_issues_with_label(
+    repo_path: &str,
+    label: &str,
+) -> Result<Vec<IssueSummary>, AppError> {
+    let (owner, repo_name) = resolve_owner_repo(Path::new(repo_path))?;
+    let client = get_client().await?;
+    let full_name = format!("{owner}/{repo_name}");
+
+    let page = client
+        .issues(&owner, &repo_name)
+        .list()
+        .labels(&[label.to_string()])
+        .state(octocrab::params::State::Open)
+        .per_page(30)
+        .send()
+        .await
+        .map_err(|e| {
+            error!("Failed to list issues for {full_name} with label {label:?}: {e}");
+            AppError::GitHub(format!("list issues failed for {full_name}: {e}"))
+        })?;
+
+    let issues: Vec<IssueSummary> = page
+        .items
+        .into_iter()
+        .filter(|issue| issue.pull_request.is_none()) // Exclude PRs (GitHub API returns PRs as issues)
+        .map(|issue| IssueSummary {
+            number: issue.number,
+            title: issue.title,
+            body: issue.body,
+            labels: issue.labels.iter().map(|l| l.name.clone()).collect(),
+            author: issue.user.login.clone(),
+            repo_name: full_name.clone(),
+            created_at: Some(issue.created_at.to_rfc3339()),
+            url: issue.html_url.to_string(),
+        })
+        .collect();
+
+    debug!(
+        "Listed {} open issues with label {label:?} for {full_name}",
+        issues.len()
+    );
+    Ok(issues)
+}
+
+/// List open issues with a specific label across all managed repos.
+///
+/// # Errors
+/// Returns `AppError` only if ALL repos fail.
+pub async fn list_all_issues_with_label(
+    repo_paths: &[String],
+    label: &str,
+) -> Result<Vec<IssueSummary>, AppError> {
+    let mut all_issues = Vec::new();
+    let mut last_error: Option<AppError> = None;
+    let mut any_succeeded = false;
+
+    for repo_path in repo_paths {
+        match list_issues_with_label(repo_path, label).await {
+            Ok(issues) => {
+                any_succeeded = true;
+                all_issues.extend(issues);
+            }
+            Err(e) => {
+                error!("Failed to list issues for {repo_path}: {e}");
+                last_error = Some(e);
+            }
+        }
+    }
+
+    if !any_succeeded {
+        if let Some(e) = last_error {
+            return Err(e);
+        }
+    }
+
+    info!(
+        "Listed {} total open labeled issues across {} repos",
+        all_issues.len(),
+        repo_paths.len()
+    );
+    Ok(all_issues)
 }
 
 #[cfg(test)]

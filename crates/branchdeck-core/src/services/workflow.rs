@@ -153,6 +153,26 @@ pub fn validate_workflow_def(def: &WorkflowDef) -> Vec<ValidationError> {
 /// Scans ordered directory tiers for `*/WORKFLOW.md` files, parses and validates
 /// each, and applies override precedence (later directories override earlier ones
 /// by workflow `name` field).
+/// Build the default search directories for workflow discovery.
+///
+/// Order (later overrides earlier):
+/// 1. Global: `~/.config/branchdeck/workflows/`
+/// 2. Project-local: `{repo_path}/.branchdeck/workflows/`
+#[must_use]
+pub fn default_search_dirs(repo_path: &str) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+
+    // Global config dir
+    if let Some(config_dir) = dirs::config_dir() {
+        dirs.push(config_dir.join("branchdeck").join("workflows"));
+    }
+
+    // Project-local
+    dirs.push(PathBuf::from(repo_path).join(".branchdeck").join("workflows"));
+
+    dirs
+}
+
 #[derive(Debug, Clone)]
 pub struct WorkflowRegistry {
     workflows: HashMap<String, WorkflowDef>,

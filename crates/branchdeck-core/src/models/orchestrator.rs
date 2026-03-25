@@ -258,6 +258,13 @@ pub fn pr_key(repo: &str, number: u64) -> String {
     format!("{repo}#{number}")
 }
 
+/// Construct a canonical issue key from repo name and issue number.
+/// Uses `i` prefix to avoid collision with PR keys.
+#[must_use]
+pub fn issue_key(repo: &str, number: u64) -> String {
+    format!("{repo}#i{number}")
+}
+
 /// Check if a PR is eligible for orchestration based on config filters.
 #[must_use]
 pub fn is_pr_eligible(pr: &PrSummary, config: &OrchestratorConfig) -> bool {

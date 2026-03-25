@@ -7,6 +7,7 @@ pub mod git;
 pub mod github;
 pub mod hook_config;
 pub mod hook_receiver;
+pub mod issue_poller;
 pub mod knowledge;
 pub mod knowledge_ingestion;
 pub mod knowledge_mcp;

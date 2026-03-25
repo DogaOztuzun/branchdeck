@@ -28,3 +28,16 @@ pub struct PrFilter {
     pub ci_status: Option<String>,
     pub label: Option<String>,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct IssueSummary {
+    pub number: u64,
+    pub title: String,
+    pub body: Option<String>,
+    pub labels: Vec<String>,
+    pub author: String,
+    pub repo_name: String,
+    pub created_at: Option<String>,
+    pub url: String,
+}

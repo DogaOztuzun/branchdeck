@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::github::PrSummary;
+use super::github::{IssueSummary, PrSummary};
 
 pub type EpochMs = u64;
 
@@ -91,6 +91,12 @@ pub enum Event {
     RetryDue {
         pr_key: String,
         worktree_path: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    IssueDetected {
+        repo: String,
+        issues: Vec<IssueSummary>,
+        ts: EpochMs,
     },
 }
 

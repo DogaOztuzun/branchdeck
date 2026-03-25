@@ -4,11 +4,12 @@ use std::sync::Arc;
 use log::{debug, error, info};
 
 use crate::models::agent::EpochMs;
-use crate::models::github::PrSummary;
+use crate::models::github::{IssueSummary, PrSummary};
 use crate::models::orchestrator::{
-    is_pr_eligible, pr_key, LifecycleEvent, LifecycleStatus, Orchestrator, OrchestratorEffect,
-    RetryEntry, RunningEntry, SessionOutcome,
+    is_pr_eligible, issue_key, pr_key, LifecycleEvent, LifecycleStatus, Orchestrator,
+    OrchestratorEffect, RetryEntry, RunningEntry, SessionOutcome,
 };
+use crate::models::workflow::{TrackerKind, TriggerContext, TriggerEvent};
 use crate::traits::{self, EventEmitter};
 
 // --- Retry backoff constants ---
@@ -124,6 +125,52 @@ pub fn apply_pr_event(
     }
 
     effects
+}
+
+/// Handle incoming issue events. Convert to `TriggerEvent` for workflow matching.
+/// Returns trigger events for issues not already claimed.
+/// The actual dispatch is handled by the workflow engine in the executor.
+#[must_use]
+pub fn apply_issue_event(
+    state: &mut Orchestrator,
+    _repo: &str,
+    issues: &[IssueSummary],
+) -> Vec<TriggerEvent> {
+    if !state.config.enabled {
+        return Vec::new();
+    }
+
+    let mut triggers = Vec::new();
+
+    for issue in issues {
+        let key = issue_key(&issue.repo_name, issue.number);
+
+        // Skip if already claimed or completed
+        if state.claimed.contains(&key) || state.completed.contains(&key) {
+            debug!("Orchestrator: issue {key} already tracked, skipping");
+            continue;
+        }
+
+        // Claim to prevent re-triggering
+        state.claimed.insert(key.clone());
+
+        info!(
+            "Orchestrator: issue {key} detected, creating trigger event for {:?}",
+            issue.title
+        );
+
+        triggers.push(TriggerEvent {
+            kind: TrackerKind::GithubIssue,
+            context: TriggerContext::GithubIssue {
+                repo: issue.repo_name.clone(),
+                number: issue.number,
+                title: issue.title.clone(),
+                labels: issue.labels.clone(),
+            },
+        });
+    }
+
+    triggers
 }
 
 /// Handle session end. Route based on outcome:
@@ -1146,6 +1193,52 @@ async fn handle_event(
                 apply_retry_due(&mut orch, key, worktree_path, now_ms())
             };
             execute_effects(effects, orchestrator, run_manager, emitter, Some(event_bus)).await;
+        }
+        Event::IssueDetected { repo, issues, .. } => {
+            let trigger_events = {
+                let mut orch = orchestrator.lock().await;
+                apply_issue_event(&mut orch, repo, issues)
+            };
+
+            if trigger_events.is_empty() {
+                return;
+            }
+
+            // Get repo path for workflow dispatch
+            let repo_path = {
+                let orch = orchestrator.lock().await;
+                orch.repo_paths.get(repo).cloned()
+            };
+
+            let Some(repo_path) = repo_path else {
+                error!("No repo_path mapping for {repo}; cannot dispatch issue workflows");
+                return;
+            };
+
+            // Load workflow registry and dispatch each trigger
+            let search_dirs = crate::services::workflow::default_search_dirs(&repo_path);
+            let registry = crate::services::workflow::WorkflowRegistry::scan(&search_dirs);
+
+            for trigger in &trigger_events {
+                let plan =
+                    crate::services::workflow_dispatch::plan_dispatch(&registry, trigger, &repo_path);
+                if plan.workflow_name.is_empty() {
+                    debug!(
+                        "No workflow matched issue trigger for {repo}: {:?}",
+                        trigger.context
+                    );
+                } else {
+                    info!(
+                        "Issue trigger matched workflow {:?} for {repo}",
+                        plan.workflow_name
+                    );
+                    // Effects will be executed by Story 2.3 (Agent Dispatch & PR Detection).
+                    // For now, log the dispatch plan.
+                    for effect in &plan.effects {
+                        info!("  dispatch effect: {effect:?}");
+                    }
+                }
+            }
         }
         _ => {} // Other events not handled by orchestrator
     }
