@@ -2,6 +2,10 @@
 
 **Goal:** Take an entire epic from epics.md through implementation -- all stories in sequence, each scored for complexity, implemented with the right level of ceremony, and merged. One command, one epic, done.
 
+## CRITICAL RULE: Subagent Delegation
+
+**Every step that references a `/slash-command` (e.g., `/bmad-quick-dev`, `/bmad-create-story`, `/bmad-party-mode`, `/bmad-code-review`) MUST be executed by spawning a subagent using the Agent tool. Do NOT execute the skill inline or implement its work directly. This workflow is a git orchestrator — it delegates all implementation, review, and analysis to subagents. Violating this rule is a process failure.**
+
 ## Configuration
 
 - **epics_file:** `{project-root}/_bmad-output/planning-artifacts/epics.md`
@@ -97,13 +101,13 @@ bun install
 
 ### 3b: Create Story Context (COMPLEX only)
 
-If story is scored **Complex**, spawn a subagent first:
+If story is scored **Complex**, use the Agent tool to spawn a subagent:
 
 ```
 /bmad-create-story Story N.M from {epics_file}. Add implementation context: which existing files to modify, which patterns to follow, known couplings to handle. Write to {worktree_base}/story-N.M/.branchdeck/story-N.M.md
 ```
 
-Wait for completion. The detailed story file gives quick-dev better context for complex refactors.
+Wait for subagent completion. The detailed story file gives quick-dev better context for complex refactors.
 
 ### 3c: Implement via quick-dev subagent (MANDATORY — NO EXCEPTIONS)
 
@@ -171,7 +175,7 @@ bun run verify
 
 ### 3f: Party-Mode Review (COMPLEX only)
 
-If story is scored **Complex**, spawn a party-mode review subagent:
+If story is scored **Complex**, use the Agent tool to spawn a subagent:
 
 ```
 /bmad-party-mode Review the implementation of Story N.M for Epic N.
