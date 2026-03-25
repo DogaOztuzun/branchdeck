@@ -1,6 +1,7 @@
-use std::path::Path;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
-use log::{debug, error};
+use log::{debug, error, warn};
 use yaml_front_matter::YamlFrontMatter;
 
 use crate::error::AppError;
@@ -143,4 +144,115 @@ pub fn validate_workflow_def(def: &WorkflowDef) -> Vec<ValidationError> {
     }
 
     errors
+}
+
+/// Registry of discovered workflow definitions.
+///
+/// Scans ordered directory tiers for `*/WORKFLOW.md` files, parses and validates
+/// each, and applies override precedence (later directories override earlier ones
+/// by workflow `name` field).
+#[derive(Debug, Clone)]
+pub struct WorkflowRegistry {
+    workflows: HashMap<String, WorkflowDef>,
+}
+
+impl WorkflowRegistry {
+    /// Scan directories for workflow definitions.
+    ///
+    /// Directories are processed in order — later directories override earlier ones
+    /// when workflow `name` fields collide. Each directory is expected to contain
+    /// subdirectories with a `WORKFLOW.md` file inside.
+    ///
+    /// Invalid definitions are logged as warnings and skipped.
+    /// Missing directories are logged at debug level and skipped.
+    #[must_use]
+    pub fn scan(search_dirs: &[PathBuf]) -> Self {
+        let mut workflows = HashMap::new();
+
+        for dir in search_dirs {
+            if !dir.is_dir() {
+                debug!("Workflow search dir does not exist, skipping: {}", dir.display());
+                continue;
+            }
+
+            let entries = match std::fs::read_dir(dir) {
+                Ok(entries) => entries,
+                Err(e) => {
+                    warn!("Failed to read workflow directory {}: {e}", dir.display());
+                    continue;
+                }
+            };
+
+            for entry in entries.filter_map(Result::ok) {
+                let subdir = entry.path();
+                if !subdir.is_dir() {
+                    continue;
+                }
+
+                let workflow_file = subdir.join("WORKFLOW.md");
+                if !workflow_file.is_file() {
+                    continue;
+                }
+
+                match parse_workflow_file(&workflow_file) {
+                    Ok(def) => {
+                        let errors = validate_workflow_def(&def);
+                        if errors.is_empty() {
+                            let name = def.config.name.clone();
+                            if workflows.contains_key(&name) {
+                                debug!(
+                                    "Workflow '{}' overridden by {}",
+                                    name,
+                                    workflow_file.display()
+                                );
+                            }
+                            debug!("Loaded workflow '{}' from {}", name, workflow_file.display());
+                            workflows.insert(name, def);
+                        } else {
+                            let error_msgs: Vec<String> =
+                                errors.iter().map(ToString::to_string).collect();
+                            warn!(
+                                "Invalid workflow at {}: {}",
+                                workflow_file.display(),
+                                error_msgs.join("; ")
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        warn!(
+                            "Failed to parse workflow at {}: {e}",
+                            workflow_file.display()
+                        );
+                    }
+                }
+            }
+        }
+
+        debug!("WorkflowRegistry loaded {} workflow(s)", workflows.len());
+        Self { workflows }
+    }
+
+    /// Return all loaded workflow definitions.
+    #[must_use]
+    pub fn list_workflows(&self) -> Vec<&WorkflowDef> {
+        self.workflows.values().collect()
+    }
+
+    /// Look up a workflow by name.
+    #[must_use]
+    pub fn get_workflow(&self, name: &str) -> Option<&WorkflowDef> {
+        self.workflows.get(name)
+    }
+
+    /// Number of loaded workflows.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.workflows.len()
+    }
+
+    /// Whether the registry is empty.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.workflows.is_empty()
+    }
 }
