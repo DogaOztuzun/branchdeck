@@ -59,6 +59,7 @@
   /* ── Animations for Lyra components ── */
   --animate-accordion-down: accordion-down 0.15s ease-out;
   --animate-accordion-up: accordion-up 0.15s ease-out;
+  --animate-pulse-opacity: pulse-opacity 2s ease-in-out infinite;
 }
 
 @keyframes accordion-down {
@@ -75,6 +76,15 @@
   }
   to {
     height: 0;
+  }
+}
+@keyframes pulse-opacity {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
   }
 }
 

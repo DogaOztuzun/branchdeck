@@ -1,3 +1,4 @@
+import { getKeyboardStore } from './stores/keyboard';
 import { getLayoutStore } from './stores/layout';
 import { getRepoStore } from './stores/repo';
 import { getTerminalStore } from './stores/terminal';
@@ -10,7 +11,18 @@ function getWorktreePath(): string {
 export function registerShortcuts() {
   const terminalStore = getTerminalStore();
   const layout = getLayoutStore();
+  const keyboard = getKeyboardStore();
 
+  // Register ? for shortcut overlay
+  keyboard.registerShortcut({
+    key: '?',
+    handler: () => keyboard.setIsOverlayOpen((v) => !v),
+    label: 'Show keyboard shortcuts',
+    context: 'global',
+    category: 'General',
+  });
+
+  // Ctrl+Shift chord shortcuts (existing, unchanged)
   document.addEventListener('keydown', (e) => {
     if (!e.ctrlKey || !e.shiftKey) return;
 
@@ -41,7 +53,7 @@ export function registerShortcuts() {
         break;
       case 'P':
         e.preventDefault();
-        layout.setActiveView('pr-triage');
+        layout.setActiveView('inbox');
         break;
     }
   });

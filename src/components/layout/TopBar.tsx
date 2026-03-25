@@ -1,13 +1,21 @@
 import { listen } from '@tauri-apps/api/event';
 import { PanelLeft, PanelRight } from 'lucide-solid';
-import { createSignal, onCleanup, onMount, Show } from 'solid-js';
+import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { cn } from '../../lib/cn';
 import { cancelQueue } from '../../lib/commands/run';
+import type { AppView } from '../../lib/stores/layout';
 import { getLayoutStore } from '../../lib/stores/layout';
 import { getLifecycleStore } from '../../lib/stores/lifecycle';
 import { getRepoStore } from '../../lib/stores/repo';
 import { getTaskStore } from '../../lib/stores/task';
 import type { QueueStatus } from '../../types/github';
+
+const navTabs: { label: string; view: AppView }[] = [
+  { label: 'Workspace', view: 'workspace' },
+  { label: 'Inbox', view: 'inbox' },
+  { label: 'SAT', view: 'sat' },
+  { label: 'Tasks', view: 'tasks' },
+];
 
 export function TopBar() {
   const repoStore = getRepoStore();
@@ -39,6 +47,13 @@ export function TopBar() {
     return 'text-accent-success';
   };
 
+  const isActive = (view: AppView) => {
+    const current = layout.activeView();
+    // inbox absorbs legacy pr-triage
+    if (view === 'inbox' && current === 'pr-triage') return true;
+    return current === view;
+  };
+
   return (
     <div class="flex items-center h-11 px-3 bg-bg-sidebar border-b border-border-subtle select-none">
       <Show when={layout.activeView() === 'workspace'}>
@@ -53,7 +68,7 @@ export function TopBar() {
         </button>
       </Show>
       <span class="text-sm font-bold text-accent-primary mr-4 tracking-tight">Branchdeck</span>
-      <Show when={repoStore.getActiveRepo()}>
+      <Show when={repoStore.getActiveRepo() && layout.activeView() === 'workspace'}>
         <span class="text-base text-text-dim mr-1">{repoStore.getActiveRepo()?.name}</span>
         <Show when={repoStore.getActiveWorktree()}>
           <span class="text-base text-text-dim mr-1">/</span>
@@ -68,7 +83,7 @@ export function TopBar() {
             <button
               type="button"
               class="cursor-pointer hover:bg-bg-main/50 px-2 py-1 transition-colors duration-150"
-              onClick={() => layout.setActiveView('pr-triage')}
+              onClick={() => layout.setActiveView('inbox')}
               title="View batch queue"
             >
               <span class={cn(qs().active ? 'animate-pulse' : '')}>
@@ -89,59 +104,59 @@ export function TopBar() {
         )}
       </Show>
 
-      <div class="ml-auto flex h-full">
-        <button
-          type="button"
-          onClick={() => layout.setActiveView('workspace')}
-          class={cn(
-            'px-4 h-full text-base font-bold uppercase tracking-wider border-x border-border-subtle transition-colors duration-150 cursor-pointer',
-            layout.activeView() === 'workspace'
-              ? 'bg-bg-main text-accent-primary'
-              : 'text-text-dim hover:text-text-main',
+      {/* Navigation tabs */}
+      <div class="ml-auto flex h-full items-center">
+        <For each={navTabs}>
+          {(tab) => (
+            <button
+              type="button"
+              onClick={() => layout.setActiveView(tab.view)}
+              class={cn(
+                'relative px-4 h-full text-sm font-medium transition-colors duration-150 cursor-pointer',
+                isActive(tab.view) ? 'text-text-main' : 'text-text-dim hover:text-text-main',
+              )}
+            >
+              {tab.label}
+              <Show when={tab.view === 'inbox' && lifecycleStore.getAttentionCount() > 0}>
+                <span class="ml-1.5 bg-accent-error text-bg-main text-xs px-1.5 min-w-[18px] text-center">
+                  {lifecycleStore.getAttentionCount()}
+                </span>
+              </Show>
+              <Show when={tab.view === 'inbox' && taskStore.state.pendingPermissions.length > 0}>
+                <span class="relative ml-1 flex h-2 w-2 inline-flex">
+                  <span class="absolute inline-flex h-full w-full bg-accent-error opacity-75 animate-ping" />
+                  <span class="relative inline-flex h-2 w-2 bg-accent-error" />
+                </span>
+              </Show>
+              {/* Active indicator: 2px bottom border */}
+              <div
+                class={cn(
+                  'absolute bottom-0 left-0 right-0 h-0.5',
+                  isActive(tab.view) ? 'bg-accent-primary' : 'bg-transparent',
+                )}
+              />
+            </button>
           )}
-        >
-          Workspace
-        </button>
-        <button
-          type="button"
-          onClick={() => layout.setActiveView('pr-triage')}
-          class={cn(
-            'px-4 h-full text-base font-bold uppercase tracking-wider border-r border-border-subtle transition-colors duration-150 cursor-pointer flex items-center gap-2',
-            layout.activeView() === 'pr-triage'
-              ? 'bg-bg-main text-accent-primary'
-              : 'text-text-dim hover:text-text-main',
-          )}
-        >
-          PR Triage
-          <Show when={lifecycleStore.getAttentionCount() > 0}>
-            <span class="bg-accent-error text-white text-xs px-1.5 min-w-[18px] text-center">
-              {lifecycleStore.getAttentionCount()}
-            </span>
-          </Show>
-          <Show when={taskStore.state.pendingPermissions.length > 0}>
-            <span class="relative flex h-2 w-2">
-              <span class="absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75 animate-ping" />
-              <span class="relative inline-flex rounded-full h-2 w-2 bg-red-400" />
-            </span>
-          </Show>
-        </button>
+        </For>
       </div>
 
       <div class="flex items-center gap-1 ml-2">
-        <button
-          type="button"
-          class={cn(
-            'p-1.5 cursor-pointer hover:bg-bg-main/50 transition-colors duration-150',
-            layout.rightPanelContext().kind === 'changes'
-              ? 'text-accent-primary'
-              : 'text-text-dim hover:text-text-main',
-          )}
-          aria-label="Toggle changes"
-          title="Changes (Ctrl+Shift+L)"
-          onClick={() => layout.showRightPanel({ kind: 'changes' })}
-        >
-          <PanelRight size={16} />
-        </button>
+        <Show when={layout.activeView() === 'workspace'}>
+          <button
+            type="button"
+            class={cn(
+              'p-1.5 cursor-pointer hover:bg-bg-main/50 transition-colors duration-150',
+              layout.rightPanelContext().kind === 'changes'
+                ? 'text-accent-primary'
+                : 'text-text-dim hover:text-text-main',
+            )}
+            aria-label="Toggle changes"
+            title="Changes (Ctrl+Shift+L)"
+            onClick={() => layout.showRightPanel({ kind: 'changes' })}
+          >
+            <PanelRight size={16} />
+          </button>
+        </Show>
       </div>
     </div>
   );
