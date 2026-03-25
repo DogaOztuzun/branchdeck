@@ -1289,12 +1289,23 @@ async fn handle_event(
             });
 
             for trigger in &trigger_events {
-                // Respect concurrency limit
+                // Respect concurrency limit — unclaim remaining triggers on break
                 {
                     let orch = orchestrator.lock().await;
                     let running_count = u32::try_from(orch.running.len()).unwrap_or(u32::MAX);
                     if running_count >= orch.config.max_concurrent {
                         debug!("Orchestrator: at concurrency limit, deferring issue dispatch");
+                        // Unclaim all remaining triggers so they retry next poll
+                        drop(orch);
+                        let mut orch = orchestrator.lock().await;
+                        for t in &trigger_events {
+                            if let TriggerContext::GithubIssue {
+                                repo: r, number, ..
+                            } = &t.context
+                            {
+                                orch.claimed.remove(&issue_key(r, *number));
+                            }
+                        }
                         break;
                     }
                 }
@@ -1306,6 +1317,17 @@ async fn handle_event(
                         "No workflow matched issue trigger for {repo}: {:?}",
                         trigger.context
                     );
+                    // Unclaim so next poll retries (e.g. after user installs a matching workflow)
+                    if let TriggerContext::GithubIssue {
+                        repo: r, number, ..
+                    } = &trigger.context
+                    {
+                        orchestrator
+                            .lock()
+                            .await
+                            .claimed
+                            .remove(&issue_key(r, *number));
+                    }
                     continue;
                 }
 

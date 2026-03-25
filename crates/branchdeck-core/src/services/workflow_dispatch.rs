@@ -141,7 +141,7 @@ pub async fn execute_dispatch_plan(
                     std::path::Path::new(repo_path),
                     worktree_path,
                     Some(branch),
-                    Some("main"),
+                    None, // Use HEAD as base — avoids hardcoding "main" for repos with different defaults
                 ) {
                     Ok(wt) => info!("Created worktree at {}", wt.path.display()),
                     Err(e) => {
