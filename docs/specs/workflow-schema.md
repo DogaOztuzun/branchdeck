@@ -1,62 +1,90 @@
 # WorkflowDef Schema Specification
 
-**Schema version:** 1
+**Format:** Markdown file with YAML frontmatter (`WORKFLOW.md`)
 
-WorkflowDef files are YAML documents that define how Branchdeck discovers, triggers, executes, and evaluates autonomous agent workflows. They live in `.branchdeck/workflows/` (project-local) or `~/.config/branchdeck/workflows/` (global defaults). Project-local definitions override global ones on name conflict.
+WorkflowDef files define how Branchdeck discovers, triggers, executes, and evaluates autonomous agent workflows. The YAML frontmatter contains runtime configuration (parsed by the daemon). The markdown body is the agent prompt — passed to the agent as-is, supporting Liquid-style template variables.
+
+Based on [OpenAI Symphony's WORKFLOW.md format](https://github.com/openai/symphony/blob/main/SPEC.md) with Branchdeck extensions for outcome detection, lifecycle display, and retry policies.
+
+## File Location
+
+- Project-local: `.branchdeck/workflows/<name>/WORKFLOW.md`
+- Global defaults: `~/.config/branchdeck/workflows/<name>/WORKFLOW.md`
+- Registry merges both; project-local wins on name conflict.
 
 ## Full Schema
 
-```yaml
-# Required
-schema_version: 1                    # Must be 1
-name: string                         # Unique identifier (e.g. "pr-shepherd")
-description: string                  # Human-readable purpose
+```markdown
+---
+# === Identity (Branchdeck) ===
+name: string                              # Required. Unique workflow identifier.
+description: string                       # Optional. Human-readable purpose.
 
-# Required: what fires this workflow
-trigger:
-  type: enum                         # See Trigger Types below
-  filter: map                        # Optional, type-specific key/value pairs
+# === Tracker (Symphony-compatible) ===
+tracker:                                  # Required. What triggers this workflow.
+  kind: enum                              # Required. See Tracker Kinds below.
+  filter: map                             # Optional. Kind-specific key/value filters.
+  project_slug: string                    # Optional. For Linear tracker compatibility.
+  active_states: list<string>             # Optional. For Linear tracker compatibility.
+  terminal_states: list<string>           # Optional. For Linear tracker compatibility.
 
-# Required: context generation
-context:
-  template: string                   # Path to context template (relative to workflow dir)
-  output: string                     # Filename written to worktree/.branchdeck/
+# === Polling (Symphony-compatible) ===
+polling:                                  # Optional.
+  interval_ms: integer                    # Default: 30000. How often to check for triggers.
 
-# Required: agent execution config
-execution:
-  skill: string                      # Path to skill directory (relative to workflow dir)
-  max_turns: integer                 # Optional: agent turn limit
-  max_budget_usd: float              # Optional: cost cap in USD
-  timeout_minutes: integer           # Optional: hard timeout
-  allowed_directories: list<string>  # Optional: worktree isolation paths
+# === Workspace (Symphony-compatible) ===
+workspace:                                # Optional.
+  root: string                            # Override for worktree location. Supports ~ expansion.
 
-# Required: ordered list of outcome checks (first match wins)
-outcomes:
-  - name: string                     # Outcome identifier
-    detect: enum                     # See Outcome Detectors below
-    path: string                     # Optional: for file-exists detector
-    next: enum                       # See Outcome Actions below
+# === Hooks (Symphony-compatible) ===
+hooks:                                    # Optional. Shell scripts at lifecycle points.
+  after_create: string                    # After worktree/workspace creation.
+  before_run: string                      # Before each agent attempt.
+  after_run: string                       # After each attempt.
+  before_remove: string                   # Before worktree deletion.
+  timeout_ms: integer                     # Hook timeout. Default: 60000.
 
-# Optional: custom status display names for the UI
-lifecycle:
+# === Agent (Symphony-compatible + Branchdeck extensions) ===
+agent:                                    # Optional.
+  max_concurrent_agents: integer          # Max parallel runs for this workflow type.
+  max_turns: integer                      # Agent turn limit.
+  max_budget_usd: float                   # Cost cap in USD (FR38). Must be >= 0.
+  timeout_minutes: integer                # Hard timeout.
+  allowed_directories: list<string>       # Worktree isolation paths (FR40).
+
+# === Outcomes (Branchdeck extension) ===
+outcomes:                                 # Optional. Ordered list, first match wins.
+  - name: string                          # Outcome identifier.
+    detect: enum                          # See Outcome Detectors below.
+    path: string                          # Required when detect is 'file-exists'.
+    next: enum                            # See Outcome Actions below.
+
+# === Lifecycle (Branchdeck extension) ===
+lifecycle:                                # Optional. UI status display names (FR33).
   dispatched: string
   complete: string
   failed: string
   retrying: string
 
-# Optional: retry configuration
-retry:
-  max_attempts: integer              # Must be >= 1
-  backoff: enum                      # See Backoff Strategies below
-  base_delay_ms: integer             # Must be > 0
+# === Retry (Branchdeck extension) ===
+retry:                                    # Optional.
+  max_attempts: integer                   # Must be >= 1.
+  backoff: enum                           # See Backoff Strategies below.
+  base_delay_ms: integer                  # Must be >= 1.
+---
+
+Agent prompt goes here. Supports {{ template_variables }}.
+
+The daemon does not interpret the prompt body — it passes it to the agent runner as-is.
 ```
 
-## Trigger Types
+## Tracker Kinds
 
 | Value | Description |
 |-------|-------------|
 | `github-issue` | New or updated GitHub issue |
 | `github-pr` | New or updated GitHub pull request |
+| `linear` | Linear issue tracker (Symphony compatibility) |
 | `manual` | User-initiated via UI or CLI |
 | `post-merge` | After a PR is merged |
 | `schedule` | Cron-based schedule |
@@ -90,27 +118,27 @@ retry:
 
 ## Example: PR Shepherd
 
-```yaml
-schema_version: 1
+```markdown
+---
 name: pr-shepherd
 description: Fix failing CI on pull requests
 
-trigger:
-  type: github-pr
+tracker:
+  kind: github-pr
   filter:
     ci_status: failure
 
-context:
-  template: templates/pr-context.md.hbs
-  output: pr-context.json
+polling:
+  interval_ms: 30000
 
-execution:
-  skill: skills/pr-shepherd
+hooks:
+  before_run: echo "Starting PR shepherd"
+
+agent:
+  max_concurrent_agents: 1
   max_turns: 25
   max_budget_usd: 5.0
   timeout_minutes: 30
-  allowed_directories:
-    - "."
 
 outcomes:
   - name: fix-pushed
@@ -134,17 +162,63 @@ retry:
   max_attempts: 3
   backoff: exponential
   base_delay_ms: 30000
+---
+
+You are working on PR #{{ pr.number }} in {{ pr.repo }}.
+
+CI is failing. Analyze the failures and fix them.
+
+## Instructions
+1. Read the CI failure logs
+2. Identify root cause
+3. Create a fix plan
+4. Implement and push
+```
+
+## Example: Symphony-Compatible (Linear)
+
+```markdown
+---
+name: linear-worker
+tracker:
+  kind: linear
+  project_slug: "my-project-abc123"
+  active_states:
+    - Todo
+    - In Progress
+  terminal_states:
+    - Done
+    - Cancelled
+
+polling:
+  interval_ms: 5000
+
+workspace:
+  root: ~/code/workspaces
+
+hooks:
+  after_create: |
+    git clone --depth 1 https://github.com/org/repo .
+
+agent:
+  max_concurrent_agents: 10
+  max_turns: 20
+---
+
+You are working on Linear ticket {{ issue.identifier }}.
+
+Title: {{ issue.title }}
+Description: {{ issue.description }}
 ```
 
 ## Validation Rules
 
-- `schema_version` must be `1`
-- `name` and `description` must be non-empty strings
-- `trigger.type` must be a valid trigger type
-- `context.template` and `context.output` must be non-empty
-- `execution.skill` must be non-empty
-- `outcomes` must contain at least one entry, each with a non-empty `name`
+- `name` must be a non-empty, non-whitespace string
+- `tracker.kind` must be a valid tracker kind
+- `agent.max_budget_usd` must be a finite non-negative number if provided
+- `outcomes[].path` is required when `detect` is `file-exists`
+- `outcomes[].name` must be non-empty
 - `retry.max_attempts` must be >= 1 if retry is specified
-- `retry.base_delay_ms` must be > 0 if retry is specified
+- `retry.base_delay_ms` must be >= 1 if retry is specified
 
-Validation errors include the field path (e.g. `outcomes[0].name`, `retry.max_attempts`) and valid values where applicable.
+Validation errors include the field path (e.g. `outcomes[0].path`, `retry.max_attempts`).

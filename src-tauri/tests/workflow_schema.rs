@@ -1,32 +1,35 @@
 //! Tests for WorkflowDef schema parsing and validation.
 //!
-//! Story 1.2: WorkflowDef Schema Spec & Model.
-//! Covers: valid definition, missing required fields, unknown enum values,
-//! invalid retry config, round-trip serialization.
+//! Story 1.2: WorkflowDef Schema Spec & Model (revised — markdown + YAML frontmatter format).
+//! Covers: valid definition, minimal def, missing required fields, unknown enum values,
+//! outcome validation, retry validation, round-trip, all tracker kinds.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use branchdeck_lib::models::workflow::{
-    BackoffStrategy, OutcomeAction, OutcomeDetector, TriggerType, WorkflowDef,
+    BackoffStrategy, OutcomeAction, OutcomeDetector, TrackerKind,
 };
-use branchdeck_lib::services::workflow::{parse_workflow_yaml, validate_workflow_def};
+use branchdeck_lib::services::workflow::{parse_workflow_md, validate_workflow_def};
 
-const VALID_WORKFLOW: &str = r#"
-schema_version: 1
+const VALID_WORKFLOW: &str = r#"---
 name: pr-shepherd
 description: Fix failing CI on pull requests
 
-trigger:
-  type: github-pr
+tracker:
+  kind: github-pr
   filter:
     ci_status: failure
 
-context:
-  template: templates/pr-context.md.hbs
-  output: pr-context.json
+polling:
+  interval_ms: 5000
 
-execution:
-  skill: skills/pr-shepherd
+hooks:
+  after_create: |
+    git clone --depth 1 https://github.com/example/repo .
+  before_run: echo "starting"
+
+agent:
+  max_concurrent_agents: 1
   max_turns: 25
   max_budget_usd: 5.0
   timeout_minutes: 30
@@ -55,60 +58,76 @@ retry:
   max_attempts: 3
   backoff: exponential
   base_delay_ms: 30000
+---
+
+You are working on PR #{{ pr.number }} in {{ pr.repo }}.
+
+## Instructions
+1. Analyze CI failures
+2. Create a fix plan
+3. Implement the fix
 "#;
 
-const MINIMAL_WORKFLOW: &str = r#"
-schema_version: 1
+const MINIMAL_WORKFLOW: &str = r#"---
 name: minimal-test
-description: A minimal workflow
+tracker:
+  kind: manual
+---
 
-trigger:
-  type: manual
-
-context:
-  template: tpl.md
-  output: ctx.json
-
-execution:
-  skill: skills/test
-
-outcomes:
-  - name: done
-    detect: file-exists
-    path: output.txt
-    next: complete
+Do the thing.
 "#;
 
 #[test]
 fn parse_valid_full_definition() {
-    let def = parse_workflow_yaml(VALID_WORKFLOW).expect("should parse valid YAML");
+    let def = parse_workflow_md(VALID_WORKFLOW).expect("should parse valid workflow");
+    let c = &def.config;
 
-    assert_eq!(def.schema_version, 1);
-    assert_eq!(def.name, "pr-shepherd");
-    assert_eq!(def.trigger.trigger_type, TriggerType::GithubPr);
-    assert!(def.trigger.filter.is_some());
-    assert_eq!(def.context.template, "templates/pr-context.md.hbs");
-    assert_eq!(def.context.output, "pr-context.json");
-    assert_eq!(def.execution.skill, "skills/pr-shepherd");
-    assert_eq!(def.execution.max_turns, Some(25));
-    assert_eq!(def.execution.max_budget_usd, Some(5.0));
-    assert_eq!(def.execution.timeout_minutes, Some(30));
-    assert_eq!(def.outcomes.len(), 3);
-    assert_eq!(def.outcomes[0].detect, OutcomeDetector::CiPassing);
-    assert_eq!(def.outcomes[0].next, OutcomeAction::Complete);
-    assert_eq!(def.outcomes[1].detect, OutcomeDetector::FileExists);
-    assert_eq!(def.outcomes[1].next, OutcomeAction::Review);
-    assert_eq!(def.outcomes[2].detect, OutcomeDetector::RunFailed);
-    assert_eq!(def.outcomes[2].next, OutcomeAction::Retry);
+    assert_eq!(c.name, "pr-shepherd");
+    assert_eq!(
+        c.description.as_deref(),
+        Some("Fix failing CI on pull requests")
+    );
+    assert_eq!(c.tracker.kind, TrackerKind::GithubPr);
+    assert!(c.tracker.filter.is_some());
 
-    let lifecycle = def.lifecycle.as_ref().expect("should have lifecycle");
+    let polling = c.polling.as_ref().expect("should have polling");
+    assert_eq!(polling.interval_ms, 5000);
+
+    let hooks = c.hooks.as_ref().expect("should have hooks");
+    assert!(hooks.after_create.is_some());
+    assert!(hooks.before_run.is_some());
+    assert!(hooks.after_run.is_none());
+
+    let agent = c.agent.as_ref().expect("should have agent");
+    assert_eq!(agent.max_turns, Some(25));
+    assert_eq!(agent.max_budget_usd, Some(5.0));
+    assert_eq!(agent.timeout_minutes, Some(30));
+    assert_eq!(agent.max_concurrent_agents, Some(1));
+
+    assert_eq!(c.outcomes.len(), 3);
+    assert_eq!(c.outcomes[0].detect, OutcomeDetector::CiPassing);
+    assert_eq!(c.outcomes[0].next, OutcomeAction::Complete);
+    assert_eq!(c.outcomes[1].detect, OutcomeDetector::FileExists);
+    assert_eq!(
+        c.outcomes[1].path.as_deref(),
+        Some(".branchdeck/analysis.json")
+    );
+    assert_eq!(c.outcomes[2].detect, OutcomeDetector::RunFailed);
+    assert_eq!(c.outcomes[2].next, OutcomeAction::Retry);
+
+    let lifecycle = c.lifecycle.as_ref().expect("should have lifecycle");
     assert_eq!(lifecycle.dispatched.as_deref(), Some("Analyzing"));
     assert_eq!(lifecycle.complete.as_deref(), Some("Fixed"));
+    assert_eq!(lifecycle.failed.as_deref(), Some("Broken"));
+    assert_eq!(lifecycle.retrying.as_deref(), Some("Retrying fix"));
 
-    let retry = def.retry.as_ref().expect("should have retry");
+    let retry = c.retry.as_ref().expect("should have retry");
     assert_eq!(retry.max_attempts, 3);
     assert_eq!(retry.backoff, BackoffStrategy::Exponential);
     assert_eq!(retry.base_delay_ms, 30_000);
+
+    assert!(def.prompt.contains("You are working on PR"));
+    assert!(def.prompt.contains("## Instructions"));
 
     let errors = validate_workflow_def(&def);
     assert!(
@@ -118,18 +137,19 @@ fn parse_valid_full_definition() {
 }
 
 #[test]
-fn parse_minimal_definition_with_defaults() {
-    let def = parse_workflow_yaml(MINIMAL_WORKFLOW).expect("should parse minimal YAML");
+fn parse_minimal_definition() {
+    let def = parse_workflow_md(MINIMAL_WORKFLOW).expect("should parse minimal workflow");
 
-    assert_eq!(def.name, "minimal-test");
-    assert_eq!(def.trigger.trigger_type, TriggerType::Manual);
-    assert!(def.trigger.filter.is_none());
-    assert!(def.execution.max_turns.is_none());
-    assert!(def.execution.max_budget_usd.is_none());
-    assert!(def.execution.timeout_minutes.is_none());
-    assert!(def.execution.allowed_directories.is_none());
-    assert!(def.lifecycle.is_none());
-    assert!(def.retry.is_none());
+    assert_eq!(def.config.name, "minimal-test");
+    assert_eq!(def.config.tracker.kind, TrackerKind::Manual);
+    assert!(def.config.description.is_none());
+    assert!(def.config.polling.is_none());
+    assert!(def.config.hooks.is_none());
+    assert!(def.config.agent.is_none());
+    assert!(def.config.outcomes.is_empty());
+    assert!(def.config.lifecycle.is_none());
+    assert!(def.config.retry.is_none());
+    assert!(def.prompt.contains("Do the thing."));
 
     let errors = validate_workflow_def(&def);
     assert!(
@@ -139,52 +159,32 @@ fn parse_minimal_definition_with_defaults() {
 }
 
 #[test]
-fn reject_missing_required_field_name() {
-    let yaml = r#"
-schema_version: 1
-name: ""
-description: test
-
-trigger:
-  type: manual
-context:
-  template: tpl.md
-  output: ctx.json
-execution:
-  skill: skills/test
-outcomes:
-  - name: done
-    detect: file-exists
-    path: out.txt
-    next: complete
+fn reject_empty_name() {
+    let md = r#"---
+name: "   "
+tracker:
+  kind: manual
+---
+prompt
 "#;
-    let def = parse_workflow_yaml(yaml).expect("should parse");
+    let def = parse_workflow_md(md).expect("should parse");
     let errors = validate_workflow_def(&def);
     assert!(
         errors.iter().any(|e| e.field == "name"),
-        "should error on empty name: {errors:?}"
+        "should error on whitespace name: {errors:?}"
     );
 }
 
 #[test]
-fn reject_unknown_trigger_type() {
-    let yaml = r#"
-schema_version: 1
+fn reject_unknown_tracker_kind() {
+    let md = r#"---
 name: test
-description: test
-trigger:
-  type: foobar
-context:
-  template: tpl.md
-  output: ctx.json
-execution:
-  skill: skills/test
-outcomes:
-  - name: done
-    detect: file-exists
-    next: complete
+tracker:
+  kind: foobar
+---
+prompt
 "#;
-    let err = parse_workflow_yaml(yaml).expect_err("should fail on unknown trigger type");
+    let err = parse_workflow_md(md).expect_err("should fail on unknown tracker kind");
     let msg = err.to_string();
     assert!(
         msg.contains("foobar"),
@@ -194,23 +194,18 @@ outcomes:
 
 #[test]
 fn reject_unknown_outcome_detector() {
-    let yaml = r#"
-schema_version: 1
+    let md = r#"---
 name: test
-description: test
-trigger:
-  type: manual
-context:
-  template: tpl.md
-  output: ctx.json
-execution:
-  skill: skills/test
+tracker:
+  kind: manual
 outcomes:
   - name: done
     detect: pr-ceated
     next: complete
+---
+prompt
 "#;
-    let err = parse_workflow_yaml(yaml).expect_err("should fail on unknown detector");
+    let err = parse_workflow_md(md).expect_err("should fail on unknown detector");
     let msg = err.to_string();
     assert!(
         msg.contains("pr-ceated"),
@@ -220,27 +215,18 @@ outcomes:
 
 #[test]
 fn reject_invalid_backoff_strategy() {
-    let yaml = r#"
-schema_version: 1
+    let md = r#"---
 name: test
-description: test
-trigger:
-  type: manual
-context:
-  template: tpl.md
-  output: ctx.json
-execution:
-  skill: skills/test
-outcomes:
-  - name: done
-    detect: file-exists
-    next: complete
+tracker:
+  kind: manual
 retry:
   max_attempts: 3
   backoff: linear
   base_delay_ms: 1000
+---
+prompt
 "#;
-    let err = parse_workflow_yaml(yaml).expect_err("should fail on unknown backoff");
+    let err = parse_workflow_md(md).expect_err("should fail on unknown backoff");
     let msg = err.to_string();
     assert!(
         msg.contains("linear"),
@@ -249,51 +235,59 @@ retry:
 }
 
 #[test]
-fn validate_empty_outcomes_list() {
-    let yaml = r#"
-schema_version: 1
+fn validate_file_exists_without_path() {
+    let md = r#"---
 name: test
-description: test
-trigger:
-  type: manual
-context:
-  template: tpl.md
-  output: ctx.json
-execution:
-  skill: skills/test
-outcomes: []
+tracker:
+  kind: manual
+outcomes:
+  - name: check-output
+    detect: file-exists
+    next: complete
+---
+prompt
 "#;
-    let def = parse_workflow_yaml(yaml).expect("should parse");
+    let def = parse_workflow_md(md).expect("should parse");
     let errors = validate_workflow_def(&def);
     assert!(
-        errors.iter().any(|e| e.field == "outcomes"),
-        "should error on empty outcomes: {errors:?}"
+        errors.iter().any(|e| e.field == "outcomes[0].path"),
+        "should error on file-exists without path: {errors:?}"
+    );
+}
+
+#[test]
+fn validate_negative_budget() {
+    let md = r#"---
+name: test
+tracker:
+  kind: manual
+agent:
+  max_budget_usd: -5.0
+---
+prompt
+"#;
+    let def = parse_workflow_md(md).expect("should parse");
+    let errors = validate_workflow_def(&def);
+    assert!(
+        errors.iter().any(|e| e.field == "agent.max_budget_usd"),
+        "should error on negative budget: {errors:?}"
     );
 }
 
 #[test]
 fn validate_retry_zero_attempts() {
-    let yaml = r#"
-schema_version: 1
+    let md = r#"---
 name: test
-description: test
-trigger:
-  type: manual
-context:
-  template: tpl.md
-  output: ctx.json
-execution:
-  skill: skills/test
-outcomes:
-  - name: done
-    detect: file-exists
-    next: complete
+tracker:
+  kind: manual
 retry:
   max_attempts: 0
   backoff: fixed
   base_delay_ms: 1000
+---
+prompt
 "#;
-    let def = parse_workflow_yaml(yaml).expect("should parse");
+    let def = parse_workflow_md(md).expect("should parse");
     let errors = validate_workflow_def(&def);
     assert!(
         errors.iter().any(|e| e.field == "retry.max_attempts"),
@@ -302,62 +296,122 @@ retry:
 }
 
 #[test]
-fn round_trip_serde() {
-    let def = parse_workflow_yaml(VALID_WORKFLOW).expect("should parse");
+fn round_trip_frontmatter() {
+    let def = parse_workflow_md(VALID_WORKFLOW).expect("should parse");
 
-    let serialized = serde_yaml::to_string(&def).expect("should serialize");
-    let roundtripped: WorkflowDef =
-        serde_yaml::from_str(&serialized).expect("should deserialize roundtrip");
+    // Serialize config back to YAML, wrap in frontmatter, re-parse
+    let yaml = serde_yaml::to_string(&def.config).expect("should serialize");
+    let reconstructed = format!("---\n{yaml}---\n{}", def.prompt);
+    let def2 = parse_workflow_md(&reconstructed).expect("should re-parse");
 
-    assert_eq!(roundtripped.name, def.name);
-    assert_eq!(roundtripped.schema_version, def.schema_version);
-    assert_eq!(roundtripped.description, def.description);
-    assert_eq!(roundtripped.trigger.trigger_type, def.trigger.trigger_type);
-    assert_eq!(roundtripped.context.template, def.context.template);
-    assert_eq!(roundtripped.context.output, def.context.output);
-    assert_eq!(roundtripped.execution.skill, def.execution.skill);
-    assert_eq!(roundtripped.execution.max_turns, def.execution.max_turns);
-    assert_eq!(roundtripped.outcomes.len(), def.outcomes.len());
-    for (a, b) in roundtripped.outcomes.iter().zip(def.outcomes.iter()) {
+    assert_eq!(def2.config.name, def.config.name);
+    assert_eq!(def2.config.tracker.kind, def.config.tracker.kind);
+    assert_eq!(
+        def2.config.agent.as_ref().map(|a| a.max_turns),
+        def.config.agent.as_ref().map(|a| a.max_turns)
+    );
+    assert_eq!(def2.config.outcomes.len(), def.config.outcomes.len());
+    for (a, b) in def2.config.outcomes.iter().zip(def.config.outcomes.iter()) {
         assert_eq!(a.name, b.name);
         assert_eq!(a.detect, b.detect);
         assert_eq!(a.next, b.next);
         assert_eq!(a.path, b.path);
     }
     assert_eq!(
-        roundtripped.retry.as_ref().map(|r| r.max_attempts),
-        def.retry.as_ref().map(|r| r.max_attempts)
+        def2.config
+            .lifecycle
+            .as_ref()
+            .and_then(|l| l.dispatched.as_deref()),
+        def.config
+            .lifecycle
+            .as_ref()
+            .and_then(|l| l.dispatched.as_deref())
     );
     assert_eq!(
-        roundtripped.retry.as_ref().map(|r| r.backoff),
-        def.retry.as_ref().map(|r| r.backoff)
+        def2.config
+            .lifecycle
+            .as_ref()
+            .and_then(|l| l.failed.as_deref()),
+        def.config
+            .lifecycle
+            .as_ref()
+            .and_then(|l| l.failed.as_deref())
     );
+    assert_eq!(
+        def2.config
+            .lifecycle
+            .as_ref()
+            .and_then(|l| l.retrying.as_deref()),
+        def.config
+            .lifecycle
+            .as_ref()
+            .and_then(|l| l.retrying.as_deref())
+    );
+    assert_eq!(
+        def2.config.retry.as_ref().map(|r| r.max_attempts),
+        def.config.retry.as_ref().map(|r| r.max_attempts)
+    );
+    assert_eq!(
+        def2.config.retry.as_ref().map(|r| r.backoff),
+        def.config.retry.as_ref().map(|r| r.backoff)
+    );
+    assert!(def2.prompt.contains("You are working on PR"));
 }
 
 #[test]
-fn all_trigger_types_parse() {
-    for tt in TriggerType::ALL {
-        let yaml = format!(
-            r#"
-schema_version: 1
-name: test-{t}
-description: test
-trigger:
-  type: {t}
-context:
-  template: tpl.md
-  output: ctx.json
-execution:
-  skill: skills/test
-outcomes:
-  - name: done
-    detect: file-exists
-    next: complete
-"#,
-            t = tt
+fn all_tracker_kinds_parse() {
+    for kind in TrackerKind::ALL {
+        let md = format!(
+            "---\nname: test-{k}\ntracker:\n  kind: {k}\n---\nprompt\n",
+            k = kind
         );
-        let def = parse_workflow_yaml(&yaml)
-            .unwrap_or_else(|e| panic!("should parse trigger type {tt}: {e}"));
-        assert_eq!(def.trigger.trigger_type, *tt);
+        let def = parse_workflow_md(&md)
+            .unwrap_or_else(|e| panic!("should parse tracker kind {kind}: {e}"));
+        assert_eq!(def.config.tracker.kind, *kind);
     }
+}
+
+#[test]
+fn symphony_compatible_workflow_parses() {
+    let md = r#"---
+name: symphony-compat
+tracker:
+  kind: linear
+  project_slug: "symphony-abc123"
+  active_states:
+    - Todo
+    - In Progress
+  terminal_states:
+    - Done
+    - Cancelled
+polling:
+  interval_ms: 5000
+workspace:
+  root: ~/code/workspaces
+hooks:
+  after_create: |
+    git clone --depth 1 https://github.com/org/repo .
+agent:
+  max_concurrent_agents: 10
+  max_turns: 20
+---
+
+You are working on a Linear ticket {{ issue.identifier }}.
+"#;
+    let def = parse_workflow_md(md).expect("should parse Symphony-style workflow");
+    assert_eq!(def.config.tracker.kind, TrackerKind::Linear);
+    assert_eq!(
+        def.config.tracker.project_slug.as_deref(),
+        Some("symphony-abc123")
+    );
+    assert_eq!(
+        def.config.tracker.active_states.as_ref().map(Vec::len),
+        Some(2)
+    );
+    assert_eq!(
+        def.config.polling.as_ref().map(|p| p.interval_ms),
+        Some(5000)
+    );
+    assert!(def.config.hooks.as_ref().unwrap().after_create.is_some());
+    assert!(def.prompt.contains("Linear ticket"));
 }

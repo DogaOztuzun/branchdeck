@@ -1,16 +1,37 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
-/// Top-level workflow definition. External contract for workflow authors.
-/// Deserialized from YAML files in `.branchdeck/workflows/` or global config.
+/// A parsed workflow definition: YAML frontmatter + markdown prompt body.
+/// Loaded from `WORKFLOW.md` files in `.branchdeck/workflows/` or global config.
+#[derive(Debug, Clone)]
+pub struct WorkflowDef {
+    pub config: WorkflowConfig,
+    pub prompt: String,
+}
+
+/// YAML frontmatter of a workflow definition.
+/// Symphony-compatible base fields + Branchdeck extensions.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct WorkflowDef {
-    pub schema_version: u32,
+pub struct WorkflowConfig {
+    // === Branchdeck identity ===
     pub name: String,
-    pub description: String,
-    pub trigger: TriggerDef,
-    pub context: ContextDef,
-    pub execution: ExecutionDef,
+    #[serde(default)]
+    pub description: Option<String>,
+
+    // === Symphony-compatible base ===
+    pub tracker: TrackerDef,
+    #[serde(default)]
+    pub polling: Option<PollingDef>,
+    #[serde(default)]
+    pub workspace: Option<WorkspaceDef>,
+    #[serde(default)]
+    pub hooks: Option<HooksDef>,
+    #[serde(default)]
+    pub agent: Option<AgentDef>,
+
+    // === Branchdeck extensions ===
+    #[serde(default)]
     pub outcomes: Vec<OutcomeDef>,
     #[serde(default)]
     pub lifecycle: Option<LifecycleDef>,
@@ -18,30 +39,40 @@ pub struct WorkflowDef {
     pub retry: Option<RetryDef>,
 }
 
+// === Tracker (Symphony: tracker) ===
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct TriggerDef {
-    #[serde(rename = "type")]
-    pub trigger_type: TriggerType,
+pub struct TrackerDef {
+    pub kind: TrackerKind,
     #[serde(default)]
-    pub filter: Option<TriggerFilter>,
+    pub filter: Option<HashMap<String, serde_json::Value>>,
+    // Symphony Linear-specific fields (optional, for compatibility)
+    #[serde(default)]
+    pub project_slug: Option<String>,
+    #[serde(default)]
+    pub active_states: Option<Vec<String>>,
+    #[serde(default)]
+    pub terminal_states: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub enum TriggerType {
+pub enum TrackerKind {
     GithubIssue,
     GithubPr,
+    Linear,
     Manual,
     PostMerge,
     Schedule,
     Webhook,
 }
 
-impl TriggerType {
-    pub const ALL: &[TriggerType] = &[
+impl TrackerKind {
+    pub const ALL: &[TrackerKind] = &[
         Self::GithubIssue,
         Self::GithubPr,
+        Self::Linear,
         Self::Manual,
         Self::PostMerge,
         Self::Schedule,
@@ -53,6 +84,7 @@ impl TriggerType {
         match self {
             Self::GithubIssue => "github-issue",
             Self::GithubPr => "github-pr",
+            Self::Linear => "linear",
             Self::Manual => "manual",
             Self::PostMerge => "post-merge",
             Self::Schedule => "schedule",
@@ -61,29 +93,58 @@ impl TriggerType {
     }
 }
 
-impl std::fmt::Display for TriggerType {
+impl std::fmt::Display for TrackerKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.as_str())
     }
 }
 
-/// Type-specific filter fields for trigger matching.
-/// Stored as a flat string map — schema depends on trigger type.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct TriggerFilter(pub std::collections::HashMap<String, serde_yaml::Value>);
+// === Polling (Symphony: polling) ===
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct ContextDef {
-    pub template: String,
-    pub output: String,
+pub struct PollingDef {
+    #[serde(default = "default_polling_interval")]
+    pub interval_ms: u64,
 }
 
+fn default_polling_interval() -> u64 {
+    30_000
+}
+
+// === Workspace (Symphony: workspace) ===
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct ExecutionDef {
-    pub skill: String,
+pub struct WorkspaceDef {
+    #[serde(default)]
+    pub root: Option<String>,
+}
+
+// === Hooks (Symphony: hooks) ===
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct HooksDef {
+    #[serde(default)]
+    pub after_create: Option<String>,
+    #[serde(default)]
+    pub before_run: Option<String>,
+    #[serde(default)]
+    pub after_run: Option<String>,
+    #[serde(default)]
+    pub before_remove: Option<String>,
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
+}
+
+// === Agent (Symphony: agent + our extensions) ===
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct AgentDef {
+    #[serde(default)]
+    pub max_concurrent_agents: Option<u32>,
     #[serde(default)]
     pub max_turns: Option<u32>,
     #[serde(default)]
@@ -93,6 +154,8 @@ pub struct ExecutionDef {
     #[serde(default)]
     pub allowed_directories: Option<Vec<String>>,
 }
+
+// === Outcomes (Branchdeck extension) ===
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -151,6 +214,13 @@ pub enum OutcomeAction {
 }
 
 impl OutcomeAction {
+    pub const ALL: &[OutcomeAction] = &[
+        Self::Complete,
+        Self::Retry,
+        Self::Review,
+        Self::CustomState,
+    ];
+
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -168,6 +238,8 @@ impl std::fmt::Display for OutcomeAction {
     }
 }
 
+// === Lifecycle (Branchdeck extension) ===
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct LifecycleDef {
@@ -180,6 +252,8 @@ pub struct LifecycleDef {
     #[serde(default)]
     pub retrying: Option<String>,
 }
+
+// === Retry (Branchdeck extension) ===
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
