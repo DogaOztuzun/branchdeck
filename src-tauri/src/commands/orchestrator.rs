@@ -80,7 +80,7 @@ pub async fn get_lifecycles_cmd(
             attempt: entry.attempt,
             started_at: entry.started_at,
             session_id: Some(entry.tab_id.clone()),
-            workflow_name: None,
+            workflow_name: entry.workflow_name.clone(),
             display_status: None,
             completed_at: None,
         });
@@ -94,7 +94,7 @@ pub async fn get_lifecycles_cmd(
             attempt: entry.attempt,
             started_at: entry.due_at_ms,
             session_id: None,
-            workflow_name: None,
+            workflow_name: entry.workflow_name.clone(),
             display_status: None,
             completed_at: None,
         });
@@ -113,7 +113,7 @@ pub async fn get_lifecycles_cmd(
             attempt: entry.attempt,
             started_at: entry.started_at,
             session_id: None,
-            workflow_name: None,
+            workflow_name: entry.workflow_name.clone(),
             display_status: None,
             completed_at: None,
         });

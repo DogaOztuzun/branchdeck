@@ -35,6 +35,13 @@ describe('inferWorkflowType', () => {
     expect(inferWorkflowType(event)).toBe('sat-scoring');
   });
 
+  it('does not false-positive on #i substring like #improvements', () => {
+    const event = makeEvent({ prKey: 'owner/repo#improvements' });
+    // #improvements should NOT trigger issue-detected in trigger source
+    // (inferWorkflowType defaults to issue-resolution regardless, so test via trigger)
+    expect(inferTriggerSource(event)).not.toBe('issue-detected');
+  });
+
   it('defaults to issue-resolution', () => {
     const event = makeEvent();
     expect(inferWorkflowType(event)).toBe('issue-resolution');

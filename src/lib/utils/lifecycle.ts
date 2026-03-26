@@ -11,7 +11,7 @@ import { LIFECYCLE_STATUS_LABELS } from '../constants/lifecycle';
 /** Infer workflow type from lifecycle context */
 export function inferWorkflowType(event: LifecycleEvent): WorkflowType {
   if (event.prKey.includes('#rescore')) return 'verification';
-  if (event.prKey.includes('#i')) return 'issue-resolution';
+  if (/#i\d+/.test(event.prKey)) return 'issue-resolution';
   const segments = event.worktreePath.split('/');
   if (segments.some((s) => s.startsWith('sat-') || s === 'sat')) return 'sat-scoring';
   if (event.status === 'retrying' || event.status === 'fixing') return 'issue-resolution';
@@ -21,7 +21,7 @@ export function inferWorkflowType(event: LifecycleEvent): WorkflowType {
 /** Infer trigger source from lifecycle event */
 export function inferTriggerSource(event: LifecycleEvent): TriggerSource {
   if (event.prKey.includes('#rescore')) return 'post-merge';
-  if (event.prKey.includes('#i')) return 'issue-detected';
+  if (/#i\d+/.test(event.prKey)) return 'issue-detected';
   if (event.attempt > 1) return 'retry';
   return 'pr-poll';
 }

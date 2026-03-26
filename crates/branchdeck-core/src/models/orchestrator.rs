@@ -31,6 +31,8 @@ pub struct RetryEntry {
     pub worktree_path: String,
     pub branch: String,
     pub base_branch: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workflow_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -152,6 +154,8 @@ pub struct ReviewReadyEntry {
     pub stale: bool,
     pub branch: String,
     pub base_branch: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workflow_name: Option<String>,
 }
 
 // --- Internal types (orchestrator state machine) ---

@@ -285,6 +285,7 @@ fn relaunch_cancels_pending_retry() {
             worktree_path: "/tmp/wt".to_string(),
             branch: "fix/bug".to_string(),
             base_branch: "main".to_string(),
+            workflow_name: None,
         },
     );
 
@@ -346,6 +347,7 @@ fn retry_due_redispatches() {
             worktree_path: "/tmp/wt".to_string(),
             branch: "fix/bug".to_string(),
             base_branch: "main".to_string(),
+            workflow_name: None,
         },
     );
 
@@ -664,6 +666,7 @@ fn merge_event_cleans_stale_state() {
             stale: false,
             branch: "fix/thing".to_string(),
             base_branch: "main".to_string(),
+            workflow_name: None,
         },
     );
 

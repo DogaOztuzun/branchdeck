@@ -417,6 +417,11 @@ impl ActivityStore {
     }
 
     async fn handle_event(&self, event: Event) {
+        // RetryDue events have no timestamp and aren't useful on replay — skip persistence
+        if matches!(&event, Event::RetryDue { .. }) {
+            return;
+        }
+
         // Persist before processing so the event survives a crash
         self.persist_event(&event);
 

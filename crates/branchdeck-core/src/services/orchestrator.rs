@@ -284,6 +284,7 @@ pub fn apply_session_end(
                     stale: false,
                     branch: entry.branch.clone(),
                     base_branch: entry.base_branch.clone(),
+                    workflow_name: entry.workflow_name.clone(),
                 },
             );
 
@@ -374,6 +375,7 @@ pub fn apply_session_end(
                         worktree_path: worktree_path.clone(),
                         branch: entry.branch.clone(),
                         base_branch: entry.base_branch.clone(),
+                        workflow_name: entry.workflow_name.clone(),
                     },
                 );
 
@@ -430,12 +432,12 @@ pub fn apply_relaunch(
 
     // Recover branch info + attempt from retry or review_ready
     let review_entry = state.review_ready.remove(pr_key);
-    let (prev_attempt, branch, base_branch) = if let Some(ref r) = retry_entry {
-        (r.attempt, r.branch.clone(), r.base_branch.clone())
+    let (prev_attempt, branch, base_branch, wf_name) = if let Some(ref r) = retry_entry {
+        (r.attempt, r.branch.clone(), r.base_branch.clone(), r.workflow_name.clone())
     } else if let Some(ref r) = review_entry {
-        (r.attempt, r.branch.clone(), r.base_branch.clone())
+        (r.attempt, r.branch.clone(), r.base_branch.clone(), r.workflow_name.clone())
     } else {
-        (0, String::new(), String::new())
+        (0, String::new(), String::new(), None)
     };
     let next_attempt = prev_attempt + 1;
 
@@ -456,7 +458,7 @@ pub fn apply_relaunch(
         worktree_path: worktree_path.to_string(),
         pr_context,
         attempt: next_attempt,
-        workflow_name: None,
+        workflow_name: wf_name.clone(),
     });
 
     effects.push(OrchestratorEffect::EmitLifecycleEvent {
@@ -467,7 +469,7 @@ pub fn apply_relaunch(
             attempt: next_attempt,
             started_at: now,
             session_id: None, // populated by executor after dispatch
-            workflow_name: None,
+            workflow_name: wf_name,
             display_status: None,
             completed_at: None,
         },
@@ -624,12 +626,14 @@ pub fn apply_retry_due(
         pr_context.base_branch = retry.base_branch;
     }
 
+    let wf_name = retry.workflow_name.clone();
+
     effects.push(OrchestratorEffect::DispatchSession {
         pr_key: pr_key.to_string(),
         worktree_path: worktree_path.to_string(),
         pr_context,
         attempt: retry.attempt,
-        workflow_name: None,
+        workflow_name: wf_name.clone(),
     });
 
     effects.push(OrchestratorEffect::EmitLifecycleEvent {
@@ -640,7 +644,7 @@ pub fn apply_retry_due(
             attempt: retry.attempt,
             started_at: now,
             session_id: None, // populated by executor after dispatch
-            workflow_name: None,
+            workflow_name: wf_name,
             display_status: None,
             completed_at: None,
         },
