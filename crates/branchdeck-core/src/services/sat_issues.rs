@@ -326,12 +326,15 @@ pub fn build_issue_body(
         let _ = writeln!(body);
     }
 
-    // Fingerprint for dedup
-    let _ = writeln!(body, "---");
-    let _ = writeln!(body, "<!-- sat-fingerprint:{fingerprint} -->");
+    // Scrub secrets before appending fingerprint (fingerprint is hex and
+    // would be falsely matched by the long-string heuristic in scrub_secrets).
+    let mut scrubbed = scrub_secrets(&body);
 
-    // Scrub secrets from the entire body
-    scrub_secrets(&body)
+    // Fingerprint for dedup — appended after scrubbing so it survives intact
+    let _ = writeln!(scrubbed, "---");
+    let _ = writeln!(scrubbed, "<!-- sat-fingerprint:{fingerprint} -->");
+
+    scrubbed
 }
 
 /// Build the labels for a SAT issue.

@@ -426,7 +426,8 @@ pub fn run_wdio_scenario(
     // The WDIO runner writes trajectory JSON to run_dir — read it back.
     // Extract scenario ID from the file to find the trajectory.
     let scenario = sat_generate::parse_scenario_file(scenario_file)?;
-    let trajectory_path = run_dir.join(format!("trajectory-{}.json", scenario.meta.id));
+    let safe_id = sat_generate::sanitize_id_for_filename(&scenario.meta.id)?;
+    let trajectory_path = run_dir.join(format!("trajectory-{safe_id}.json"));
 
     if trajectory_path.exists() {
         let content = std::fs::read_to_string(&trajectory_path).map_err(|e| {
@@ -516,7 +517,9 @@ pub fn load_execution_scenarios(
         .into_iter()
         .filter(|s| filter_ids.is_empty() || filter_ids.contains(&s.meta.id))
         .map(|s| {
-            let path = scenarios_dir.join(format!("{}.md", s.meta.id));
+            let safe_id = sat_generate::sanitize_id_for_filename(&s.meta.id)
+                .unwrap_or_else(|_| s.meta.id.clone());
+            let path = scenarios_dir.join(format!("{safe_id}.md"));
             (path, s)
         })
         .collect();

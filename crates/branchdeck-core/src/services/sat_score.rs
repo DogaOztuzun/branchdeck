@@ -667,7 +667,9 @@ pub fn read_run_result(run_dir: &Path) -> Result<SatRunResult, AppError> {
 /// # Errors
 /// Returns `AppError::Sat` if the file cannot be read or parsed.
 pub fn read_trajectory(run_dir: &Path, scenario_id: &str) -> Result<SatTrajectory, AppError> {
-    let path = run_dir.join(format!("trajectory-{scenario_id}.json"));
+    let safe_id = super::sat_generate::sanitize_id_for_filename(scenario_id)
+        .unwrap_or_else(|_| scenario_id.to_string());
+    let path = run_dir.join(format!("trajectory-{safe_id}.json"));
     let content = std::fs::read_to_string(&path).map_err(|e| {
         error!("Failed to read trajectory from {}: {e}", path.display());
         AppError::Sat(format!("failed to read trajectory {scenario_id}: {e}"))
