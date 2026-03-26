@@ -37,6 +37,7 @@ async fn poll_loop(event_bus: &EventBus, repo_paths: &[String]) {
     let mut ticker = interval(Duration::from_secs(POLL_INTERVAL_SECS));
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     let mut seen_merged: HashSet<String> = HashSet::new();
+    let mut first_tick = true;
 
     loop {
         ticker.tick().await;
@@ -48,7 +49,26 @@ async fn poll_loop(event_bus: &EventBus, repo_paths: &[String]) {
 
         match github::list_all_recently_merged_prs(repo_paths).await {
             Ok(merged_prs) => {
-                publish_new_merges(event_bus, &merged_prs, &mut seen_merged);
+                if first_tick {
+                    // Pre-seed: mark all currently merged PRs as seen without publishing events.
+                    // This prevents cold-start from triggering re-scores for already-processed merges.
+                    for pr in &merged_prs {
+                        seen_merged.insert(format!("{}#{}", pr.repo_name, pr.number));
+                    }
+                    info!(
+                        "Merge poller: pre-seeded {} existing merged PRs",
+                        seen_merged.len()
+                    );
+                    first_tick = false;
+                } else {
+                    publish_new_merges(event_bus, &merged_prs, &mut seen_merged);
+                    // Evict entries not in the current response to bound memory growth.
+                    let current_keys: HashSet<String> = merged_prs
+                        .iter()
+                        .map(|pr| format!("{}#{}", pr.repo_name, pr.number))
+                        .collect();
+                    seen_merged.retain(|k| current_keys.contains(k));
+                }
             }
             Err(e) => {
                 error!("Merge poller failed: {e}");

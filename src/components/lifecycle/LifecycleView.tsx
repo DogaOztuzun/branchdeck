@@ -12,15 +12,20 @@ import { CycleRow } from './CycleRow';
 
 /** Infer workflow type from lifecycle context */
 function inferWorkflowType(event: LifecycleEvent): WorkflowType {
+  if (event.prKey.includes('#rescore')) return 'verification';
+  if (event.prKey.includes('#i')) return 'issue-resolution';
+  // Check for SAT-related worktree paths using path segment match (not substring)
+  const segments = event.worktreePath.split('/');
+  if (segments.some((s) => s.startsWith('sat-') || s === 'sat')) return 'sat-scoring';
   if (event.status === 'retrying' || event.status === 'fixing') return 'issue-resolution';
-  if (event.worktreePath.includes('sat')) return 'sat-scoring';
-  if (event.status === 'completed') return 'verification';
   return 'issue-resolution';
 }
 
 /** Infer trigger source from lifecycle event */
 function inferTriggerSource(event: LifecycleEvent): TriggerSource {
-  if (event.attempt > 1) return 'regression';
+  if (event.prKey.includes('#rescore')) return 'post-merge';
+  if (event.prKey.includes('#i')) return 'issue-detected';
+  if (event.attempt > 1) return 'retry';
   return 'pr-poll';
 }
 
@@ -35,7 +40,7 @@ function toCycle(event: LifecycleEvent): WorkflowCycle {
     attempt: event.attempt,
     startedAt: event.startedAt,
     updatedAt: event.startedAt,
-    completedAt: event.status === 'completed' ? event.startedAt : null,
+    completedAt: event.status === 'completed' ? Date.now() : null,
     worktreePath: event.worktreePath,
     description: event.worktreePath.split('/').pop() ?? event.prKey,
   };

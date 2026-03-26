@@ -220,8 +220,13 @@ pub fn apply_merge_event(
         return Vec::new();
     }
 
-    // Record to prevent duplicate triggers
+    // Record to prevent duplicate triggers (bounded: cap at 500, evict oldest)
     state.merged_prs.insert(key.clone());
+    if state.merged_prs.len() > 500 {
+        if let Some(oldest) = state.merged_prs.iter().next().cloned() {
+            state.merged_prs.remove(&oldest);
+        }
+    }
 
     // Clean up any stale orchestrator state for this PR
     state.running.remove(&key);
@@ -1436,6 +1441,94 @@ async fn handle_event(
                         let mut orch = orchestrator.lock().await;
                         orch.claimed.remove(&key);
                     }
+                }
+            }
+        }
+        Event::PrMerged {
+            repo,
+            pr_number,
+            branch,
+            ..
+        } => {
+            let trigger_events = {
+                let mut orch = orchestrator.lock().await;
+                apply_merge_event(&mut orch, repo, *pr_number, branch)
+            };
+
+            if trigger_events.is_empty() {
+                return;
+            }
+
+            // Get repo path and cached registry for workflow dispatch
+            let (repo_path, registry) = {
+                let orch = orchestrator.lock().await;
+                let rp = orch.repo_paths.get(repo).cloned();
+                let reg = orch.registry.clone();
+                (rp, reg)
+            };
+
+            let Some(repo_path) = repo_path else {
+                error!("No repo_path mapping for {repo}; cannot dispatch post-merge workflows");
+                return;
+            };
+
+            let registry = registry.unwrap_or_else(|| {
+                let dirs = crate::services::workflow::default_search_dirs(&repo_path);
+                crate::services::workflow::WorkflowRegistry::scan(&dirs)
+            });
+
+            for trigger in &trigger_events {
+                let plan = crate::services::workflow_dispatch::plan_dispatch(
+                    &registry, trigger, &repo_path,
+                );
+                if plan.workflow_name.is_empty() {
+                    debug!("No workflow matched post-merge trigger for {repo}");
+                    continue;
+                }
+
+                info!(
+                    "Post-merge trigger matched workflow {:?} for {repo} PR #{pr_number}",
+                    plan.workflow_name
+                );
+
+                let result = crate::services::workflow_dispatch::execute_dispatch_plan(
+                    &plan,
+                    run_manager,
+                    emitter,
+                )
+                .await;
+
+                if let Some((worktree_path, tab_id)) = result {
+                    let now = now_ms();
+                    let key = format!("{repo}#{pr_number}#rescore");
+                    let mut orch = orchestrator.lock().await;
+                    orch.running.insert(
+                        key.clone(),
+                        RunningEntry {
+                            pr_key: key.clone(),
+                            worktree_path: worktree_path.clone(),
+                            tab_id,
+                            started_at: now,
+                            attempt: 1,
+                            branch: format!("workflow/sat-rescore-{pr_number}"),
+                            base_branch: "main".to_string(),
+                        },
+                    );
+                    drop(orch);
+
+                    let event = LifecycleEvent {
+                        pr_key: key.clone(),
+                        worktree_path,
+                        status: LifecycleStatus::Running,
+                        attempt: 1,
+                        started_at: now,
+                        session_id: None,
+                    };
+                    if let Err(e) = traits::emit(emitter.as_ref(), "lifecycle:updated", &event) {
+                        error!("Failed to emit lifecycle:updated for rescore {key}: {e}");
+                    }
+                } else {
+                    error!("Post-merge dispatch failed for {repo} PR #{pr_number}");
                 }
             }
         }

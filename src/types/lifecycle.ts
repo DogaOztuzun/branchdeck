@@ -97,7 +97,7 @@ export type TriageGroups = {
 export type WorkflowType = 'issue-resolution' | 'sat-scoring' | 'verification' | 'manual';
 
 /** Trigger sources for a workflow cycle */
-export type TriggerSource = 'pr-poll' | 'sat-run' | 'ci-failure' | 'manual' | 'regression';
+export type TriggerSource = 'pr-poll' | 'post-merge' | 'issue-detected' | 'retry' | 'manual';
 
 /** A single workflow cycle shown in the lifecycle view */
 export type WorkflowCycle = {

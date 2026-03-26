@@ -71,26 +71,6 @@ pub fn increment_cycle_state(state: &CircuitBreakerState) -> CircuitBreakerState
     }
 }
 
-/// Build a `LifecycleEffect` for a tripped circuit breaker.
-///
-/// This effect notifies the triage view that the cycle has been stopped.
-#[must_use]
-pub fn build_tripped_effect(decision: &CircuitBreakerDecision) -> Option<LifecycleEffect> {
-    match decision {
-        CircuitBreakerDecision::Tripped {
-            iteration,
-            max,
-            reason,
-        } => Some(LifecycleEffect::CircuitBreakerTripped {
-            repo: String::new(), // Caller fills in from context
-            iteration: *iteration,
-            max_iterations: *max,
-            reason: reason.clone(),
-        }),
-        CircuitBreakerDecision::Continue { .. } => None,
-    }
-}
-
 /// Build a `LifecycleEffect` for a tripped circuit breaker with repo context.
 #[must_use]
 pub fn build_tripped_effect_for_repo(
@@ -136,8 +116,8 @@ pub fn build_cycle_learning(
     let issues_found = comparison.scenario_comparisons.len();
     // issues_fixed = scenarios that improved
     let issues_fixed = comparison.improved_count;
-    // issues_verified = scenarios that improved or stayed the same (no regression)
-    let issues_verified = comparison.improved_count + comparison.unchanged_count;
+    // issues_verified = scenarios that actually improved (true positives for accuracy)
+    let issues_verified = comparison.improved_count;
 
     SatCycleLearning {
         recorded_at: recorded_at.to_string(),
@@ -165,7 +145,7 @@ pub fn build_cycle_learning(
 ///
 /// Where:
 /// - `true_positives` = sum of `issues_verified` across all cycles
-///   (issues correctly identified as real app bugs that were then fixed)
+///   (issues correctly identified as real app bugs that improved after fixing)
 /// - `false_positives` = sum of `false_positives` across all cycles
 ///   (findings misclassified as app bugs but were actually runner/scenario issues)
 ///
@@ -477,7 +457,7 @@ mod tests {
         assert_eq!(learning.cycle_iteration, 1);
         assert_eq!(learning.issues_found, 6); // 3+1+2 scenarios compared
         assert_eq!(learning.issues_fixed, 3); // improved_count
-        assert_eq!(learning.issues_verified, 5); // improved + unchanged
+        assert_eq!(learning.issues_verified, 3); // improved_count only
         assert_eq!(learning.false_positives, 2);
         assert_eq!(learning.score_before, 50);
         assert_eq!(learning.score_after, 65);

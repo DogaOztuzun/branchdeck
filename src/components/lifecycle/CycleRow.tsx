@@ -17,10 +17,10 @@ const WORKFLOW_TYPE_LABELS: Record<string, string> = {
 
 const TRIGGER_SOURCE_LABELS: Record<string, string> = {
   'pr-poll': 'PR poll',
-  'sat-run': 'SAT run',
-  'ci-failure': 'CI failure',
+  'post-merge': 'Post-merge',
+  'issue-detected': 'Issue detected',
+  retry: 'Retry',
   manual: 'Manual',
-  regression: 'Regression',
 };
 
 function formatElapsed(ms: number): string {
