@@ -4,6 +4,7 @@ import { getLayoutStore } from '../../lib/stores/layout';
 import { getLifecycleStore } from '../../lib/stores/lifecycle';
 import { toCycle } from '../../lib/utils/lifecycle';
 import type { WorkflowCycle } from '../../types/lifecycle';
+import { TriageActivityFeed } from '../triage/TriageActivityFeed';
 import { CycleRow } from './CycleRow';
 
 export function LifecycleView() {
@@ -85,6 +86,9 @@ export function LifecycleView() {
           <span class="text-[var(--color-success)]">{totalCompleted()}</span>
           <span>completed</span>
         </div>
+
+        {/* Real-time agent activity feed */}
+        <TriageActivityFeed />
 
         {/* Empty state */}
         <Show when={totalAll() === 0}>

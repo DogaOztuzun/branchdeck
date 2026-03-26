@@ -265,6 +265,43 @@ impl ActivityStore {
             .cloned()
             .collect()
     }
+
+    pub async fn get_agents_for_session(&self, session_id: &str) -> Vec<AgentState> {
+        self.inner
+            .lock()
+            .await
+            .agents
+            .values()
+            .filter(|a| a.session_id == session_id)
+            .cloned()
+            .collect()
+    }
+
+    pub async fn get_files_for_session(&self, session_id: &str) -> Vec<FileAccess> {
+        self.inner
+            .lock()
+            .await
+            .files
+            .values()
+            .filter(|f| f.last_agent.starts_with(session_id))
+            .cloned()
+            .collect()
+    }
+
+    pub async fn get_all_agents(&self) -> Vec<AgentState> {
+        self.inner.lock().await.agents.values().cloned().collect()
+    }
+
+    pub async fn get_active_sessions(&self) -> Vec<AgentState> {
+        self.inner
+            .lock()
+            .await
+            .agents
+            .values()
+            .filter(|a| a.agent_id.is_none() && a.status == AgentStatus::Active)
+            .cloned()
+            .collect()
+    }
 }
 
 fn agent_key(session_id: &str, agent_id: Option<&str>) -> String {
