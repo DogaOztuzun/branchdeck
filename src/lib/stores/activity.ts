@@ -86,6 +86,9 @@ function sseTypeToEventType(sseType: string): EventType | null {
 
 /** Subscribe to daemon SSE for real-time activity events */
 function startListening() {
+  // Re-entry guard: prevent duplicate subscriptions on remount
+  if (sseUnsubscribes.length > 0) return;
+
   const sseEventTypes = [
     'agent:session_start',
     'agent:session_stop',

@@ -208,6 +208,9 @@ function createAgentStore() {
   }
 
   async function startListening() {
+    // Re-entry guard: prevent duplicate listeners on remount
+    if (tauriUnlisten || sseUnsubscribes.length > 0) return;
+
     // Try Tauri listen first (desktop mode)
     let tauriAvailable = false;
     try {

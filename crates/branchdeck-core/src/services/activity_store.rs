@@ -543,15 +543,13 @@ impl ActivityStore {
     }
 
     pub async fn get_files_for_session(&self, session_id: &str) -> Vec<FileAccess> {
+        let prefix = format!("{session_id}:");
         self.inner
             .lock()
             .await
             .files
             .values()
-            .filter(|f| {
-                f.last_agent == session_id
-                    || f.last_agent.starts_with(&format!("{session_id}:"))
-            })
+            .filter(|f| f.last_agent == session_id || f.last_agent.starts_with(&prefix))
             .cloned()
             .collect()
     }
