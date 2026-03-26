@@ -11,6 +11,8 @@ export function SATSummaryBar() {
     const delta = sat.scoreDelta();
     const sq = sat.signalQuality();
     const c = sat.cycles();
+    const fpRate = sat.falsePositiveRate();
+    const acc = sat.classificationAccuracy();
 
     const result: SummaryStatItem[] = [{ label: 'Score', value: String(score), color: 'primary' }];
 
@@ -27,6 +29,22 @@ export function SATSummaryBar() {
       value: `${sq}%`,
       color: sat.signalColor(),
     });
+
+    if (fpRate !== null) {
+      result.push({
+        label: 'FP Rate',
+        value: `${fpRate}%`,
+        color: fpRate <= 10 ? 'success' : fpRate <= 25 ? 'warning' : 'error',
+      });
+    }
+
+    if (acc.accuracy !== null) {
+      result.push({
+        label: 'Accuracy',
+        value: `${acc.accuracy}%`,
+        color: acc.accuracy >= 80 ? 'success' : acc.accuracy >= 60 ? 'warning' : 'error',
+      });
+    }
 
     if (c.length > 0) {
       result.push({ label: 'Cycle', value: String(c.length) });

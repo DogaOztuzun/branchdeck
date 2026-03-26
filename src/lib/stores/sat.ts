@@ -1,6 +1,12 @@
 import { createSignal } from 'solid-js';
 import type { ChartDataPoint, PersonaLine } from '../../types/chart';
-import type { CategoryFilter, SATCycle, SATFinding } from '../../types/sat';
+import type {
+  CategoryFilter,
+  ClassificationAccuracy,
+  ConfidenceLevel,
+  SATCycle,
+  SATFinding,
+} from '../../types/sat';
 import { getKeyboardStore } from './keyboard';
 
 const [findings, setFindings] = createSignal<SATFinding[]>([]);
@@ -30,6 +36,71 @@ function signalColor(): 'success' | 'warning' | 'error' {
   if (sq >= 80) return 'success';
   if (sq >= 60) return 'warning';
   return 'error';
+}
+
+/** Map a numeric confidence (0-100) to a ConfidenceLevel */
+function confidenceLevel(confidence: number): ConfidenceLevel {
+  if (confidence >= 75) return 'high';
+  if (confidence >= 50) return 'medium';
+  return 'low';
+}
+
+/** Compute false positive rate as a percentage from cycle data */
+function falsePositiveRate(): number | null {
+  const c = cycles();
+  if (c.length === 0) return null;
+  const totalFound = c.reduce((sum, cycle) => sum + cycle.issuesFound, 0);
+  if (totalFound === 0) return null;
+  const totalFP = c.reduce((sum, cycle) => sum + cycle.falsePositives, 0);
+  return Math.round((totalFP / totalFound) * 100);
+}
+
+/** Compute classification accuracy from cycle data (FR27, NFR24) */
+function classificationAccuracy(): ClassificationAccuracy {
+  const c = cycles();
+  if (c.length === 0) {
+    return {
+      totalClassifications: 0,
+      truePositives: 0,
+      falsePositives: 0,
+      accuracy: null,
+      cyclesCounted: 0,
+    };
+  }
+
+  const totalClassifications = c.reduce((sum, cycle) => sum + cycle.issuesFound, 0);
+  const truePositives = c.reduce((sum, cycle) => sum + cycle.issuesFixed, 0);
+  const falsePositives = c.reduce((sum, cycle) => sum + cycle.falsePositives, 0);
+  const denominator = truePositives + falsePositives;
+  const accuracy = denominator > 0 ? Math.round((truePositives / denominator) * 100) : null;
+
+  return {
+    totalClassifications,
+    truePositives,
+    falsePositives,
+    accuracy,
+    cyclesCounted: c.length,
+  };
+}
+
+/** Per-cycle false positive rate for trend display */
+function falsePositiveRateTrend(): { cycle: number; rate: number }[] {
+  return cycles()
+    .filter((c) => c.issuesFound > 0)
+    .map((c) => ({
+      cycle: c.cycle,
+      rate: Math.round((c.falsePositives / c.issuesFound) * 100),
+    }));
+}
+
+/** Per-cycle classification accuracy for trend display */
+function classificationAccuracyTrend(): { cycle: number; accuracy: number }[] {
+  return cycles()
+    .filter((c) => c.issuesFixed + c.falsePositives > 0)
+    .map((c) => ({
+      cycle: c.cycle,
+      accuracy: Math.round((c.issuesFixed / (c.issuesFixed + c.falsePositives)) * 100),
+    }));
 }
 
 function currentScore(): number {
@@ -169,10 +240,42 @@ function registerSATShortcuts() {
 
 function loadMockData() {
   setCycles([
-    { cycle: 1, score: 62, date: 'Mar 20', findingsCount: 5 },
-    { cycle: 2, score: 68, date: 'Mar 21', findingsCount: 4 },
-    { cycle: 3, score: 72, date: 'Mar 23', findingsCount: 3 },
-    { cycle: 4, score: 78, date: 'Mar 25', findingsCount: 4 },
+    {
+      cycle: 1,
+      score: 62,
+      date: 'Mar 20',
+      findingsCount: 5,
+      falsePositives: 2,
+      issuesFixed: 2,
+      issuesFound: 5,
+    },
+    {
+      cycle: 2,
+      score: 68,
+      date: 'Mar 21',
+      findingsCount: 4,
+      falsePositives: 1,
+      issuesFixed: 3,
+      issuesFound: 4,
+    },
+    {
+      cycle: 3,
+      score: 72,
+      date: 'Mar 23',
+      findingsCount: 3,
+      falsePositives: 0,
+      issuesFixed: 2,
+      issuesFound: 3,
+    },
+    {
+      cycle: 4,
+      score: 78,
+      date: 'Mar 25',
+      findingsCount: 4,
+      falsePositives: 1,
+      issuesFixed: 2,
+      issuesFound: 4,
+    },
   ]);
   setFindings([
     {
@@ -251,6 +354,11 @@ export function getSATStore() {
     filteredFindings,
     signalQuality,
     signalColor,
+    confidenceLevel,
+    falsePositiveRate,
+    classificationAccuracy,
+    falsePositiveRateTrend,
+    classificationAccuracyTrend,
     currentScore,
     scoreDelta,
     chartData,

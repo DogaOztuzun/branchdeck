@@ -4,6 +4,8 @@ export type FindingSeverity = 'critical' | 'high' | 'medium' | 'low';
 
 export type FindingStatus = 'open' | 'issue-created' | 'fixed' | 'false-positive';
 
+export type ConfidenceLevel = 'high' | 'medium' | 'low';
+
 export type SATFinding = {
   id: string;
   title: string;
@@ -21,9 +23,25 @@ export type SATCycle = {
   score: number;
   date: string;
   findingsCount: number;
+  /** Number of findings that were false positives in this cycle */
+  falsePositives: number;
+  /** Number of findings that were confirmed fixed in this cycle */
+  issuesFixed: number;
+  /** Total issues found in this cycle */
+  issuesFound: number;
 };
 
 export type CategoryFilter = 'all' | FindingCategory;
+
+/** Classification accuracy metrics computed from historical cycle data (FR27, NFR24) */
+export type ClassificationAccuracy = {
+  totalClassifications: number;
+  truePositives: number;
+  falsePositives: number;
+  /** Accuracy as 0-100 percentage, or null if no data */
+  accuracy: number | null;
+  cyclesCounted: number;
+};
 
 // Pipeline types (Story 3.5)
 
