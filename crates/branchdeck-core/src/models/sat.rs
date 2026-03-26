@@ -622,3 +622,92 @@ pub struct SatLearningsFile {
     #[serde(default)]
     pub learnings: Vec<SatLearning>,
 }
+
+// ===========================================================================
+// Issue creation types (Story 3.4)
+// ===========================================================================
+
+/// Configuration for SAT issue creation.
+#[derive(Debug, Clone)]
+pub struct SatIssueConfig {
+    /// Root directory of the project (where `sat/` lives).
+    pub project_root: PathBuf,
+    /// Path to runs directory (default: `sat/runs/`).
+    pub runs_dir: PathBuf,
+    /// Path to the git repository (for resolving owner/repo).
+    pub repo_path: PathBuf,
+    /// Minimum severity threshold (1 = critical, 2 = high). Findings with
+    /// severity <= this value are eligible for issue creation.
+    pub max_severity: u8,
+    /// Only create issues for findings in these categories.
+    pub allowed_categories: Vec<FindingCategory>,
+    /// Only create issues for findings with these confidence levels.
+    pub allowed_confidences: Vec<ConfidenceLevel>,
+}
+
+impl SatIssueConfig {
+    /// Create a config with standard defaults for a project root.
+    #[must_use]
+    pub fn new(project_root: PathBuf) -> Self {
+        let runs_dir = project_root.join("sat/runs");
+        let repo_path = project_root.clone();
+        Self {
+            project_root,
+            runs_dir,
+            repo_path,
+            max_severity: 2, // critical (1) and high (2)
+            allowed_categories: vec![FindingCategory::App],
+            allowed_confidences: vec![ConfidenceLevel::High],
+        }
+    }
+}
+
+/// Outcome of creating a single GitHub issue from a finding.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "outcome")]
+pub enum IssueCreationOutcome {
+    /// Issue was created successfully.
+    Created {
+        issue_number: u64,
+        issue_url: String,
+    },
+    /// Issue was skipped because a duplicate fingerprint already exists.
+    SkippedDuplicate { fingerprint: String },
+    /// Issue creation failed.
+    Failed { reason: String },
+}
+
+/// Result of attempting to create an issue for a single finding.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SatIssueEntry {
+    /// The finding's scenario ID.
+    pub scenario_id: String,
+    /// Persona name from the scored finding.
+    pub persona: String,
+    /// Idempotent fingerprint (SHA-256 of `scenario_id` + persona + `run_id`).
+    pub fingerprint: String,
+    /// Finding summary.
+    pub summary: String,
+    /// Outcome of the creation attempt.
+    pub outcome: IssueCreationOutcome,
+}
+
+/// Full result of SAT issue creation for a run.
+/// Written to `sat/runs/run-{id}/issues.json`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SatIssueResult {
+    /// Run ID that was processed.
+    pub run_id: String,
+    /// ISO 8601 timestamp when issue creation started.
+    pub created_at: String,
+    /// Per-finding issue creation entries.
+    pub entries: Vec<SatIssueEntry>,
+    /// Count of issues actually created.
+    pub created_count: usize,
+    /// Count of duplicates skipped.
+    pub skipped_count: usize,
+    /// Count of failures.
+    pub failed_count: usize,
+}
