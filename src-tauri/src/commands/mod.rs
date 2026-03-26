@@ -5,6 +5,7 @@ pub mod github;
 pub mod knowledge;
 pub mod orchestrator;
 pub mod run;
+pub mod sat;
 pub mod task;
 pub mod terminal;
 pub mod workspace;
