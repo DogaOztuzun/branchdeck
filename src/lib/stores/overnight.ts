@@ -39,8 +39,8 @@ function recordSessionStart(): void {
 function getCutoff(): number {
   const lastSession = getLastSessionTimestamp();
   const windowCutoff = Date.now() - windowHours() * 60 * 60 * 1000;
-  // Use whichever is earlier — the last session or the configured window
-  return Math.min(lastSession, windowCutoff);
+  // Use whichever is more recent — bounds the window to at most windowHours ago
+  return Math.max(lastSession, windowCutoff);
 }
 
 export type OvernightStats = {

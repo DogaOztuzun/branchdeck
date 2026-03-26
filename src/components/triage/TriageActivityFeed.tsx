@@ -13,7 +13,7 @@ export function TriageActivityFeed() {
   const [expandedSessionId, setExpandedSessionId] = createSignal<string | null>(null);
 
   // Tick to update elapsed times
-  const [, setTick] = createSignal(0);
+  const [tick, setTick] = createSignal(0);
   let tickInterval: ReturnType<typeof setInterval> | null = null;
 
   onMount(() => {
@@ -23,6 +23,7 @@ export function TriageActivityFeed() {
 
   onCleanup(() => {
     if (tickInterval) clearInterval(tickInterval);
+    agentStore.stopListening();
   });
 
   const activeRuns = createMemo((): SessionAgentInfo[] => {
@@ -49,6 +50,13 @@ export function TriageActivityFeed() {
   }
 
   function handleKeyDown(e: KeyboardEvent) {
+    if (
+      e.target instanceof HTMLInputElement ||
+      e.target instanceof HTMLTextAreaElement ||
+      e.target instanceof HTMLSelectElement
+    )
+      return;
+
     const runs = allRuns();
     if (runs.length === 0) return;
 
@@ -105,6 +113,7 @@ export function TriageActivityFeed() {
               selected={selectedIndex() === i()}
               expanded={expandedSessionId() === session.sessionId}
               onClick={() => handleClick(session.sessionId, i())}
+              tick={tick()}
             />
           )}
         </For>
@@ -124,6 +133,7 @@ export function TriageActivityFeed() {
                 selected={selectedIndex() === idx()}
                 expanded={expandedSessionId() === session.sessionId}
                 onClick={() => handleClick(session.sessionId, idx())}
+                tick={tick()}
               />
             );
           }}

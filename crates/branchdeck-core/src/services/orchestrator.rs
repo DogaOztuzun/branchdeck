@@ -1203,13 +1203,16 @@ pub async fn execute_effects(
                     }
                 }
 
+                // Capture timestamp once for consistent completed_at + timeline entry
+                let now = crate::services::run_manager::now_epoch_ms();
+
                 // Set completed_at for terminal states
-                if matches!(
+                let is_terminal = matches!(
                     event.status,
                     LifecycleStatus::Completed | LifecycleStatus::Failed
-                ) && event.completed_at.is_none()
-                {
-                    event.completed_at = Some(crate::services::run_manager::now_epoch_ms());
+                );
+                if is_terminal && event.completed_at.is_none() {
+                    event.completed_at = Some(now);
                 }
 
                 // Record timeline entry for full lifecycle view (NFR25)
@@ -1230,7 +1233,7 @@ pub async fn execute_effects(
                         .clone()
                         .unwrap_or_else(|| status_str.to_string());
                     let timeline_entry = LifecycleTimelineEntry {
-                        timestamp: crate::services::run_manager::now_epoch_ms(),
+                        timestamp: now,
                         status: status_str.to_string(),
                         display_status: display,
                         detail: format!(
@@ -1242,10 +1245,15 @@ pub async fn execute_effects(
                             event.attempt
                         ),
                     };
-                    orch.timelines
+                    let entries = orch.timelines
                         .entry(event.pr_key.clone())
-                        .or_default()
-                        .push(timeline_entry);
+                        .or_default();
+                    entries.push(timeline_entry);
+                    // Cap timeline entries per PR to prevent unbounded growth
+                    if entries.len() > 100 {
+                        let drain_count = entries.len() - 100;
+                        entries.drain(..drain_count);
+                    }
                 }
 
                 if let Err(e) = traits::emit(emitter.as_ref(), "lifecycle:updated", &event) {

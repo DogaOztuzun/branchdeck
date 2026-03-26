@@ -2,7 +2,7 @@ use axum::extract::State;
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use branchdeck_core::models::agent::Event;
 use futures::stream::Stream;
-use log::{debug, warn};
+use log::{debug, error, warn};
 use std::convert::Infallible;
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
@@ -32,7 +32,10 @@ fn to_sse_envelope(event: &Event, id: &str) -> serde_json::Value {
     let event_type = event_type_name(event);
     let ts = extract_timestamp(event);
 
-    let data = serde_json::to_value(event).unwrap_or_default();
+    let data = serde_json::to_value(event).unwrap_or_else(|e| {
+        error!("Failed to serialize SSE event data: {e}");
+        serde_json::Value::Null
+    });
 
     serde_json::json!({
         "id": id,
@@ -76,7 +79,10 @@ pub async fn sse_handler(
             let id = next_event_id();
             let event_type = event_type_name(&event);
             let envelope = to_sse_envelope(&event, &id);
-            let payload = serde_json::to_string(&envelope).unwrap_or_default();
+            let payload = serde_json::to_string(&envelope).unwrap_or_else(|e| {
+                error!("Failed to serialize SSE envelope: {e}");
+                String::new()
+            });
 
             Some(Ok(SseEvent::default().event(event_type).id(id).data(payload)))
         }

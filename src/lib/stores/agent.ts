@@ -209,32 +209,36 @@ function createAgentStore() {
 
   async function startListening() {
     // Try Tauri listen first (desktop mode)
+    let tauriAvailable = false;
     try {
       const { listen } = await import('@tauri-apps/api/event');
       const unlisten = await listen<AgentEvent>('agent:event', (e) => {
         handleEvent(e.payload);
       });
       tauriUnlisten = unlisten;
+      tauriAvailable = true;
     } catch {
       // Not in Tauri — use SSE
     }
 
-    // Also subscribe via SSE (daemon mode or dual-transport)
-    const agentEventTypes = [
-      'agent:session_start',
-      'agent:tool_start',
-      'agent:tool_end',
-      'agent:subagent_start',
-      'agent:subagent_stop',
-      'agent:session_stop',
-      'agent:notification',
-    ];
+    // Only subscribe via SSE if Tauri is unavailable (avoid duplicate events)
+    if (!tauriAvailable) {
+      const agentEventTypes = [
+        'agent:session_start',
+        'agent:tool_start',
+        'agent:tool_end',
+        'agent:subagent_start',
+        'agent:subagent_stop',
+        'agent:session_stop',
+        'agent:notification',
+      ];
 
-    for (const eventType of agentEventTypes) {
-      const unsub = onEvent<AgentEvent>(eventType, (envelope) => {
-        handleEvent(envelope.data);
-      });
-      sseUnsubscribes.push(unsub);
+      for (const eventType of agentEventTypes) {
+        const unsub = onEvent<AgentEvent>(eventType, (envelope) => {
+          handleEvent(envelope.data);
+        });
+        sseUnsubscribes.push(unsub);
+      }
     }
   }
 

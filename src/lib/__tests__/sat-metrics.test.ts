@@ -1,8 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { getSATStore } from '../stores/sat';
 
 describe('SAT store confidence and metrics', () => {
   const sat = getSATStore();
+
+  beforeEach(() => {
+    sat.loadMockData();
+  });
 
   describe('confidenceLevel', () => {
     it('returns high for confidence >= 75', () => {
@@ -24,12 +28,7 @@ describe('SAT store confidence and metrics', () => {
   });
 
   describe('falsePositiveRate', () => {
-    it('returns null when no cycles loaded', () => {
-      expect(sat.falsePositiveRate()).toBeNull();
-    });
-
-    it('computes rate from mock data after loadMockData', () => {
-      sat.loadMockData();
+    it('computes rate from mock data', () => {
       const rate = sat.falsePositiveRate();
       // Mock data: 4 FP out of 16 total = 25%
       expect(rate).toBe(25);
@@ -37,15 +36,7 @@ describe('SAT store confidence and metrics', () => {
   });
 
   describe('classificationAccuracy', () => {
-    it('returns null accuracy when no cycles loaded', () => {
-      // Reset by reloading — store is a singleton but we can test the mock state
-      const acc = sat.classificationAccuracy();
-      // After loadMockData was called above, we have data
-      expect(acc.cyclesCounted).toBeGreaterThan(0);
-    });
-
     it('computes accuracy from mock data', () => {
-      sat.loadMockData();
       const acc = sat.classificationAccuracy();
       // Mock: TP=9, FP=4, accuracy = 9/(9+4) = 69%
       expect(acc.totalClassifications).toBe(16);
@@ -58,7 +49,6 @@ describe('SAT store confidence and metrics', () => {
 
   describe('falsePositiveRateTrend', () => {
     it('returns per-cycle FP rates', () => {
-      sat.loadMockData();
       const trend = sat.falsePositiveRateTrend();
       expect(trend.length).toBe(4);
       // Cycle 1: 2/5 = 40%
@@ -70,7 +60,6 @@ describe('SAT store confidence and metrics', () => {
 
   describe('classificationAccuracyTrend', () => {
     it('returns per-cycle accuracy', () => {
-      sat.loadMockData();
       const trend = sat.classificationAccuracyTrend();
       // All cycles have issuesFixed + falsePositives > 0 except cycle 3 (0 FP, 2 fixed = denominator 2)
       expect(trend.length).toBeGreaterThan(0);

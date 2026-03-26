@@ -10,6 +10,7 @@ type RunActivityRowProps = {
   selected: boolean;
   expanded: boolean;
   onClick: () => void;
+  tick: number;
 };
 
 function formatTime(ts: number): string {
@@ -90,6 +91,7 @@ export function RunActivityRow(props: RunActivityRowProps) {
   });
 
   const elapsedText = createMemo(() => {
+    void props.tick; // Track tick signal to trigger re-evaluation
     const elapsed = Date.now() - props.session.startedAt;
     const secs = Math.floor(elapsed / 1000);
     if (secs < 60) return `${secs}s`;
