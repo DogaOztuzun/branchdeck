@@ -863,3 +863,78 @@ pub struct PostMergeTrigger {
     /// Context for the re-score run.
     pub rescore_context: PostMergeRescoreContext,
 }
+
+// ===========================================================================
+// Score comparison types (Story 4.2)
+// ===========================================================================
+
+/// Per-persona score delta showing before/after change.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct PersonaScoreDelta {
+    /// Persona name (e.g., "confused-newcomer").
+    pub persona: String,
+    /// Score before the fix (from the original SAT run).
+    pub before: u32,
+    /// Score after the fix (from the post-merge re-score).
+    pub after: u32,
+    /// Signed delta (after - before). Positive = improvement.
+    pub delta: i32,
+}
+
+/// Per-scenario comparison of before/after scores.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ScenarioComparison {
+    /// Scenario ID.
+    pub scenario_id: String,
+    /// Persona associated with the scenario.
+    pub persona: String,
+    /// Score before the fix.
+    pub before_score: u32,
+    /// Score after the fix.
+    pub after_score: u32,
+    /// Signed delta (after - before). Positive = improvement.
+    pub delta: i32,
+    /// Per-dimension deltas.
+    pub dimension_deltas: DimensionDeltas,
+}
+
+/// Per-dimension before/after deltas.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct DimensionDeltas {
+    pub functionality: i32,
+    pub usability: i32,
+    pub error_handling: i32,
+    pub performance: i32,
+}
+
+/// Full before/after score comparison for a SAT cycle.
+/// Written to `sat/runs/run-{id}/comparison.json` (NFR23).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ScoreComparison {
+    /// Run ID of the original (before) SAT run.
+    pub before_run_id: String,
+    /// Run ID of the post-merge (after) re-score run.
+    pub after_run_id: String,
+    /// ISO 8601 timestamp when comparison was computed.
+    pub compared_at: String,
+    /// Per-scenario comparisons (only scenarios present in both runs).
+    pub scenario_comparisons: Vec<ScenarioComparison>,
+    /// Per-persona aggregated deltas.
+    pub persona_deltas: Vec<PersonaScoreDelta>,
+    /// Overall score before the fix.
+    pub overall_before: u32,
+    /// Overall score after the fix.
+    pub overall_after: u32,
+    /// Overall signed delta.
+    pub overall_delta: i32,
+    /// Number of scenarios that improved (delta > 0).
+    pub improved_count: usize,
+    /// Number of scenarios that regressed (delta < 0).
+    pub regressed_count: usize,
+    /// Number of scenarios unchanged (delta == 0).
+    pub unchanged_count: usize,
+}
