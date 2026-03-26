@@ -46,20 +46,7 @@ fn to_sse_envelope(event: &Event, id: &str) -> serde_json::Value {
 }
 
 fn extract_timestamp(event: &Event) -> u64 {
-    match event {
-        Event::SessionStart { ts, .. }
-        | Event::ToolStart { ts, .. }
-        | Event::ToolEnd { ts, .. }
-        | Event::SubagentStart { ts, .. }
-        | Event::SubagentStop { ts, .. }
-        | Event::SessionStop { ts, .. }
-        | Event::Notification { ts, .. }
-        | Event::RunComplete { ts, .. }
-        | Event::PrStatusChanged { ts, .. }
-        | Event::IssueDetected { ts, .. }
-        | Event::PrMerged { ts, .. } => *ts,
-        Event::RetryDue { .. } => branchdeck_core::models::agent::now_ms(),
-    }
+    event.timestamp()
 }
 
 static EVENT_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);

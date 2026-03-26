@@ -110,6 +110,28 @@ pub enum Event {
     },
 }
 
+impl Event {
+    /// Extract the timestamp from any event variant.
+    /// `RetryDue` has no timestamp field — returns 0.
+    #[must_use]
+    pub fn timestamp(&self) -> EpochMs {
+        match self {
+            Self::SessionStart { ts, .. }
+            | Self::ToolStart { ts, .. }
+            | Self::ToolEnd { ts, .. }
+            | Self::SubagentStart { ts, .. }
+            | Self::SubagentStop { ts, .. }
+            | Self::SessionStop { ts, .. }
+            | Self::Notification { ts, .. }
+            | Self::RunComplete { ts, .. }
+            | Self::PrStatusChanged { ts, .. }
+            | Self::IssueDetected { ts, .. }
+            | Self::PrMerged { ts, .. } => *ts,
+            Self::RetryDue { .. } => 0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum AgentStatus {

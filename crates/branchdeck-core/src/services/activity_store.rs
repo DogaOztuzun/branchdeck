@@ -348,6 +348,10 @@ impl ActivityStore {
     }
 
     /// Append a single event as a JSON line to the persistence file.
+    ///
+    /// Append-only JSONL persistence — intentional exception to `write_atomic` rule.
+    /// Rewriting the entire file per event (`write_atomic`) is O(n) and untenable at 10k events.
+    /// Compaction uses `write_atomic`; hot-path appends are append-only by design.
     fn persist_event(&self, event: &Event) {
         let Some(path) = &self.persistence_path else {
             return;
@@ -507,7 +511,7 @@ impl ActivityStore {
             .await
             .events
             .iter()
-            .filter(|e| event_ts(e) >= since_ms)
+            .filter(|e| e.timestamp() >= since_ms)
             .cloned()
             .collect()
     }
@@ -565,24 +569,6 @@ impl ActivityStore {
             .filter(|a| a.agent_id.is_none() && a.status == AgentStatus::Active)
             .cloned()
             .collect()
-    }
-}
-
-/// Extract the timestamp from any event variant (used for filtering).
-fn event_ts(event: &Event) -> EpochMs {
-    match event {
-        Event::SessionStart { ts, .. }
-        | Event::ToolStart { ts, .. }
-        | Event::ToolEnd { ts, .. }
-        | Event::SubagentStart { ts, .. }
-        | Event::SubagentStop { ts, .. }
-        | Event::SessionStop { ts, .. }
-        | Event::Notification { ts, .. }
-        | Event::RunComplete { ts, .. }
-        | Event::PrStatusChanged { ts, .. }
-        | Event::IssueDetected { ts, .. }
-        | Event::PrMerged { ts, .. } => *ts,
-        Event::RetryDue { .. } => 0,
     }
 }
 

@@ -654,30 +654,9 @@ pub fn apply_retry_due(
 }
 
 /// Record a running session. Called by the effect executor after dispatch.
-#[allow(clippy::too_many_arguments)]
-pub fn record_running(
-    state: &mut Orchestrator,
-    pr_key: &str,
-    worktree_path: &str,
-    tab_id: &str,
-    now: EpochMs,
-    attempt: u32,
-    pr_context: &crate::models::orchestrator::PrContext,
-    workflow_name: Option<String>,
-) {
-    state.running.insert(
-        pr_key.to_string(),
-        RunningEntry {
-            pr_key: pr_key.to_string(),
-            worktree_path: worktree_path.to_string(),
-            tab_id: tab_id.to_string(),
-            started_at: now,
-            attempt,
-            branch: pr_context.branch.clone(),
-            base_branch: pr_context.base_branch.clone(),
-            workflow_name,
-        },
-    );
+pub fn record_running(state: &mut Orchestrator, entry: RunningEntry) {
+    let pr_key = entry.pr_key.clone();
+    state.running.insert(pr_key, entry);
 }
 
 /// Skip a PR — remove from all tracking, no retry.
@@ -1109,13 +1088,16 @@ async fn execute_dispatch(
             let mut orch = orchestrator.lock().await;
             record_running(
                 &mut orch,
-                key,
-                worktree_path,
-                &tab_id,
-                now_ms(),
-                attempt,
-                pr_context,
-                workflow_name,
+                RunningEntry {
+                    pr_key: key.to_string(),
+                    worktree_path: worktree_path.to_string(),
+                    tab_id: tab_id.clone(),
+                    started_at: now_ms(),
+                    attempt,
+                    branch: pr_context.branch.clone(),
+                    base_branch: pr_context.base_branch.clone(),
+                    workflow_name,
+                },
             );
             info!("Dispatched orchestrator session for {key} (tab={tab_id})");
         }

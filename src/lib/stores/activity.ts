@@ -124,8 +124,12 @@ function stopListening() {
   sseUnsubscribes.length = 0;
 }
 
+function isRecord(data: unknown): data is Record<string, unknown> {
+  return typeof data === 'object' && data !== null;
+}
+
 function formatEventDescription(type: string, data: unknown): string {
-  const d = data as Record<string, unknown>;
+  const d = isRecord(data) ? data : {};
   switch (type) {
     case 'agent:session_start':
       return `Agent session started: ${d.sessionId ?? 'unknown'}`;
@@ -153,10 +157,9 @@ function formatEventDescription(type: string, data: unknown): string {
 }
 
 function extractDetail(data: unknown): Record<string, string> | undefined {
-  if (!data || typeof data !== 'object') return undefined;
-  const d = data as Record<string, unknown>;
+  if (!isRecord(data)) return undefined;
   const detail: Record<string, string> = {};
-  for (const [key, value] of Object.entries(d)) {
+  for (const [key, value] of Object.entries(data)) {
     if (value !== null && value !== undefined) {
       detail[key] = String(value);
     }

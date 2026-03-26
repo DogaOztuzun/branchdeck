@@ -49,14 +49,9 @@ export function TriageActivityFeed() {
     }
   }
 
-  function handleKeyDown(e: KeyboardEvent) {
-    if (
-      e.target instanceof HTMLInputElement ||
-      e.target instanceof HTMLTextAreaElement ||
-      e.target instanceof HTMLSelectElement
-    )
-      return;
+  let containerRef: HTMLElement | undefined;
 
+  function handleKeyDown(e: KeyboardEvent) {
     const runs = allRuns();
     if (runs.length === 0) return;
 
@@ -79,16 +74,14 @@ export function TriageActivityFeed() {
     }
   }
 
-  onMount(() => {
-    document.addEventListener('keydown', handleKeyDown);
-  });
-
-  onCleanup(() => {
-    document.removeEventListener('keydown', handleKeyDown);
-  });
-
   return (
-    <div class="mb-4">
+    <div
+      ref={containerRef}
+      tabIndex={-1}
+      role="listbox"
+      class="mb-4 outline-none"
+      onKeyDown={handleKeyDown}
+    >
       {/* Section header */}
       <Show when={activeCount() > 0}>
         <h3 class="text-[10px] font-medium text-[var(--color-warning)] uppercase tracking-[0.06em] mb-2 px-3">
