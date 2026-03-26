@@ -191,6 +191,58 @@ pub fn apply_issue_event(
     triggers
 }
 
+/// Handle a PR merge detection. Produces `TriggerEvent::PostMerge` for each
+/// newly-merged PR that was previously tracked (claimed/completed).
+///
+/// The merge poller calls this when it detects `merged_at` on a PR. The function:
+/// 1. Skips PRs already processed as merged (idempotent)
+/// 2. Records the PR key in `merged_prs` to prevent duplicate triggers
+/// 3. Returns `PostMerge` trigger events for workflow dispatch
+///
+/// The actual re-score dispatch is handled by `workflow_dispatch::plan_dispatch`
+/// matching a `post-merge` tracker workflow.
+#[must_use]
+pub fn apply_merge_event(
+    state: &mut Orchestrator,
+    repo: &str,
+    pr_number: u64,
+    branch: &str,
+) -> Vec<TriggerEvent> {
+    if !state.config.enabled {
+        return Vec::new();
+    }
+
+    let key = pr_key(repo, pr_number);
+
+    // Skip if already processed as merged
+    if state.merged_prs.contains(&key) {
+        debug!("Orchestrator: merge for {key} already processed, skipping");
+        return Vec::new();
+    }
+
+    // Record to prevent duplicate triggers
+    state.merged_prs.insert(key.clone());
+
+    // Clean up any stale orchestrator state for this PR
+    state.running.remove(&key);
+    state.claimed.remove(&key);
+    state.retry_queue.remove(&key);
+    state.review_ready.remove(&key);
+
+    info!(
+        "Orchestrator: PR {key} merged, creating PostMerge trigger for re-score"
+    );
+
+    vec![TriggerEvent {
+        kind: TrackerKind::PostMerge,
+        context: TriggerContext::PostMerge {
+            repo: repo.to_string(),
+            pr_number,
+            branch: branch.to_string(),
+        },
+    }]
+}
+
 /// Handle session end. Route based on outcome:
 /// - `AnalysisWritten` → emit `review_ready`
 /// - `FixCompleted` → mark completed, release claim

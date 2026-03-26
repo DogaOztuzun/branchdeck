@@ -825,3 +825,41 @@ pub struct SatPipelineResult {
     #[serde(default)]
     pub issues_created: Option<usize>,
 }
+
+// ===========================================================================
+// Post-merge re-score context (Story 4.1)
+// ===========================================================================
+
+/// Context for a post-merge re-score run.
+/// Links the re-score back to the original issue/PR for traceability.
+/// Written to the worktree as `.branchdeck/rescore-context.json`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct PostMergeRescoreContext {
+    /// Repository in "owner/repo" format.
+    pub repo: String,
+    /// PR number that was merged (the implement-issue PR).
+    pub merged_pr_number: u64,
+    /// Branch name of the merged PR.
+    pub merged_branch: String,
+    /// Scenario IDs to re-run (from the original SAT run that found the issues).
+    /// Empty means re-run all scenarios.
+    #[serde(default)]
+    pub scenario_filter: Vec<String>,
+    /// Original issue number that the merged PR was fixing (if traceable).
+    #[serde(default)]
+    pub original_issue_number: Option<u64>,
+    /// Run ID of the original SAT run that found the issue (if known).
+    #[serde(default)]
+    pub original_run_id: Option<String>,
+}
+
+/// Result of detecting a post-merge trigger.
+/// Produced by the pure `apply_merge_event` function.
+#[derive(Debug, Clone)]
+pub struct PostMergeTrigger {
+    /// PR key (e.g., "owner/repo#42").
+    pub pr_key: String,
+    /// Context for the re-score run.
+    pub rescore_context: PostMergeRescoreContext,
+}

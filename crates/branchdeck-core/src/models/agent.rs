@@ -98,6 +98,15 @@ pub enum Event {
         issues: Vec<IssueSummary>,
         ts: EpochMs,
     },
+    /// A PR has been detected as merged (closed with `merged_at` set).
+    /// Used by the merge poller to trigger post-merge workflows (e.g., SAT re-score).
+    #[serde(rename_all = "camelCase")]
+    PrMerged {
+        repo: String,
+        pr_number: u64,
+        branch: String,
+        ts: EpochMs,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
