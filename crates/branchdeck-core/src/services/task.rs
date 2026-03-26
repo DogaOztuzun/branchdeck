@@ -169,6 +169,8 @@ pub fn create_task(
         pr,
         created,
         run_count: 0,
+        cycle_iteration: None,
+        cycle_max: None,
     };
 
     let instructions = "\n## Instructions\n\nAs you work, update this file:\n- Check off Progress items as you complete them: `- [ ]` → `- [x]`\n- Append your findings and results to the Log section below\n";

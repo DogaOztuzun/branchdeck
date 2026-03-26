@@ -64,6 +64,14 @@ pub enum LifecycleEffect {
         workflow_name: String,
         worktree_path: String,
     },
+    /// Circuit breaker tripped — SAT fix-verify cycle reached its iteration limit.
+    /// The triage view should notify the user that autonomous fixing has stopped.
+    CircuitBreakerTripped {
+        repo: String,
+        iteration: u32,
+        max_iterations: u32,
+        reason: String,
+    },
 }
 
 /// Check all outcomes in order and return the first match.

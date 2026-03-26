@@ -615,12 +615,122 @@ pub struct SatLearning {
     pub summary: String,
 }
 
+/// A cycle-level learning entry for `sat/learnings.yaml`.
+///
+/// Captures the aggregate results of a full fix-verify cycle, including
+/// issues found/fixed/verified, score changes, and false positives.
+/// Used to compute classification accuracy across cycles (FR27, NFR24).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SatCycleLearning {
+    /// ISO 8601 timestamp when the cycle learning was recorded.
+    pub recorded_at: String,
+    /// Run ID of the post-merge re-score.
+    pub run_id: String,
+    /// PR number that was merged (the fix).
+    pub merged_pr_number: u64,
+    /// Repository in "owner/repo" format.
+    pub repo: String,
+    /// Cycle iteration number (1-based).
+    pub cycle_iteration: u32,
+    /// Number of issues found in the original SAT run.
+    pub issues_found: usize,
+    /// Number of issues that were fixed (score improved).
+    pub issues_fixed: usize,
+    /// Number of issues verified as resolved (no regression).
+    pub issues_verified: usize,
+    /// Number of false positives detected (runner/scenario misclassified as app).
+    pub false_positives: usize,
+    /// Aggregate score before the fix.
+    pub score_before: u32,
+    /// Aggregate score after the fix.
+    pub score_after: u32,
+    /// Verification outcome of this cycle.
+    pub outcome: VerificationOutcome,
+}
+
 /// Top-level structure of `sat/learnings.yaml`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct SatLearningsFile {
     #[serde(default)]
     pub learnings: Vec<SatLearning>,
+    /// Cycle-level learnings from fix-verify cycles (Story 4.4).
+    #[serde(default)]
+    pub cycle_learnings: Vec<SatCycleLearning>,
+}
+
+// ===========================================================================
+// Circuit breaker types (Story 4.4)
+// ===========================================================================
+
+/// Configuration for the circuit breaker that limits autonomous fix iterations.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct CircuitBreakerConfig {
+    /// Maximum number of fix-verify iterations per cycle.
+    /// Default: 3 (FR25).
+    pub max_iterations: u32,
+}
+
+impl Default for CircuitBreakerConfig {
+    fn default() -> Self {
+        Self { max_iterations: 3 }
+    }
+}
+
+/// Tracked state of the circuit breaker for a given cycle.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct CircuitBreakerState {
+    /// Current iteration number (1-based, incremented each time a fix cycle runs).
+    pub cycle_iteration: u32,
+    /// Maximum iterations allowed (from config).
+    pub cycle_max: u32,
+    /// Repository in "owner/repo" format.
+    pub repo: String,
+    /// The original issue number that started this cycle.
+    pub original_issue_number: Option<u64>,
+}
+
+/// Decision from the circuit breaker: continue or stop.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CircuitBreakerDecision {
+    /// Iteration is within limits — cycle may continue.
+    Continue {
+        /// Current iteration (after increment).
+        iteration: u32,
+        /// Maximum allowed.
+        max: u32,
+    },
+    /// Iteration limit reached — cycle must stop.
+    Tripped {
+        /// The iteration that would have been next.
+        iteration: u32,
+        /// Maximum allowed.
+        max: u32,
+        /// Human-readable reason.
+        reason: String,
+    },
+}
+
+/// Classification accuracy metrics computed from cycle learnings.
+///
+/// Tracks how well the SAT LLM judge classifies findings over time (NFR24).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ClassificationAccuracy {
+    /// Total classifications (`issues_found` across all cycles).
+    pub total_classifications: usize,
+    /// True positives: issues that were found AND verified as fixed.
+    pub true_positives: usize,
+    /// False positives: findings that were misclassified (runner/scenario as app).
+    pub false_positives: usize,
+    /// Accuracy: `true_positives / (true_positives + false_positives)`.
+    /// `None` if no data is available.
+    pub accuracy: Option<f64>,
+    /// Number of cycles included in this calculation.
+    pub cycles_counted: usize,
 }
 
 // ===========================================================================

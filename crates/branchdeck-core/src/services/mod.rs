@@ -21,6 +21,7 @@ pub mod run_manager;
 pub mod run_responses;
 pub mod run_stale;
 pub mod run_state;
+pub mod sat_circuit_breaker;
 pub mod sat_comparison;
 pub mod sat_execute;
 pub mod sat_generate;
