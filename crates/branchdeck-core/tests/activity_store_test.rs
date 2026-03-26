@@ -131,3 +131,103 @@ async fn get_active_sessions_filters_correctly() {
     let all = store.get_all_agents().await;
     assert_eq!(all.len(), 2);
 }
+
+#[tokio::test]
+async fn persistence_round_trip_survives_restart() {
+    let tmp = tempfile::tempdir().unwrap();
+    let data_dir = tmp.path().to_path_buf();
+
+    // Create a store with persistence, publish events via bus
+    {
+        let event_bus = Arc::new(EventBus::new());
+        let store = Arc::new(
+            ActivityStore::new_with_persistence(&data_dir).unwrap(),
+        );
+        store.start_subscriber(&event_bus);
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+
+        event_bus.publish(Event::SessionStart {
+            session_id: "persist-sess".into(),
+            tab_id: "tab-p".into(),
+            model: None,
+            ts: 5000,
+        });
+
+        event_bus.publish(Event::ToolEnd {
+            session_id: "persist-sess".into(),
+            agent_id: None,
+            tab_id: "tab-p".into(),
+            tool_name: "Edit".into(),
+            tool_use_id: "tu-p1".into(),
+            file_path: Some("/src/app.rs".into()),
+            ts: 5100,
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        // Verify events are queryable
+        let events = store.get_events_since(0).await;
+        assert_eq!(events.len(), 2);
+    }
+
+    // Simulate restart: create a new store from the same directory
+    let store2 = ActivityStore::new_with_persistence(&data_dir).unwrap();
+
+    // Loaded events should be queryable
+    let events = store2.get_events_since(0).await;
+    assert_eq!(events.len(), 2);
+
+    // Agent state should be rebuilt from replayed events
+    let agents = store2.get_agents_for_session("persist-sess").await;
+    assert_eq!(agents.len(), 1);
+    assert_eq!(agents[0].session_id, "persist-sess");
+
+    // File access should be rebuilt
+    let files = store2.get_files_for_session("persist-sess").await;
+    assert_eq!(files.len(), 1);
+    assert!(files[0].was_modified);
+}
+
+#[tokio::test]
+async fn loaded_events_appear_in_time_filtered_queries() {
+    let tmp = tempfile::tempdir().unwrap();
+    let data_dir = tmp.path().to_path_buf();
+
+    // Populate events at different timestamps
+    {
+        let event_bus = Arc::new(EventBus::new());
+        let store = Arc::new(
+            ActivityStore::new_with_persistence(&data_dir).unwrap(),
+        );
+        store.start_subscriber(&event_bus);
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+
+        event_bus.publish(Event::SessionStart {
+            session_id: "old-sess".into(),
+            tab_id: "tab-1".into(),
+            model: None,
+            ts: 1000,
+        });
+
+        event_bus.publish(Event::SessionStart {
+            session_id: "new-sess".into(),
+            tab_id: "tab-2".into(),
+            model: None,
+            ts: 9000,
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+
+    // Reload and query with time filter
+    let store2 = ActivityStore::new_with_persistence(&data_dir).unwrap();
+
+    let all = store2.get_events_since(0).await;
+    assert_eq!(all.len(), 2);
+
+    let recent = store2.get_events_since(5000).await;
+    assert_eq!(recent.len(), 1);
+
+    let none = store2.get_events_since(99_999).await;
+    assert!(none.is_empty());
+}

@@ -91,6 +91,7 @@ pub fn make_running_entry(pr_key: &str) -> branchdeck_lib::models::orchestrator:
         attempt: 1,
         branch: "fix/test".to_string(),
         base_branch: "main".to_string(),
+        workflow_name: None,
     }
 }
 

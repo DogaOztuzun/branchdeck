@@ -196,6 +196,7 @@ pub async fn orchestrator_shepherd_pr_cmd(
                 worktree_path: worktree_path.clone(),
                 pr_context,
                 attempt: 1,
+                workflow_name: None,
             },
             crate::models::orchestrator::OrchestratorEffect::EmitLifecycleEvent {
                 event: LifecycleEvent {

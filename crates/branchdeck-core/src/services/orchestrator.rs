@@ -69,7 +69,8 @@ pub fn apply_pr_event(
         }
 
         // Use workflow registry for trigger matching if available, fallback to hardcoded eligibility
-        let eligible = if let Some(registry) = &state.registry {
+        // Returns (eligible, matched_workflow_name)
+        let (eligible, matched_workflow_name) = if let Some(registry) = &state.registry {
             let trigger = TriggerEvent {
                 kind: TrackerKind::GithubPr,
                 context: TriggerContext::GithubPr {
@@ -81,9 +82,11 @@ pub fn apply_pr_event(
                     review_decision: pr.review_decision.clone(),
                 },
             };
-            !registry.match_workflows(&trigger).is_empty()
+            let matches = registry.match_workflows(&trigger);
+            let wf_name = matches.first().map(|wf| wf.config.name.clone());
+            (!matches.is_empty(), wf_name)
         } else {
-            is_pr_eligible(pr, &state.config)
+            (is_pr_eligible(pr, &state.config), None)
         };
         if !eligible {
             continue;
@@ -125,6 +128,7 @@ pub fn apply_pr_event(
                 },
             },
             attempt: 1,
+            workflow_name: matched_workflow_name.clone(),
         });
 
         effects.push(OrchestratorEffect::EmitLifecycleEvent {
@@ -135,8 +139,8 @@ pub fn apply_pr_event(
                 attempt: 1,
                 started_at: now,
                 session_id: None, // populated by executor after dispatch
-                workflow_name: None,
-                display_status: None,
+                workflow_name: matched_workflow_name.clone(),
+                display_status: None, // resolved by executor from workflow lifecycle (FR33)
                 completed_at: None,
             },
         });
@@ -291,7 +295,7 @@ pub fn apply_session_end(
                     attempt: entry.attempt,
                     started_at: entry.started_at,
                     session_id: None,
-                    workflow_name: None,
+                    workflow_name: entry.workflow_name.clone(),
                     display_status: None,
                     completed_at: None,
                 },
@@ -308,7 +312,7 @@ pub fn apply_session_end(
                 attempt: entry.attempt,
                 started_at: entry.started_at,
                 session_id: None,
-                workflow_name: None,
+                workflow_name: entry.workflow_name.clone(),
                 display_status: None,
                 completed_at: None,
             };
@@ -333,7 +337,7 @@ pub fn apply_session_end(
                     attempt: entry.attempt,
                     started_at: entry.started_at,
                     session_id: None,
-                    workflow_name: None,
+                    workflow_name: entry.workflow_name.clone(),
                     display_status: None,
                     completed_at: None,
                 };
@@ -381,7 +385,7 @@ pub fn apply_session_end(
                         attempt: entry.attempt + 1,
                         started_at: entry.started_at,
                         session_id: None,
-                        workflow_name: None,
+                        workflow_name: entry.workflow_name.clone(),
                         display_status: None,
                         completed_at: None,
                     },
@@ -452,6 +456,7 @@ pub fn apply_relaunch(
         worktree_path: worktree_path.to_string(),
         pr_context,
         attempt: next_attempt,
+        workflow_name: None,
     });
 
     effects.push(OrchestratorEffect::EmitLifecycleEvent {
@@ -462,9 +467,9 @@ pub fn apply_relaunch(
             attempt: next_attempt,
             started_at: now,
             session_id: None, // populated by executor after dispatch
-                workflow_name: None,
-                display_status: None,
-                completed_at: None,
+            workflow_name: None,
+            display_status: None,
+            completed_at: None,
         },
     });
 
@@ -624,6 +629,7 @@ pub fn apply_retry_due(
         worktree_path: worktree_path.to_string(),
         pr_context,
         attempt: retry.attempt,
+        workflow_name: None,
     });
 
     effects.push(OrchestratorEffect::EmitLifecycleEvent {
@@ -634,9 +640,9 @@ pub fn apply_retry_due(
             attempt: retry.attempt,
             started_at: now,
             session_id: None, // populated by executor after dispatch
-                workflow_name: None,
-                display_status: None,
-                completed_at: None,
+            workflow_name: None,
+            display_status: None,
+            completed_at: None,
         },
     });
 
@@ -644,6 +650,7 @@ pub fn apply_retry_due(
 }
 
 /// Record a running session. Called by the effect executor after dispatch.
+#[allow(clippy::too_many_arguments)]
 pub fn record_running(
     state: &mut Orchestrator,
     pr_key: &str,
@@ -652,6 +659,7 @@ pub fn record_running(
     now: EpochMs,
     attempt: u32,
     pr_context: &crate::models::orchestrator::PrContext,
+    workflow_name: Option<String>,
 ) {
     state.running.insert(
         pr_key.to_string(),
@@ -663,6 +671,7 @@ pub fn record_running(
             attempt,
             branch: pr_context.branch.clone(),
             base_branch: pr_context.base_branch.clone(),
+            workflow_name,
         },
     );
 }
@@ -985,6 +994,7 @@ async fn execute_dispatch(
     attempt: u32,
     orchestrator: &OrchestratorState,
     run_manager: &crate::services::run_manager::RunManagerState,
+    workflow_name: Option<String>,
 ) {
     use crate::models::agent::now_ms;
 
@@ -1101,6 +1111,7 @@ async fn execute_dispatch(
                 now_ms(),
                 attempt,
                 pr_context,
+                workflow_name,
             );
             info!("Dispatched orchestrator session for {key} (tab={tab_id})");
         }
@@ -1127,6 +1138,7 @@ pub async fn execute_effects(
                 worktree_path,
                 pr_context,
                 attempt,
+                workflow_name,
             } => {
                 execute_dispatch(
                     &key,
@@ -1135,6 +1147,7 @@ pub async fn execute_effects(
                     attempt,
                     orchestrator,
                     run_manager,
+                    workflow_name,
                 )
                 .await;
             }
@@ -1228,6 +1241,23 @@ pub async fn execute_effects(
                         LifecycleStatus::Stale => "stale",
                         LifecycleStatus::Failed => "failed",
                     };
+
+                    // Resolve display status from workflow lifecycle definition (FR33)
+                    if event.display_status.is_none() {
+                        if let Some(ref wf_name) = event.workflow_name {
+                            if let Some(registry) = &orch.registry {
+                                if let Some(wf) = registry.get_workflow(wf_name) {
+                                    if let Some(ref lifecycle) = wf.config.lifecycle {
+                                        let resolved = lifecycle.resolve_display_status(status_str);
+                                        if resolved != status_str {
+                                            event.display_status = Some(resolved);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     let display = event
                         .display_status
                         .clone()
@@ -1499,6 +1529,7 @@ async fn handle_event(
                                 attempt: 1,
                                 branch: issue_branch,
                                 base_branch: "main".to_string(),
+                                workflow_name: Some(plan.workflow_name.clone()),
                             },
                         );
                         drop(orch);
@@ -1511,7 +1542,7 @@ async fn handle_event(
                             attempt: 1,
                             started_at: now,
                             session_id: None,
-                            workflow_name: None,
+                            workflow_name: Some(plan.workflow_name.clone()),
                             display_status: None,
                             completed_at: None,
                         };
@@ -1597,6 +1628,7 @@ async fn handle_event(
                             attempt: 1,
                             branch: format!("workflow/sat-rescore-{pr_number}"),
                             base_branch: base_branch.clone(),
+                            workflow_name: Some("sat-rescore".to_string()),
                         },
                     );
                     drop(orch);
@@ -1608,7 +1640,7 @@ async fn handle_event(
                         attempt: 1,
                         started_at: now,
                         session_id: None,
-                        workflow_name: None,
+                        workflow_name: Some("sat-rescore".to_string()),
                         display_status: None,
                         completed_at: None,
                     };

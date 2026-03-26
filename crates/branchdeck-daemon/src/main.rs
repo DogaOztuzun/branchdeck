@@ -2,7 +2,7 @@ use axum::routing::get;
 use axum::Router;
 use branchdeck_core::services::activity_store::ActivityStore;
 use branchdeck_core::services::event_bus::EventBus;
-use log::{error, info};
+use log::{error, info, warn};
 use std::sync::Arc;
 
 mod routes;
@@ -15,7 +15,21 @@ async fn main() {
     env_logger::init();
 
     let event_bus = Arc::new(EventBus::new());
-    let activity_store = Arc::new(ActivityStore::new());
+
+    let data_dir = dirs::data_local_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("branchdeck");
+
+    let activity_store = match ActivityStore::new_with_persistence(&data_dir) {
+        Ok(store) => {
+            info!("Activity store initialized with file-backed persistence");
+            Arc::new(store)
+        }
+        Err(e) => {
+            warn!("Failed to initialize persistent activity store, falling back to in-memory: {e}");
+            Arc::new(ActivityStore::new())
+        }
+    };
 
     activity_store.start_subscriber(&event_bus);
     activity_store.start_gc(300_000); // 5 minute TTL

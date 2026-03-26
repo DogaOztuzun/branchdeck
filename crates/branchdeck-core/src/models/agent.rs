@@ -12,7 +12,7 @@ pub fn now_ms() -> EpochMs {
         .map_or(0, |d| d.as_millis() as u64)
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum Event {
     #[serde(rename_all = "camelCase")]
@@ -118,7 +118,7 @@ pub enum AgentStatus {
     Stopped,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentState {
     pub session_id: String,
@@ -132,7 +132,7 @@ pub struct AgentState {
     pub last_activity: EpochMs,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileAccess {
     pub path: String,

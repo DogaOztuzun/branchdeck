@@ -31,18 +31,26 @@ export function SATSummaryBar() {
     });
 
     if (fpRate !== null) {
+      const fpTrend = sat.falsePositiveRateTrend();
       result.push({
         label: 'FP Rate',
         value: `${fpRate}%`,
         color: fpRate <= 10 ? 'success' : fpRate <= 25 ? 'warning' : 'error',
+        sparkline:
+          fpTrend.length >= 2 ? { data: fpTrend.map((t) => t.rate), color: '#f7768e' } : undefined,
       });
     }
 
     if (acc.accuracy !== null) {
+      const accTrend = sat.classificationAccuracyTrend();
       result.push({
         label: 'Accuracy',
         value: `${acc.accuracy}%`,
         color: acc.accuracy >= 80 ? 'success' : acc.accuracy >= 60 ? 'warning' : 'error',
+        sparkline:
+          accTrend.length >= 2
+            ? { data: accTrend.map((t) => t.accuracy), color: '#9ece6a' }
+            : undefined,
       });
     }
 

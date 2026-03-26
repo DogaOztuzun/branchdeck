@@ -1,14 +1,24 @@
+use crate::error::AppError;
 use crate::models::agent::{now_ms, AgentState, AgentStatus, EpochMs, Event, FileAccess};
 use crate::services::event_bus::EventBus;
-use log::{debug, warn};
+use log::{debug, error, info, warn};
 use std::collections::HashMap;
+use std::fs::OpenOptions;
+use std::io::{BufRead, BufReader, Write as _};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
 
+/// Maximum events retained in the JSONL persistence file.
+/// On load, older events beyond this limit are discarded and the file is compacted.
+const MAX_PERSISTED_EVENTS: usize = 10_000;
+
 struct StoreInner {
     agents: HashMap<String, AgentState>,
     files: HashMap<String, FileAccess>,
+    /// Raw events kept for overnight summary queries.
+    events: Vec<Event>,
 }
 
 impl StoreInner {
@@ -121,6 +131,8 @@ impl StoreInner {
 
 pub struct ActivityStore {
     inner: Arc<Mutex<StoreInner>>,
+    /// Path to the JSONL persistence file. `None` means in-memory only.
+    persistence_path: Option<PathBuf>,
 }
 
 impl Default for ActivityStore {
@@ -130,13 +142,233 @@ impl Default for ActivityStore {
 }
 
 impl ActivityStore {
+    /// Create an in-memory-only activity store (no persistence across restarts).
     #[must_use]
     pub fn new() -> Self {
         Self {
             inner: Arc::new(Mutex::new(StoreInner {
                 agents: HashMap::new(),
                 files: HashMap::new(),
+                events: Vec::new(),
             })),
+            persistence_path: None,
+        }
+    }
+
+    /// Create an activity store backed by a JSONL file in `data_dir`.
+    ///
+    /// Events are appended to `{data_dir}/activity.jsonl` and loaded on construction.
+    /// If loading fails, the store starts empty and logs the error.
+    ///
+    /// # Errors
+    ///
+    /// Returns `AppError::Io` if the data directory cannot be created.
+    pub fn new_with_persistence(data_dir: &std::path::Path) -> Result<Self, AppError> {
+        std::fs::create_dir_all(data_dir).map_err(|e| {
+            error!("Failed to create activity data dir {}: {e}", data_dir.display());
+            e
+        })?;
+
+        let persistence_path = data_dir.join("activity.jsonl");
+
+        let mut store = Self {
+            inner: Arc::new(Mutex::new(StoreInner {
+                agents: HashMap::new(),
+                files: HashMap::new(),
+                events: Vec::new(),
+            })),
+            persistence_path: Some(persistence_path),
+        };
+
+        if let Err(e) = store.load_persisted_events() {
+            error!("Failed to load persisted activity events: {e}");
+        }
+
+        Ok(store)
+    }
+
+    /// Load events from the JSONL file, replay them into the in-memory store,
+    /// and compact the file if it exceeds `MAX_PERSISTED_EVENTS`.
+    fn load_persisted_events(&mut self) -> Result<(), AppError> {
+        let path = match &self.persistence_path {
+            Some(p) => p.clone(),
+            None => return Ok(()),
+        };
+
+        let file = match std::fs::File::open(&path) {
+            Ok(f) => f,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                debug!("No persisted activity file at {}, starting fresh", path.display());
+                return Ok(());
+            }
+            Err(e) => return Err(AppError::Io(e)),
+        };
+
+        let reader = BufReader::new(file);
+        let mut events = Vec::new();
+        let mut parse_errors = 0u64;
+
+        for line in reader.lines() {
+            let line = line?;
+            if line.trim().is_empty() {
+                continue;
+            }
+            match serde_json::from_str::<Event>(&line) {
+                Ok(event) => events.push(event),
+                Err(_) => parse_errors += 1,
+            }
+        }
+
+        if parse_errors > 0 {
+            warn!("Skipped {parse_errors} unparseable lines from {}", path.display());
+        }
+
+        // Truncate to last MAX_PERSISTED_EVENTS
+        let needs_compact = events.len() > MAX_PERSISTED_EVENTS;
+        if needs_compact {
+            let drain_count = events.len() - MAX_PERSISTED_EVENTS;
+            events.drain(..drain_count);
+        }
+
+        let event_count = events.len();
+        self.replay_events_sync(&events)?;
+
+        info!("Loaded {event_count} persisted activity events from {}", path.display());
+
+        // Compact the file if we truncated
+        if needs_compact {
+            if let Err(e) = self.compact_persistence_file(&events) {
+                error!("Failed to compact activity file: {e}");
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Replay events into the in-memory store (blocking, used during init).
+    fn replay_events_sync(&self, events: &[Event]) -> Result<(), AppError> {
+        // We can't use async lock during init, so use try_lock
+        let mut inner = self.inner.try_lock().map_err(|e| {
+            error!("Failed to acquire lock for replay: {e}");
+            AppError::Agent(format!("Lock contention during event replay: {e}"))
+        })?;
+
+        inner.events = events.to_vec();
+
+        for event in events {
+            match event {
+                Event::SessionStart {
+                    session_id,
+                    tab_id,
+                    ts,
+                    ..
+                } => inner.on_session_start(session_id.clone(), tab_id.clone(), *ts),
+                Event::ToolStart {
+                    session_id,
+                    agent_id,
+                    tool_name,
+                    file_path,
+                    ts,
+                    ..
+                } => inner.on_tool_start(
+                    session_id,
+                    agent_id.as_deref(),
+                    tool_name,
+                    file_path.as_deref(),
+                    *ts,
+                ),
+                Event::ToolEnd {
+                    session_id,
+                    agent_id,
+                    tool_name,
+                    file_path,
+                    ts,
+                    ..
+                } => inner.on_tool_end(
+                    session_id,
+                    agent_id.as_deref(),
+                    tool_name,
+                    file_path.as_deref(),
+                    *ts,
+                ),
+                Event::SubagentStart {
+                    session_id,
+                    agent_id,
+                    agent_type,
+                    tab_id,
+                    ts,
+                } => inner.on_subagent_start(
+                    session_id.clone(),
+                    agent_id.clone(),
+                    agent_type.clone(),
+                    tab_id.clone(),
+                    *ts,
+                ),
+                Event::SubagentStop {
+                    session_id,
+                    agent_id,
+                    ts,
+                    ..
+                } => inner.on_subagent_stop(session_id, agent_id, *ts),
+                Event::SessionStop { session_id, ts, .. } => {
+                    inner.on_session_stop(session_id, *ts);
+                }
+                Event::Notification { session_id, ts, .. } => {
+                    if let Some(agent) = inner.agents.get_mut(session_id.as_str()) {
+                        agent.last_activity = *ts;
+                    }
+                }
+                Event::RunComplete { .. }
+                | Event::PrStatusChanged { .. }
+                | Event::RetryDue { .. }
+                | Event::IssueDetected { .. }
+                | Event::PrMerged { .. } => {}
+            }
+        }
+        Ok(())
+    }
+
+    /// Rewrite the JSONL file with only the given events (atomic via `write_atomic`).
+    fn compact_persistence_file(&self, events: &[Event]) -> Result<(), AppError> {
+        let Some(path) = &self.persistence_path else {
+            return Ok(());
+        };
+
+        let mut content = String::new();
+        for event in events {
+            if let Ok(line) = serde_json::to_string(event) {
+                content.push_str(&line);
+                content.push('\n');
+            }
+        }
+
+        crate::util::write_atomic(path, content.as_bytes())?;
+        info!("Compacted activity file to {} events at {}", events.len(), path.display());
+        Ok(())
+    }
+
+    /// Append a single event as a JSON line to the persistence file.
+    fn persist_event(&self, event: &Event) {
+        let Some(path) = &self.persistence_path else {
+            return;
+        };
+
+        let line = match serde_json::to_string(event) {
+            Ok(l) => l,
+            Err(e) => {
+                error!("Failed to serialize event for persistence: {e}");
+                return;
+            }
+        };
+
+        let result = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .and_then(|mut f| writeln!(f, "{line}"));
+
+        if let Err(e) = result {
+            error!("Failed to persist activity event to {}: {e}", path.display());
         }
     }
 
@@ -185,7 +417,18 @@ impl ActivityStore {
     }
 
     async fn handle_event(&self, event: Event) {
+        // Persist before processing so the event survives a crash
+        self.persist_event(&event);
+
         let mut inner = self.inner.lock().await;
+        inner.events.push(event.clone());
+
+        // Trim in-memory events list to avoid unbounded growth
+        if inner.events.len() > MAX_PERSISTED_EVENTS {
+            let drain_count = inner.events.len() - MAX_PERSISTED_EVENTS;
+            inner.events.drain(..drain_count);
+        }
+
         match event {
             Event::SessionStart {
                 session_id,
@@ -251,6 +494,19 @@ impl ActivityStore {
         }
     }
 
+    /// Get all events recorded since a given timestamp.
+    /// Used by the overnight summary to query activity from the last session.
+    pub async fn get_events_since(&self, since_ms: EpochMs) -> Vec<Event> {
+        self.inner
+            .lock()
+            .await
+            .events
+            .iter()
+            .filter(|e| event_ts(e) >= since_ms)
+            .cloned()
+            .collect()
+    }
+
     pub async fn get_all_files(&self) -> Vec<FileAccess> {
         self.inner.lock().await.files.values().cloned().collect()
     }
@@ -304,6 +560,24 @@ impl ActivityStore {
             .filter(|a| a.agent_id.is_none() && a.status == AgentStatus::Active)
             .cloned()
             .collect()
+    }
+}
+
+/// Extract the timestamp from any event variant (used for filtering).
+fn event_ts(event: &Event) -> EpochMs {
+    match event {
+        Event::SessionStart { ts, .. }
+        | Event::ToolStart { ts, .. }
+        | Event::ToolEnd { ts, .. }
+        | Event::SubagentStart { ts, .. }
+        | Event::SubagentStop { ts, .. }
+        | Event::SessionStop { ts, .. }
+        | Event::Notification { ts, .. }
+        | Event::RunComplete { ts, .. }
+        | Event::PrStatusChanged { ts, .. }
+        | Event::IssueDetected { ts, .. }
+        | Event::PrMerged { ts, .. } => *ts,
+        Event::RetryDue { .. } => 0,
     }
 }
 

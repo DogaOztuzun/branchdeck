@@ -16,6 +16,9 @@ pub struct RunningEntry {
     pub attempt: u32,
     pub branch: String,
     pub base_branch: String,
+    /// Matched workflow name for lifecycle display status resolution (FR33)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workflow_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -168,6 +171,7 @@ pub enum OrchestratorEffect {
         worktree_path: String,
         pr_context: PrContext,
         attempt: u32,
+        workflow_name: Option<String>,
     },
     StopSession {
         pr_key: String,
