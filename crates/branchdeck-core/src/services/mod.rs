@@ -23,6 +23,7 @@ pub mod run_state;
 pub mod sat_execute;
 pub mod sat_generate;
 pub mod sat_issues;
+pub mod sat_pipeline;
 pub mod sat_score;
 pub mod shepherd;
 pub mod task;

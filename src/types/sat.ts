@@ -24,3 +24,28 @@ export type SATCycle = {
 };
 
 export type CategoryFilter = 'all' | FindingCategory;
+
+// Pipeline types (Story 3.5)
+
+export type SatPipelineStage = 'generate' | 'execute' | 'score' | 'create_issues';
+
+export type SatPipelineStatus =
+  | { status: 'running'; stage: SatPipelineStage }
+  | { status: 'completed' }
+  | { status: 'failed'; stage: SatPipelineStage; error: string };
+
+export type SatStageResult = {
+  stage: SatPipelineStage;
+  success: boolean;
+  duration_ms: number;
+  error?: string;
+};
+
+export type SatPipelineResult = {
+  status: SatPipelineStatus;
+  stages: SatStageResult[];
+  total_duration_ms: number;
+  run_id?: string;
+  aggregate_score?: number;
+  issues_created?: number;
+};

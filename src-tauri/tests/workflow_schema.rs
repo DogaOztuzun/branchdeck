@@ -462,6 +462,52 @@ fn validate_inf_budget() {
 }
 
 #[test]
+fn sat_orchestrator_workflow_parses_and_validates() {
+    let content = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../workflows/sat-orchestrator/WORKFLOW.md"
+    ))
+    .expect("should read sat-orchestrator WORKFLOW.md");
+    let def = parse_workflow_md(&content).expect("should parse sat-orchestrator");
+    assert_eq!(def.config.name, "sat-orchestrator");
+    assert_eq!(def.config.tracker.kind, TrackerKind::Manual);
+
+    let agent = def.config.agent.as_ref().expect("should have agent config");
+    assert_eq!(agent.max_budget_usd, Some(15.0));
+    assert_eq!(agent.timeout_minutes, Some(30));
+
+    assert_eq!(def.config.outcomes.len(), 2);
+    assert_eq!(def.config.outcomes[0].name, "issues-created");
+    assert_eq!(def.config.outcomes[0].detect, OutcomeDetector::FileExists);
+    assert_eq!(def.config.outcomes[0].next, OutcomeAction::Complete);
+    assert_eq!(def.config.outcomes[1].name, "run-failed");
+    assert_eq!(def.config.outcomes[1].detect, OutcomeDetector::RunFailed);
+    assert_eq!(def.config.outcomes[1].next, OutcomeAction::Retry);
+
+    let retry = def.config.retry.as_ref().expect("should have retry config");
+    assert_eq!(retry.max_attempts, 2);
+    assert_eq!(retry.backoff, BackoffStrategy::Fixed);
+    assert_eq!(retry.base_delay_ms, 10000);
+
+    let lc = def
+        .config
+        .lifecycle
+        .as_ref()
+        .expect("should have lifecycle config");
+    assert_eq!(lc.dispatched.as_deref(), Some("Generating Scenarios"));
+    assert_eq!(lc.complete.as_deref(), Some("Cycle Complete"));
+    assert_eq!(lc.failed.as_deref(), Some("Cycle Failed"));
+
+    let errors = validate_workflow_def(&def);
+    assert!(errors.is_empty(), "validation errors: {errors:?}");
+
+    assert!(
+        def.prompt.contains("Pipeline stages"),
+        "prompt should contain pipeline instructions"
+    );
+}
+
+#[test]
 fn validate_whitespace_description() {
     let md = "---\nname: test\ndescription: \"   \"\ntracker:\n  kind: manual\n---\nprompt\n";
     let def = parse_workflow_md(md).expect("should parse");

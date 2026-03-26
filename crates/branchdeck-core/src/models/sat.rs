@@ -711,3 +711,117 @@ pub struct SatIssueResult {
     /// Count of failures.
     pub failed_count: usize,
 }
+
+// ===========================================================================
+// Pipeline types (Story 3.5)
+// ===========================================================================
+
+/// Stage in the SAT pipeline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SatPipelineStage {
+    /// Generate scenarios and build manifest.
+    Generate,
+    /// Execute scenarios via `WebDriver`.
+    Execute,
+    /// Score results with LLM-as-judge.
+    Score,
+    /// Create GitHub issues from findings.
+    CreateIssues,
+}
+
+impl std::fmt::Display for SatPipelineStage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Generate => f.write_str("generate"),
+            Self::Execute => f.write_str("execute"),
+            Self::Score => f.write_str("score"),
+            Self::CreateIssues => f.write_str("create-issues"),
+        }
+    }
+}
+
+/// Status of a SAT pipeline run.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "status")]
+pub enum SatPipelineStatus {
+    /// Pipeline is currently running a stage.
+    Running { stage: SatPipelineStage },
+    /// Pipeline completed all stages successfully.
+    Completed,
+    /// Pipeline failed at a specific stage.
+    Failed {
+        stage: SatPipelineStage,
+        error: String,
+    },
+}
+
+impl std::fmt::Display for SatPipelineStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Running { stage } => write!(f, "running ({stage})"),
+            Self::Completed => f.write_str("completed"),
+            Self::Failed { stage, error } => write!(f, "failed at {stage}: {error}"),
+        }
+    }
+}
+
+/// Configuration for a full SAT pipeline cycle.
+#[derive(Debug, Clone)]
+pub struct SatPipelineConfig {
+    /// Root directory of the project (where `sat/` lives).
+    pub project_root: PathBuf,
+    /// Optional scenario ID filter — only execute these scenarios.
+    #[allow(dead_code)]
+    pub scenario_filter: Vec<String>,
+    /// Maximum budget in USD for the entire cycle.
+    pub max_budget_usd: f64,
+}
+
+impl SatPipelineConfig {
+    /// Create a config with standard defaults for a project root.
+    #[must_use]
+    pub fn new(project_root: PathBuf) -> Self {
+        Self {
+            project_root,
+            scenario_filter: Vec::new(),
+            max_budget_usd: 15.0,
+        }
+    }
+}
+
+/// Per-stage timing record in the pipeline result.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SatStageResult {
+    /// Which stage this covers.
+    pub stage: SatPipelineStage,
+    /// Whether the stage succeeded.
+    pub success: bool,
+    /// Duration of this stage in milliseconds.
+    pub duration_ms: u64,
+    /// Error message if the stage failed.
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+/// Result of a complete SAT pipeline run.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SatPipelineResult {
+    /// Overall status of the pipeline.
+    pub status: SatPipelineStatus,
+    /// Per-stage results (in order of execution).
+    pub stages: Vec<SatStageResult>,
+    /// Total duration in milliseconds.
+    pub total_duration_ms: u64,
+    /// Run ID produced by the execute stage (if reached).
+    #[serde(default)]
+    pub run_id: Option<String>,
+    /// Aggregate satisfaction score (if scoring completed).
+    #[serde(default)]
+    pub aggregate_score: Option<u32>,
+    /// Number of issues created (if issue creation completed).
+    #[serde(default)]
+    pub issues_created: Option<usize>,
+}

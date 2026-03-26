@@ -451,6 +451,8 @@ pub fn run() {
             commands::orchestrator::write_approval_cmd,
             commands::orchestrator::list_discovered_prs_cmd,
             commands::orchestrator::get_running_entries_cmd,
+            // SAT
+            commands::sat::trigger_sat_cycle,
             // Task
             commands::task::create_task_cmd,
             commands::task::get_task_cmd,
