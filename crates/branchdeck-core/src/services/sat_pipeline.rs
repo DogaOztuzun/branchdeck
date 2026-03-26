@@ -132,6 +132,24 @@ pub fn run_sat_pipeline(
                 manifest.persona_count, manifest.scenario_count
             );
             stages.push(stage_ok(SatPipelineStage::Generate, duration));
+
+            // Fail early if there are no scenarios to execute
+            if manifest.scenario_count == 0 {
+                let msg = "manifest contains 0 scenarios — nothing to execute".to_string();
+                error!("Pipeline: {msg}");
+                let total = millis_u64(pipeline_start.elapsed());
+                return Ok(build_pipeline_result(
+                    stages,
+                    SatPipelineStatus::Failed {
+                        stage: SatPipelineStage::Generate,
+                        error: msg,
+                    },
+                    total,
+                    None,
+                    None,
+                    None,
+                ));
+            }
         }
         Err(e) => {
             let duration = millis_u64(gen_start.elapsed());

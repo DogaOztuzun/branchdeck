@@ -17,6 +17,34 @@ use crate::models::sat::{
 };
 
 // ---------------------------------------------------------------------------
+// ID sanitization (security)
+// ---------------------------------------------------------------------------
+
+/// Sanitize a scenario/persona ID for safe use as a filename component.
+///
+/// Strips directory separators and replaces non-alphanumeric characters
+/// (except hyphens and underscores) to prevent path traversal.
+///
+/// # Errors
+/// Returns `AppError::Sat` if the ID is empty after sanitization.
+pub fn sanitize_id_for_filename(id: &str) -> Result<String, AppError> {
+    let sanitized: String = id
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    if sanitized.is_empty() {
+        return Err(AppError::Sat("empty scenario id after sanitization".into()));
+    }
+    Ok(sanitized)
+}
+
+// ---------------------------------------------------------------------------
 // Persona parsing
 // ---------------------------------------------------------------------------
 
@@ -294,7 +322,8 @@ pub fn write_manifest(manifest: &SatManifest, scenarios_dir: &Path) -> Result<Pa
 /// # Errors
 /// Returns `AppError::Sat` if the file cannot be written.
 pub fn write_scenario(scenario: &SatScenario, scenarios_dir: &Path) -> Result<PathBuf, AppError> {
-    let filename = format!("{}.md", scenario.meta.id);
+    let safe_id = sanitize_id_for_filename(&scenario.meta.id)?;
+    let filename = format!("{safe_id}.md");
     let path = scenarios_dir.join(&filename);
     let content = render_scenario_md(scenario);
     crate::util::write_atomic(&path, content.as_bytes()).map_err(|e| {
@@ -408,7 +437,15 @@ pub fn load_scenarios(dir: &Path) -> Result<Vec<SatScenario>, AppError> {
 /// Extract the text content of a `## Section` heading from markdown.
 fn extract_section(body: &str, heading: &str) -> Option<String> {
     let marker = format!("## {heading}");
-    let start = body.find(&marker)?;
+    // Find marker followed by newline or end-of-string (exact heading match)
+    let start = body.find(&marker).and_then(|p| {
+        let after = p + marker.len();
+        if after >= body.len() || body.as_bytes()[after] == b'\n' {
+            Some(p)
+        } else {
+            None
+        }
+    })?;
     let after_heading = &body[start + marker.len()..];
     let content_start = after_heading.find('\n').map_or(0, |i| i + 1);
     let rest = &after_heading[content_start..];
@@ -436,16 +473,25 @@ fn extract_list_section(body: &str, heading: &str) -> Vec<String> {
             if trimmed.is_empty() {
                 return None;
             }
-            // Strip leading "1. ", "- ", "* " etc.
-            let stripped = trimmed
-                .trim_start_matches(|c: char| {
-                    c.is_ascii_digit() || c == '.' || c == '-' || c == '*'
-                })
-                .trim_start();
-            if stripped.is_empty() {
+            // Strip leading bullet/number prefix: "- ", "* ", "1. ", "10. " etc.
+            let content = if let Some(rest) = trimmed.strip_prefix("- ") {
+                rest
+            } else if let Some(rest) = trimmed.strip_prefix("* ") {
+                rest
+            } else if let Some(dot_pos) = trimmed.find(". ") {
+                let prefix = &trimmed[..dot_pos];
+                if prefix.chars().all(|c| c.is_ascii_digit()) {
+                    &trimmed[dot_pos + 2..]
+                } else {
+                    trimmed
+                }
+            } else {
+                trimmed
+            };
+            if content.is_empty() {
                 None
             } else {
-                Some(stripped.to_string())
+                Some(content.to_string())
             }
         })
         .collect()

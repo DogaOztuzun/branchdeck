@@ -23,10 +23,7 @@ pub async fn trigger_sat_cycle(project_root: String) -> Result<SatPipelineResult
         )));
     }
 
-    // Resolve GitHub owner/repo for issue creation
-    let (owner, repo) = sat_pipeline::resolve_repo_info(root)?;
-
-    let config = SatPipelineConfig::new(root.to_path_buf());
+    let root_path = root.to_path_buf();
 
     // Use no-op implementations for the integration boundaries.
     // In production, the agent-driven path handles LLM and GitHub API calls.
@@ -39,8 +36,11 @@ pub async fn trigger_sat_cycle(project_root: String) -> Result<SatPipelineResult
     let judge = PlaceholderJudge;
     let creator = PlaceholderCreator;
 
-    // Run the pipeline on a blocking thread to avoid blocking the Tauri async runtime
+    // Run resolve_repo_info + pipeline on a blocking thread to avoid
+    // blocking the Tauri async runtime (git2 I/O is synchronous)
     let result = tokio::task::spawn_blocking(move || {
+        let (owner, repo) = sat_pipeline::resolve_repo_info(&root_path)?;
+        let config = SatPipelineConfig::new(root_path);
         sat_pipeline::run_sat_pipeline(&config, &judge, &creator, &owner, &repo)
     })
     .await

@@ -12,7 +12,7 @@ agent:
 outcomes:
   - name: issues-created
     detect: file-exists
-    path: sat/runs/latest/issues.json
+    path: sat/runs/latest/issues.json  # 'latest' is a symlink updated after each run
     next: complete
   - name: run-failed
     detect: run-failed

@@ -276,6 +276,12 @@ pub fn clamp_score(score: u32) -> u32 {
     score.min(100)
 }
 
+/// Clamp a severity value to the valid 1-5 range.
+#[must_use]
+pub fn clamp_severity(raw: u8) -> u8 {
+    raw.clamp(1, 5)
+}
+
 /// Parse the raw LLM response text into a `SatScenarioScore`.
 ///
 /// Extracts JSON from the response (handles markdown code fences),
@@ -312,7 +318,7 @@ pub fn parse_score_response(
             category: parse_finding_category(&f.category),
             confidence: parse_confidence_level(&f.confidence),
             evidence: f.evidence,
-            severity: f.severity.clamp(1, 5),
+            severity: clamp_severity(f.severity),
         })
         .collect();
 

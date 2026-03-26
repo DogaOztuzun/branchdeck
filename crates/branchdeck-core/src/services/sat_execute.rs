@@ -247,7 +247,8 @@ pub fn build_run_result(
 /// # Errors
 /// Returns `AppError::Sat` if serialization or file write fails.
 pub fn write_trajectory(trajectory: &SatTrajectory, run_dir: &Path) -> Result<PathBuf, AppError> {
-    let filename = format!("trajectory-{}.json", trajectory.scenario_id);
+    let safe_id = sat_generate::sanitize_id_for_filename(&trajectory.scenario_id)?;
+    let filename = format!("trajectory-{safe_id}.json");
     let path = run_dir.join(&filename);
     let json = serde_json::to_string_pretty(trajectory).map_err(|e| {
         error!("Failed to serialize trajectory: {e}");
@@ -327,6 +328,7 @@ pub fn build_runner_env(
 ///
 /// # Errors
 /// Returns `AppError::Sat` if the process cannot be spawned or exits with error.
+#[allow(clippy::too_many_lines)]
 pub fn run_wdio_scenario(
     config: &SatRunConfig,
     scenario_file: &Path,
@@ -352,24 +354,59 @@ pub fn run_wdio_scenario(
     cmd.arg("wdio")
         .arg("run")
         .arg(&wdio_config)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
         .current_dir(&config.project_root);
 
     for (key, value) in &env_vars {
         cmd.env(key, value);
     }
 
-    let output = cmd.output().map_err(|e| {
+    let mut child = cmd.spawn().map_err(|e| {
         error!("Failed to spawn WDIO runner: {e}");
         AppError::Sat(format!("failed to spawn WDIO runner: {e}"))
     })?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    // Timeout: 5 minutes per scenario to prevent hung processes
+    let timeout = std::time::Duration::from_secs(300);
+    let start = std::time::Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(s)) => break s,
+            Ok(None) => {
+                if start.elapsed() > timeout {
+                    let _ = child.kill();
+                    let scenario_id = scenario_file.to_string_lossy();
+                    return Err(AppError::Sat(format!(
+                        "scenario {scenario_id} timed out after {}s",
+                        timeout.as_secs()
+                    )));
+                }
+                std::thread::sleep(std::time::Duration::from_millis(500));
+            }
+            Err(e) => {
+                return Err(AppError::Sat(format!("failed to wait on WDIO runner: {e}")));
+            }
+        }
+    };
 
-    if !output.status.success() {
+    let mut stdout_bytes = Vec::new();
+    let mut stderr_bytes = Vec::new();
+    if let Some(mut out) = child.stdout.take() {
+        std::io::Read::read_to_end(&mut out, &mut stdout_bytes).ok();
+    }
+    if let Some(mut err) = child.stderr.take() {
+        std::io::Read::read_to_end(&mut err, &mut stderr_bytes).ok();
+    }
+    let stdout = String::from_utf8_lossy(&stdout_bytes);
+    let stderr = String::from_utf8_lossy(&stderr_bytes);
+
+    let output_status_success = status.success();
+
+    if !output_status_success {
         warn!(
             "WDIO runner exited with status {}: stderr={}",
-            output.status,
+            status,
             stderr.chars().take(500).collect::<String>()
         );
     }
@@ -404,7 +441,7 @@ pub fn run_wdio_scenario(
             AppError::Sat(format!("trajectory parse error: {e}"))
         })?;
         Ok(trajectory)
-    } else if !output.status.success() {
+    } else if !output_status_success {
         // Runner failed entirely — classify as runner failure
         let now = chrono::Utc::now().to_rfc3339();
         let trajectory = build_trajectory(
@@ -423,6 +460,35 @@ pub fn run_wdio_scenario(
             "WDIO runner succeeded but no trajectory file found at {}",
             trajectory_path.display()
         )))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Latest symlink management
+// ---------------------------------------------------------------------------
+
+/// Create or update the `sat/runs/latest` symlink to point to the given run.
+///
+/// Best-effort: logs a warning on failure but does not propagate errors,
+/// since the symlink is a convenience for workflow outcome detection.
+fn update_latest_symlink(runs_dir: &Path, run_id: &str) {
+    let latest = runs_dir.join("latest");
+    // Remove existing symlink (ignore error if it doesn't exist)
+    let _ = std::fs::remove_file(&latest);
+    #[cfg(unix)]
+    {
+        if let Err(e) = std::os::unix::fs::symlink(run_id, &latest) {
+            warn!(
+                "Failed to create latest symlink at {}: {e}",
+                latest.display()
+            );
+        } else {
+            debug!("Updated latest symlink -> {run_id}");
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        warn!("Symlink creation not supported on this platform; latest symlink skipped");
     }
 }
 
@@ -541,6 +607,9 @@ pub fn execute_run(config: &SatRunConfig, filter_ids: &[String]) -> Result<SatRu
     );
 
     write_run_result(&run_result, &run_dir)?;
+
+    // 5. Update the `latest` symlink so workflow outcome detectors can find it
+    update_latest_symlink(&config.runs_dir, &run_id);
 
     info!(
         "SAT run {run_id} complete: {}/{} scenarios completed, {} aborted, {} runner failures",

@@ -72,9 +72,9 @@ pub trait IssueCreator {
 pub fn generate_fingerprint(scenario_id: &str, persona: &str, run_id: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(scenario_id.as_bytes());
-    hasher.update(b"|");
+    hasher.update(b"\x00");
     hasher.update(persona.as_bytes());
-    hasher.update(b"|");
+    hasher.update(b"\x00");
     hasher.update(run_id.as_bytes());
     let hash = hasher.finalize();
     // Use first 16 bytes (32 hex chars) for a readable fingerprint
@@ -153,7 +153,9 @@ pub fn scrub_secrets(input: &str) -> String {
 
     // Replace known token prefixes
     for &(name, prefix) in SECRET_MARKERS {
-        while let Some(pos) = output.find(prefix) {
+        let mut search_from = 0;
+        while let Some(rel_pos) = output[search_from..].find(prefix) {
+            let pos = search_from + rel_pos;
             // Find the end of the token (first whitespace, quote, or end of string)
             let token_start = pos;
             let rest = &output[pos..];
@@ -164,8 +166,11 @@ pub fn scrub_secrets(input: &str) -> String {
             // Only redact if it's long enough to plausibly be a real token
             if token.len() > prefix.len() + 4 {
                 output.replace_range(token_start..token_end, &format!("[REDACTED {name}]"));
+                // After replacement, continue searching from end of replacement
+                search_from = token_start + format!("[REDACTED {name}]").len();
             } else {
-                break; // Don't infinite loop on short matches
+                // Skip past this short match and keep scanning
+                search_from = token_end;
             }
         }
     }
