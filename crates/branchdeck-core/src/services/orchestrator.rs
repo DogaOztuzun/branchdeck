@@ -220,11 +220,11 @@ pub fn apply_merge_event(
         return Vec::new();
     }
 
-    // Record to prevent duplicate triggers (bounded: cap at 500, evict oldest)
+    // Record to prevent duplicate triggers (bounded: cap at 500, evict arbitrary entry)
     state.merged_prs.insert(key.clone());
     if state.merged_prs.len() > 500 {
-        if let Some(oldest) = state.merged_prs.iter().next().cloned() {
-            state.merged_prs.remove(&oldest);
+        if let Some(evict) = state.merged_prs.iter().next().cloned() {
+            state.merged_prs.remove(&evict);
         }
     }
 
