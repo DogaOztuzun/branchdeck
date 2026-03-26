@@ -243,9 +243,10 @@ impl ActivityStore {
             Event::RunComplete { .. }
             | Event::PrStatusChanged { .. }
             | Event::RetryDue { .. }
-            | Event::IssueDetected { .. } => {
+            | Event::IssueDetected { .. }
+            | Event::PrMerged { .. } => {
                 // RunComplete handled by KnowledgeService
-                // PrStatusChanged, RetryDue, IssueDetected handled by Orchestrator
+                // PrStatusChanged, RetryDue, IssueDetected, PrMerged handled by Orchestrator
             }
         }
     }

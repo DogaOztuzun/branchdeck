@@ -474,6 +474,95 @@ pub async fn list_all_open_prs(
     Ok(all_prs)
 }
 
+/// List recently merged PRs for a single repo.
+/// Queries closed PRs and filters to those with `merged_at` set.
+/// Returns the 20 most recent closed PRs that were actually merged.
+///
+/// # Errors
+/// Returns `AppError` on authentication, API, or rate-limit failures.
+pub async fn list_recently_merged_prs(
+    repo_path: &str,
+) -> Result<Vec<crate::models::github::MergedPrInfo>, AppError> {
+    let (owner, repo_name) = resolve_owner_repo(Path::new(repo_path))?;
+    let display_name = format!("{owner}/{repo_name}");
+
+    let client = get_client().await?;
+
+    let pulls = client
+        .pulls(&owner, &repo_name)
+        .list()
+        .state(octocrab::params::State::Closed)
+        .sort(octocrab::params::pulls::Sort::Updated)
+        .direction(octocrab::params::Direction::Descending)
+        .per_page(20)
+        .send()
+        .await
+        .map_err(|e| {
+            error!("Failed to list merged PRs for {owner}/{repo_name}: {e}");
+            AppError::GitHub(e.to_string())
+        })?;
+
+    let merged: Vec<crate::models::github::MergedPrInfo> = pulls
+        .items
+        .iter()
+        .filter_map(|pr| {
+            let merged_at = pr.merged_at?;
+            Some(crate::models::github::MergedPrInfo {
+                number: pr.number,
+                title: pr.title.clone().unwrap_or_default(),
+                branch: pr.head.ref_field.clone(),
+                base_branch: pr.base.ref_field.clone(),
+                repo_name: display_name.clone(),
+                merged_at: merged_at.to_rfc3339(),
+            })
+        })
+        .collect();
+
+    debug!(
+        "Found {} recently merged PRs for {display_name}",
+        merged.len()
+    );
+    Ok(merged)
+}
+
+/// List recently merged PRs across all managed repos.
+///
+/// # Errors
+/// Returns `AppError` only if ALL repos fail.
+pub async fn list_all_recently_merged_prs(
+    repo_paths: &[String],
+) -> Result<Vec<crate::models::github::MergedPrInfo>, AppError> {
+    let mut all_merged = Vec::new();
+    let mut last_error: Option<AppError> = None;
+    let mut any_succeeded = false;
+
+    for repo_path in repo_paths {
+        match list_recently_merged_prs(repo_path).await {
+            Ok(merged) => {
+                any_succeeded = true;
+                all_merged.extend(merged);
+            }
+            Err(e) => {
+                error!("Failed to list merged PRs for {repo_path}: {e}");
+                last_error = Some(e);
+            }
+        }
+    }
+
+    if !any_succeeded {
+        if let Some(e) = last_error {
+            return Err(e);
+        }
+    }
+
+    info!(
+        "Listed {} total merged PRs across {} repos",
+        all_merged.len(),
+        repo_paths.len()
+    );
+    Ok(all_merged)
+}
+
 /// Enrich a `PrSummary` with CI status and review decision by fetching checks and reviews.
 ///
 /// # Errors

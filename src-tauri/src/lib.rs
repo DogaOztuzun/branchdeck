@@ -305,6 +305,10 @@ pub fn run() {
                         Arc::clone(&event_bus),
                         repo_paths.clone(),
                     );
+                    services::merge_poller::start_merge_poller(
+                        Arc::clone(&event_bus),
+                        repo_paths.clone(),
+                    );
                     services::pr_poller::start_pr_poller(
                         event_bus,
                         repo_paths,

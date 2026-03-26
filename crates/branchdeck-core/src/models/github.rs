@@ -41,3 +41,16 @@ pub struct IssueSummary {
     pub created_at: Option<String>,
     pub url: String,
 }
+
+/// Lightweight summary of a recently merged PR.
+/// Used by the merge poller to detect post-merge triggers.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct MergedPrInfo {
+    pub number: u64,
+    pub title: String,
+    pub branch: String,
+    pub base_branch: String,
+    pub repo_name: String,
+    pub merged_at: String,
+}

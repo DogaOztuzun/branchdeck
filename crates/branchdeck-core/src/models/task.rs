@@ -37,6 +37,12 @@ pub struct TaskFrontmatter {
     pub pr: Option<u64>,
     pub created: String,
     pub run_count: u32,
+    /// Current SAT fix-verify cycle iteration (1-based). `None` if not in a cycle.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cycle_iteration: Option<u32>,
+    /// Maximum SAT fix-verify cycle iterations allowed. `None` if not in a cycle.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cycle_max: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize)]

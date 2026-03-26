@@ -7,9 +7,10 @@ use branchdeck_lib::models::orchestrator::{
     is_pr_eligible, LifecycleStatus, Orchestrator, OrchestratorConfig, OrchestratorEffect,
     SessionOutcome,
 };
+use branchdeck_lib::models::workflow::{TrackerKind, TriggerContext};
 use branchdeck_lib::services::orchestrator::{
-    apply_pr_event, apply_reconciliation, apply_relaunch, apply_retry_due, apply_session_end,
-    apply_skip, retry_backoff,
+    apply_merge_event, apply_pr_event, apply_reconciliation, apply_relaunch, apply_retry_due,
+    apply_session_end, apply_skip, retry_backoff,
 };
 
 fn make_config(enabled: bool, max_concurrent: u32) -> OrchestratorConfig {
@@ -589,4 +590,85 @@ fn is_pr_eligible_passing_ci_no_review_not_eligible() {
     let pr = make_pr(1, "fix/bug", Some("SUCCESS"));
 
     assert!(!is_pr_eligible(&pr, &config));
+}
+
+// --- apply_merge_event tests (Story 4.1: Post-Merge Re-Score Trigger) ---
+
+#[test]
+fn merge_event_produces_post_merge_trigger() {
+    let mut state = make_orchestrator(true, 1);
+
+    let triggers = apply_merge_event(&mut state, "test/repo", 42, "fix/sat-issue");
+
+    assert_eq!(triggers.len(), 1);
+    assert_eq!(triggers[0].kind, TrackerKind::PostMerge);
+    match &triggers[0].context {
+        TriggerContext::PostMerge {
+            repo,
+            pr_number,
+            branch,
+        } => {
+            assert_eq!(repo, "test/repo");
+            assert_eq!(*pr_number, 42);
+            assert_eq!(branch, "fix/sat-issue");
+        }
+        _ => panic!("Expected PostMerge context"),
+    }
+}
+
+#[test]
+fn merge_event_records_in_merged_prs() {
+    let mut state = make_orchestrator(true, 1);
+
+    let _ = apply_merge_event(&mut state, "test/repo", 42, "fix/thing");
+
+    assert!(state.merged_prs.contains("test/repo#42"));
+}
+
+#[test]
+fn merge_event_idempotent_skips_duplicate() {
+    let mut state = make_orchestrator(true, 1);
+
+    let first = apply_merge_event(&mut state, "test/repo", 42, "fix/thing");
+    let second = apply_merge_event(&mut state, "test/repo", 42, "fix/thing");
+
+    assert_eq!(first.len(), 1);
+    assert!(
+        second.is_empty(),
+        "Duplicate merge should produce no triggers"
+    );
+}
+
+#[test]
+fn merge_event_cleans_stale_state() {
+    let mut state = make_orchestrator(true, 1);
+    state.claimed.insert("test/repo#42".to_string());
+    state.review_ready.insert(
+        "test/repo#42".to_string(),
+        branchdeck_lib::models::orchestrator::ReviewReadyEntry {
+            pr_key: "test/repo#42".to_string(),
+            worktree_path: "/tmp/wt".to_string(),
+            attempt: 1,
+            started_at: 1000,
+            stale: false,
+            branch: "fix/thing".to_string(),
+            base_branch: "main".to_string(),
+        },
+    );
+
+    let _ = apply_merge_event(&mut state, "test/repo", 42, "fix/thing");
+
+    assert!(!state.claimed.contains("test/repo#42"));
+    assert!(!state.review_ready.contains_key("test/repo#42"));
+}
+
+#[test]
+fn merge_event_disabled_orchestrator_returns_empty() {
+    let mut state = make_orchestrator(false, 1);
+    // Even with explicit enabled=false, auto_analyze=false
+    state.config.auto_analyze = false;
+
+    let triggers = apply_merge_event(&mut state, "test/repo", 42, "fix/thing");
+
+    assert!(triggers.is_empty());
 }

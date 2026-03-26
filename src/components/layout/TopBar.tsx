@@ -15,6 +15,7 @@ const navTabs: { label: string; view: AppView }[] = [
   { label: 'Inbox', view: 'inbox' },
   { label: 'SAT', view: 'sat' },
   { label: 'Tasks', view: 'tasks' },
+  { label: 'Lifecycle', view: 'lifecycle' },
 ];
 
 export function TopBar() {

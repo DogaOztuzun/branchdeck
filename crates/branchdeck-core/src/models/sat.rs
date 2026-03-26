@@ -615,12 +615,121 @@ pub struct SatLearning {
     pub summary: String,
 }
 
+/// A cycle-level learning entry for `sat/learnings.yaml`.
+///
+/// Captures the aggregate results of a full fix-verify cycle, including
+/// issues found/fixed/verified, score changes, and false positives.
+/// Used to compute classification accuracy across cycles (FR27, NFR24).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SatCycleLearning {
+    /// ISO 8601 timestamp when the cycle learning was recorded.
+    pub recorded_at: String,
+    /// Run ID of the post-merge re-score.
+    pub run_id: String,
+    /// PR number that was merged (the fix).
+    pub merged_pr_number: u64,
+    /// Repository in "owner/repo" format.
+    pub repo: String,
+    /// Cycle iteration number (1-based).
+    pub cycle_iteration: u32,
+    /// Number of issues found in the original SAT run.
+    pub issues_found: usize,
+    /// Number of issues that were fixed (score improved). Used as true positives
+    /// for classification accuracy: fixed = correctly identified as real app bugs.
+    pub issues_fixed: usize,
+    /// Number of false positives detected (runner/scenario misclassified as app).
+    pub false_positives: usize,
+    /// Aggregate score before the fix.
+    pub score_before: u32,
+    /// Aggregate score after the fix.
+    pub score_after: u32,
+    /// Verification outcome of this cycle.
+    pub outcome: VerificationOutcome,
+}
+
 /// Top-level structure of `sat/learnings.yaml`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct SatLearningsFile {
     #[serde(default)]
     pub learnings: Vec<SatLearning>,
+    /// Cycle-level learnings from fix-verify cycles (Story 4.4).
+    #[serde(default)]
+    pub cycle_learnings: Vec<SatCycleLearning>,
+}
+
+// ===========================================================================
+// Circuit breaker types (Story 4.4)
+// ===========================================================================
+
+/// Configuration for the circuit breaker that limits autonomous fix iterations.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct CircuitBreakerConfig {
+    /// Maximum number of fix-verify iterations per cycle.
+    /// Default: 3 (FR25).
+    pub max_iterations: u32,
+}
+
+impl Default for CircuitBreakerConfig {
+    fn default() -> Self {
+        Self { max_iterations: 3 }
+    }
+}
+
+/// Tracked state of the circuit breaker for a given cycle.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct CircuitBreakerState {
+    /// Current iteration number (1-based, incremented each time a fix cycle runs).
+    pub cycle_iteration: u32,
+    /// Maximum iterations allowed (from config).
+    pub cycle_max: u32,
+    /// Repository in "owner/repo" format.
+    pub repo: String,
+    /// The original issue number that started this cycle.
+    pub original_issue_number: Option<u64>,
+}
+
+/// Decision from the circuit breaker: continue or stop.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CircuitBreakerDecision {
+    /// Iteration is within limits — cycle may continue.
+    Continue {
+        /// Current iteration (after increment).
+        iteration: u32,
+        /// Maximum allowed.
+        max: u32,
+    },
+    /// Iteration limit reached — cycle must stop.
+    Tripped {
+        /// The iteration that would have been next.
+        iteration: u32,
+        /// Maximum allowed.
+        max: u32,
+        /// Human-readable reason.
+        reason: String,
+    },
+}
+
+/// Classification accuracy metrics computed from cycle learnings.
+///
+/// Tracks how well the SAT LLM judge classifies findings over time (NFR24).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ClassificationAccuracy {
+    /// Total classifications (`issues_found` across all cycles).
+    pub total_classifications: usize,
+    /// True positives: issues that were found AND verified as fixed.
+    pub true_positives: usize,
+    /// False positives: findings that were misclassified (runner/scenario as app).
+    pub false_positives: usize,
+    /// Accuracy: `true_positives / (true_positives + false_positives)`.
+    /// `None` if no data is available.
+    pub accuracy: Option<f64>,
+    /// Number of cycles included in this calculation.
+    pub cycles_counted: usize,
 }
 
 // ===========================================================================
@@ -824,4 +933,197 @@ pub struct SatPipelineResult {
     /// Number of issues created (if issue creation completed).
     #[serde(default)]
     pub issues_created: Option<usize>,
+}
+
+// ===========================================================================
+// Post-merge re-score context (Story 4.1)
+// ===========================================================================
+
+/// Context for a post-merge re-score run.
+/// Links the re-score back to the original issue/PR for traceability.
+/// Written to the worktree as `.branchdeck/rescore-context.json`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct PostMergeRescoreContext {
+    /// Repository in "owner/repo" format.
+    pub repo: String,
+    /// PR number that was merged (the implement-issue PR).
+    pub merged_pr_number: u64,
+    /// Branch name of the merged PR.
+    pub merged_branch: String,
+    /// Scenario IDs to re-run (from the original SAT run that found the issues).
+    /// Empty means re-run all scenarios.
+    #[serde(default)]
+    pub scenario_filter: Vec<String>,
+    /// Original issue number that the merged PR was fixing (if traceable).
+    #[serde(default)]
+    pub original_issue_number: Option<u64>,
+    /// Run ID of the original SAT run that found the issue (if known).
+    #[serde(default)]
+    pub original_run_id: Option<String>,
+}
+
+/// Result of detecting a post-merge trigger.
+/// Produced by the pure `apply_merge_event` function.
+#[derive(Debug, Clone)]
+pub struct PostMergeTrigger {
+    /// PR key (e.g., "owner/repo#42").
+    pub pr_key: String,
+    /// Context for the re-score run.
+    pub rescore_context: PostMergeRescoreContext,
+}
+
+// ===========================================================================
+// Score comparison types (Story 4.2)
+// ===========================================================================
+
+/// Per-persona score delta showing before/after change.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct PersonaScoreDelta {
+    /// Persona name (e.g., "confused-newcomer").
+    pub persona: String,
+    /// Score before the fix (from the original SAT run).
+    pub before: u32,
+    /// Score after the fix (from the post-merge re-score).
+    pub after: u32,
+    /// Signed delta (after - before). Positive = improvement.
+    pub delta: i32,
+}
+
+/// Per-scenario comparison of before/after scores.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ScenarioComparison {
+    /// Scenario ID.
+    pub scenario_id: String,
+    /// Persona associated with the scenario.
+    pub persona: String,
+    /// Score before the fix.
+    pub before_score: u32,
+    /// Score after the fix.
+    pub after_score: u32,
+    /// Signed delta (after - before). Positive = improvement.
+    pub delta: i32,
+    /// Per-dimension deltas.
+    pub dimension_deltas: DimensionDeltas,
+}
+
+/// Per-dimension before/after deltas.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct DimensionDeltas {
+    pub functionality: i32,
+    pub usability: i32,
+    pub error_handling: i32,
+    pub performance: i32,
+}
+
+/// Full before/after score comparison for a SAT cycle.
+/// Written to `sat/runs/run-{id}/comparison.json` (NFR23).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ScoreComparison {
+    /// Run ID of the original (before) SAT run.
+    pub before_run_id: String,
+    /// Run ID of the post-merge (after) re-score run.
+    pub after_run_id: String,
+    /// ISO 8601 timestamp when comparison was computed.
+    pub compared_at: String,
+    /// Per-scenario comparisons (only scenarios present in both runs).
+    pub scenario_comparisons: Vec<ScenarioComparison>,
+    /// Per-persona aggregated deltas.
+    pub persona_deltas: Vec<PersonaScoreDelta>,
+    /// Overall score before the fix.
+    pub overall_before: u32,
+    /// Overall score after the fix.
+    pub overall_after: u32,
+    /// Overall signed delta.
+    pub overall_delta: i32,
+    /// Number of scenarios that improved (delta > 0).
+    pub improved_count: usize,
+    /// Number of scenarios that regressed (delta < 0).
+    pub regressed_count: usize,
+    /// Number of scenarios unchanged (delta == 0).
+    pub unchanged_count: usize,
+}
+
+// ===========================================================================
+// Regression detection types (Story 4.3)
+// ===========================================================================
+
+/// A single regression detected by comparing before/after scores.
+///
+/// A regression is a scenario that previously had a higher score
+/// and now scores lower after a fix was merged.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct RegressionFinding {
+    /// Scenario ID that regressed.
+    pub scenario_id: String,
+    /// Persona associated with the scenario.
+    pub persona: String,
+    /// Score before the fix (from the original SAT run).
+    pub before_score: u32,
+    /// Score after the fix (from the post-merge re-score).
+    pub after_score: u32,
+    /// Magnitude of regression (always positive; before - after).
+    pub regression_magnitude: u32,
+    /// Per-dimension regression details (negative values = regression).
+    pub dimension_deltas: DimensionDeltas,
+    /// The PR number suspected of causing the regression.
+    pub suspected_pr_number: u64,
+    /// Repository in "owner/repo" format.
+    pub repo: String,
+}
+
+/// Outcome of verifying a SAT cycle after a fix is merged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VerificationOutcome {
+    /// All scenarios improved or stayed the same. Cycle is done.
+    Verified,
+    /// Some previously-passing scenarios now score lower. New issues needed.
+    Regressed,
+    /// Mixed: some improved, some regressed. New issues for regressions.
+    Mixed,
+}
+
+impl std::fmt::Display for VerificationOutcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Verified => f.write_str("verified"),
+            Self::Regressed => f.write_str("regressed"),
+            Self::Mixed => f.write_str("mixed"),
+        }
+    }
+}
+
+/// Full regression report for a SAT cycle verification.
+/// Written to `sat/runs/run-{id}/regression-report.json`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct RegressionReport {
+    /// Run ID of the post-merge re-score run.
+    pub after_run_id: String,
+    /// Run ID of the original (before) SAT run.
+    pub before_run_id: String,
+    /// ISO 8601 timestamp when the report was generated.
+    pub generated_at: String,
+    /// PR number that was merged (the fix).
+    pub merged_pr_number: u64,
+    /// Repository in "owner/repo" format.
+    pub repo: String,
+    /// Verification outcome.
+    pub outcome: VerificationOutcome,
+    /// Overall score delta (positive = improvement).
+    pub overall_delta: i32,
+    /// Number of scenarios that improved.
+    pub improved_count: usize,
+    /// Number of scenarios that regressed.
+    pub regressed_count: usize,
+    /// Number of scenarios unchanged.
+    pub unchanged_count: usize,
+    /// Detailed regression findings (empty if outcome is `Verified`).
+    pub regressions: Vec<RegressionFinding>,
 }

@@ -214,6 +214,8 @@ pub struct Orchestrator {
     pub completed_lifecycles: std::collections::HashMap<String, LifecycleEvent>,
     /// Cached workflow registry for trigger matching (loaded at init from all repo paths)
     pub registry: Option<crate::services::workflow::WorkflowRegistry>,
+    /// PR keys that have already been processed as merged (prevents duplicate re-score triggers)
+    pub merged_prs: std::collections::HashSet<String>,
 }
 
 impl std::fmt::Debug for Orchestrator {
@@ -245,6 +247,7 @@ impl Orchestrator {
             retry_timers: std::collections::HashMap::new(),
             completed_lifecycles: std::collections::HashMap::new(),
             registry: None,
+            merged_prs: std::collections::HashSet::new(),
         }
     }
 }
