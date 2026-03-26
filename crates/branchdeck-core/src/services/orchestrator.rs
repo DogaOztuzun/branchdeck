@@ -6,8 +6,8 @@ use log::{debug, error, info};
 use crate::models::agent::EpochMs;
 use crate::models::github::{IssueSummary, PrSummary};
 use crate::models::orchestrator::{
-    is_pr_eligible, issue_key, pr_key, LifecycleEvent, LifecycleStatus, Orchestrator,
-    OrchestratorEffect, RetryEntry, RunningEntry, SessionOutcome,
+    is_pr_eligible, issue_key, pr_key, LifecycleEvent, LifecycleStatus, LifecycleTimelineEntry,
+    Orchestrator, OrchestratorEffect, RetryEntry, RunningEntry, SessionOutcome,
 };
 use crate::models::workflow::{TrackerKind, TriggerContext, TriggerEvent};
 use crate::traits::{self, EventEmitter};
@@ -135,6 +135,9 @@ pub fn apply_pr_event(
                 attempt: 1,
                 started_at: now,
                 session_id: None, // populated by executor after dispatch
+                workflow_name: None,
+                display_status: None,
+                completed_at: None,
             },
         });
 
@@ -288,6 +291,9 @@ pub fn apply_session_end(
                     attempt: entry.attempt,
                     started_at: entry.started_at,
                     session_id: None,
+                    workflow_name: None,
+                    display_status: None,
+                    completed_at: None,
                 },
             });
         }
@@ -302,6 +308,9 @@ pub fn apply_session_end(
                 attempt: entry.attempt,
                 started_at: entry.started_at,
                 session_id: None,
+                workflow_name: None,
+                display_status: None,
+                completed_at: None,
             };
             info!("PR {pr_key} completed (fix succeeded), tracking in completed_lifecycles");
             state
@@ -324,6 +333,9 @@ pub fn apply_session_end(
                     attempt: entry.attempt,
                     started_at: entry.started_at,
                     session_id: None,
+                    workflow_name: None,
+                    display_status: None,
+                    completed_at: None,
                 };
                 state
                     .completed_lifecycles
@@ -369,6 +381,9 @@ pub fn apply_session_end(
                         attempt: entry.attempt + 1,
                         started_at: entry.started_at,
                         session_id: None,
+                        workflow_name: None,
+                        display_status: None,
+                        completed_at: None,
                     },
                 });
             }
@@ -447,6 +462,9 @@ pub fn apply_relaunch(
             attempt: next_attempt,
             started_at: now,
             session_id: None, // populated by executor after dispatch
+                workflow_name: None,
+                display_status: None,
+                completed_at: None,
         },
     });
 
@@ -551,6 +569,9 @@ pub fn apply_reconciliation(
                         attempt: entry.attempt,
                         started_at: entry.started_at,
                         session_id: None,
+                        workflow_name: None,
+                        display_status: None,
+                        completed_at: None,
                     },
                 });
             }
@@ -613,6 +634,9 @@ pub fn apply_retry_due(
             attempt: retry.attempt,
             started_at: now,
             session_id: None, // populated by executor after dispatch
+                workflow_name: None,
+                display_status: None,
+                completed_at: None,
         },
     });
 
@@ -668,6 +692,9 @@ pub fn apply_skip(state: &mut Orchestrator, pr_key: &str) -> Vec<OrchestratorEff
         attempt: 0,
         started_at: 0,
         session_id: None,
+        workflow_name: None,
+        display_status: None,
+        completed_at: None,
     };
     info!("PR {pr_key} skipped, tracking in completed_lifecycles");
     state
@@ -1175,6 +1202,52 @@ pub async fn execute_effects(
                         event.session_id = Some(entry.tab_id.clone());
                     }
                 }
+
+                // Set completed_at for terminal states
+                if matches!(
+                    event.status,
+                    LifecycleStatus::Completed | LifecycleStatus::Failed
+                ) && event.completed_at.is_none()
+                {
+                    event.completed_at = Some(crate::services::run_manager::now_epoch_ms());
+                }
+
+                // Record timeline entry for full lifecycle view (NFR25)
+                {
+                    let mut orch = orchestrator.lock().await;
+                    let status_str = match event.status {
+                        LifecycleStatus::Running => "running",
+                        LifecycleStatus::ReviewReady => "reviewReady",
+                        LifecycleStatus::Approved => "approved",
+                        LifecycleStatus::Fixing => "fixing",
+                        LifecycleStatus::Completed => "completed",
+                        LifecycleStatus::Retrying => "retrying",
+                        LifecycleStatus::Stale => "stale",
+                        LifecycleStatus::Failed => "failed",
+                    };
+                    let display = event
+                        .display_status
+                        .clone()
+                        .unwrap_or_else(|| status_str.to_string());
+                    let timeline_entry = LifecycleTimelineEntry {
+                        timestamp: crate::services::run_manager::now_epoch_ms(),
+                        status: status_str.to_string(),
+                        display_status: display,
+                        detail: format!(
+                            "{} (attempt {})",
+                            event
+                                .display_status
+                                .as_deref()
+                                .unwrap_or(status_str),
+                            event.attempt
+                        ),
+                    };
+                    orch.timelines
+                        .entry(event.pr_key.clone())
+                        .or_default()
+                        .push(timeline_entry);
+                }
+
                 if let Err(e) = traits::emit(emitter.as_ref(), "lifecycle:updated", &event) {
                     error!("Failed to emit lifecycle:updated: {e}");
                 }
@@ -1430,6 +1503,9 @@ async fn handle_event(
                             attempt: 1,
                             started_at: now,
                             session_id: None,
+                            workflow_name: None,
+                            display_status: None,
+                            completed_at: None,
                         };
                         if let Err(e) = traits::emit(emitter.as_ref(), "lifecycle:updated", &event)
                         {
@@ -1524,6 +1600,9 @@ async fn handle_event(
                         attempt: 1,
                         started_at: now,
                         session_id: None,
+                        workflow_name: None,
+                        display_status: None,
+                        completed_at: None,
                     };
                     if let Err(e) = traits::emit(emitter.as_ref(), "lifecycle:updated", &event) {
                         error!("Failed to emit lifecycle:updated for rescore {key}: {e}");

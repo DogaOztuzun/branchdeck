@@ -53,6 +53,27 @@ pub struct LifecycleEvent {
     pub started_at: EpochMs,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
+    /// The workflow definition name that produced this lifecycle event.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_name: Option<String>,
+    /// Human-readable status label resolved from the workflow definition's lifecycle section.
+    /// When present, the frontend should display this instead of the hardcoded status label.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_status: Option<String>,
+    /// Timestamp when the cycle completed (if terminal state).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completed_at: Option<EpochMs>,
+}
+
+/// A single timestamped entry in a workflow cycle's lifecycle timeline.
+/// Every autonomous action produces one of these entries (NFR25).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LifecycleTimelineEntry {
+    pub timestamp: EpochMs,
+    pub status: String,
+    pub display_status: String,
+    pub detail: String,
 }
 
 // --- Agent-facing types (written to JSON files) → snake_case ---
@@ -216,6 +237,8 @@ pub struct Orchestrator {
     pub registry: Option<crate::services::workflow::WorkflowRegistry>,
     /// PR keys that have already been processed as merged (prevents duplicate re-score triggers)
     pub merged_prs: std::collections::HashSet<String>,
+    /// Timeline entries per prKey: every lifecycle transition is recorded for the full view.
+    pub timelines: std::collections::HashMap<String, Vec<LifecycleTimelineEntry>>,
 }
 
 impl std::fmt::Debug for Orchestrator {
@@ -248,6 +271,7 @@ impl Orchestrator {
             completed_lifecycles: std::collections::HashMap::new(),
             registry: None,
             merged_prs: std::collections::HashSet::new(),
+            timelines: std::collections::HashMap::new(),
         }
     }
 }

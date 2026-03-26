@@ -563,6 +563,9 @@ fn reconciliation_removes_completed_on_new_ci_failure() {
             attempt: 1,
             started_at: 1000,
             session_id: None,
+            workflow_name: None,
+            display_status: None,
+            completed_at: None,
         },
     );
 

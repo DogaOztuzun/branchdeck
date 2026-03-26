@@ -80,6 +80,9 @@ pub async fn get_lifecycles_cmd(
             attempt: entry.attempt,
             started_at: entry.started_at,
             session_id: Some(entry.tab_id.clone()),
+            workflow_name: None,
+            display_status: None,
+            completed_at: None,
         });
     }
 
@@ -91,6 +94,9 @@ pub async fn get_lifecycles_cmd(
             attempt: entry.attempt,
             started_at: entry.due_at_ms,
             session_id: None,
+            workflow_name: None,
+            display_status: None,
+            completed_at: None,
         });
     }
 
@@ -107,6 +113,9 @@ pub async fn get_lifecycles_cmd(
             attempt: entry.attempt,
             started_at: entry.started_at,
             session_id: None,
+            workflow_name: None,
+            display_status: None,
+            completed_at: None,
         });
     }
 
@@ -196,6 +205,9 @@ pub async fn orchestrator_shepherd_pr_cmd(
                     attempt: 1,
                     started_at: crate::models::agent::now_ms(),
                     session_id: None, // populated by executor after dispatch
+                    workflow_name: None,
+                    display_status: None,
+                    completed_at: None,
                 },
             },
         ]

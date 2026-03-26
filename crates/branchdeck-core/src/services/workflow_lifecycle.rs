@@ -292,6 +292,8 @@ pub fn compute_backoff_delay(retry: &RetryDef, attempt: u32) -> u64 {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
     use crate::models::workflow::*;
     use crate::services::workflow::parse_workflow_md;
@@ -548,5 +550,82 @@ mod tests {
         assert!(effects
             .iter()
             .any(|e| matches!(e, LifecycleEffect::MarkFailed { .. })));
+    }
+
+    #[test]
+    fn lifecycle_def_resolve_named_fields() {
+        let lifecycle = LifecycleDef {
+            dispatched: Some("Dispatching Agent".to_string()),
+            complete: Some("All Done".to_string()),
+            failed: Some("Agent Failed".to_string()),
+            retrying: Some("Scheduling Retry".to_string()),
+            custom_statuses: HashMap::new(),
+        };
+        assert_eq!(lifecycle.resolve_display_status("dispatched"), "Dispatching Agent");
+        assert_eq!(lifecycle.resolve_display_status("running"), "Dispatching Agent");
+        assert_eq!(lifecycle.resolve_display_status("complete"), "All Done");
+        assert_eq!(lifecycle.resolve_display_status("completed"), "All Done");
+        assert_eq!(lifecycle.resolve_display_status("failed"), "Agent Failed");
+        assert_eq!(lifecycle.resolve_display_status("retrying"), "Scheduling Retry");
+    }
+
+    #[test]
+    fn lifecycle_def_resolve_custom_statuses() {
+        let mut custom = HashMap::new();
+        custom.insert("analyzing".to_string(), "Analyzing Code".to_string());
+        custom.insert("patching".to_string(), "Applying Patches".to_string());
+        custom.insert("validating".to_string(), "Running Validation".to_string());
+
+        let lifecycle = LifecycleDef {
+            dispatched: None,
+            complete: None,
+            failed: None,
+            retrying: None,
+            custom_statuses: custom,
+        };
+        assert_eq!(lifecycle.resolve_display_status("analyzing"), "Analyzing Code");
+        assert_eq!(lifecycle.resolve_display_status("patching"), "Applying Patches");
+        assert_eq!(lifecycle.resolve_display_status("validating"), "Running Validation");
+        // Unknown status falls back to raw key
+        assert_eq!(lifecycle.resolve_display_status("unknown"), "unknown");
+    }
+
+    #[test]
+    fn lifecycle_def_named_fields_override_custom() {
+        let mut custom = HashMap::new();
+        custom.insert("failed".to_string(), "Custom Failed".to_string());
+
+        let lifecycle = LifecycleDef {
+            dispatched: None,
+            complete: None,
+            failed: Some("Named Failed".to_string()),
+            retrying: None,
+            custom_statuses: custom,
+        };
+        // Named field takes precedence over custom_statuses
+        assert_eq!(lifecycle.resolve_display_status("failed"), "Named Failed");
+    }
+
+    #[test]
+    fn lifecycle_def_custom_statuses_parsed_from_yaml() {
+        let md = "---\n\
+                   name: custom-workflow\n\
+                   description: Custom statuses test\n\
+                   tracker:\n\
+                   \x20 kind: manual\n\
+                   lifecycle:\n\
+                   \x20 dispatched: Launched\n\
+                   \x20 complete: Verified\n\
+                   \x20 custom_statuses:\n\
+                   \x20   analyzing: Deep Analysis\n\
+                   \x20   patching: Hot Patching\n\
+                   ---\n\
+                   Do custom work.\n";
+        let def = parse_workflow_md(md).unwrap();
+        let lifecycle = def.config.lifecycle.unwrap();
+        assert_eq!(lifecycle.dispatched.as_deref(), Some("Launched"));
+        assert_eq!(lifecycle.resolve_display_status("analyzing"), "Deep Analysis");
+        assert_eq!(lifecycle.resolve_display_status("patching"), "Hot Patching");
+        assert_eq!(lifecycle.resolve_display_status("running"), "Launched");
     }
 }

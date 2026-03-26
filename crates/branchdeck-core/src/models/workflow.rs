@@ -247,6 +247,51 @@ pub struct LifecycleDef {
     pub failed: Option<String>,
     #[serde(default)]
     pub retrying: Option<String>,
+    /// Arbitrary status name overrides: maps internal status keys to display names.
+    /// Supports custom workflow statuses (e.g., "analyzing" -> "Analyzing Code",
+    /// "patching" -> "Applying Patches", "validating" -> "Running Validation").
+    /// Named fields above take precedence over entries in this map.
+    #[serde(default)]
+    pub custom_statuses: HashMap<String, String>,
+}
+
+impl LifecycleDef {
+    /// Resolve a display name for a given internal status key.
+    /// Named fields (dispatched, complete, failed, retrying) take precedence,
+    /// then `custom_statuses` map, then falls back to the raw status key.
+    #[must_use]
+    pub fn resolve_display_status(&self, status: &str) -> String {
+        // Check named fields first
+        match status {
+            "dispatched" | "running" => {
+                if let Some(ref label) = self.dispatched {
+                    return label.clone();
+                }
+            }
+            "complete" | "completed" => {
+                if let Some(ref label) = self.complete {
+                    return label.clone();
+                }
+            }
+            "failed" => {
+                if let Some(ref label) = self.failed {
+                    return label.clone();
+                }
+            }
+            "retrying" => {
+                if let Some(ref label) = self.retrying {
+                    return label.clone();
+                }
+            }
+            _ => {}
+        }
+        // Check custom_statuses map
+        if let Some(label) = self.custom_statuses.get(status) {
+            return label.clone();
+        }
+        // Fallback: return raw status key
+        status.to_string()
+    }
 }
 
 // === Retry (Branchdeck extension) ===

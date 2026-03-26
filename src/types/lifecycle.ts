@@ -19,6 +19,20 @@ export type LifecycleEvent = {
   attempt: number;
   startedAt: EpochMs;
   sessionId?: string;
+  /** The workflow definition name that produced this event */
+  workflowName?: string;
+  /** Human-readable status label from the workflow definition's lifecycle section */
+  displayStatus?: string;
+  /** Timestamp when the cycle completed (terminal states) */
+  completedAt?: EpochMs;
+};
+
+/** A single timestamped entry in a workflow cycle's lifecycle timeline (NFR25) */
+export type LifecycleTimelineEntry = {
+  timestamp: EpochMs;
+  status: string;
+  displayStatus: string;
+  detail: string;
 };
 
 export type RunningEntry = {
@@ -112,4 +126,10 @@ export type WorkflowCycle = {
   completedAt: EpochMs | null;
   worktreePath: string;
   description: string;
+  /** Workflow definition name (e.g., "pr-shepherd", "sat-scoring") */
+  workflowName?: string;
+  /** Custom display label for the current status from the workflow definition */
+  displayStatus?: string;
+  /** Full timeline of lifecycle transitions with timestamps */
+  timeline: LifecycleTimelineEntry[];
 };
