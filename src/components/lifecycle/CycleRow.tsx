@@ -66,9 +66,8 @@ export function CycleRow(props: CycleRowProps) {
 
   const elapsed = () => {
     if (!props.cycle.startedAt || props.cycle.startedAt === 0) return '';
-    if (props.cycle.completedAt) {
-      return formatElapsed(props.cycle.completedAt - props.cycle.startedAt);
-    }
+    // Only show live elapsed for active cycles; completed cycles lack a backend completedAt
+    if (status() === 'completed' || status() === 'failed') return '';
     return formatElapsed(props.nowMs - props.cycle.startedAt);
   };
 

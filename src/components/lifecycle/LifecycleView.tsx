@@ -40,7 +40,7 @@ function toCycle(event: LifecycleEvent): WorkflowCycle {
     attempt: event.attempt,
     startedAt: event.startedAt,
     updatedAt: event.startedAt,
-    completedAt: event.status === 'completed' ? Date.now() : null,
+    completedAt: null, // Backend doesn't expose completedAt; elapsed suppressed for completed cycles
     worktreePath: event.worktreePath,
     description: event.worktreePath.split('/').pop() ?? event.prKey,
   };

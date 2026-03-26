@@ -62,12 +62,10 @@ async fn poll_loop(event_bus: &EventBus, repo_paths: &[String]) {
                     first_tick = false;
                 } else {
                     publish_new_merges(event_bus, &merged_prs, &mut seen_merged);
-                    // Evict entries not in the current response to bound memory growth.
-                    let current_keys: HashSet<String> = merged_prs
-                        .iter()
-                        .map(|pr| format!("{}#{}", pr.repo_name, pr.number))
-                        .collect();
-                    seen_merged.retain(|k| current_keys.contains(k));
+                    // Note: seen_merged grows monotonically within a session. The API
+                    // returns at most 20 PRs per repo, so new entries are bounded per tick.
+                    // Across restarts, seen_merged resets (pre-seed handles that).
+                    // Orchestrator.merged_prs is the authoritative dedup layer.
                 }
             }
             Err(e) => {
@@ -101,6 +99,7 @@ fn publish_new_merges(
             repo: pr.repo_name.clone(),
             pr_number: pr.number,
             branch: pr.branch.clone(),
+            base_branch: pr.base_branch.clone(),
             ts: now_ms(),
         });
 

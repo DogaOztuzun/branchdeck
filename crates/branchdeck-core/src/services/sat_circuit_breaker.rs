@@ -114,10 +114,8 @@ pub fn build_cycle_learning(
 ) -> SatCycleLearning {
     // issues_found = total scenarios compared
     let issues_found = comparison.scenario_comparisons.len();
-    // issues_fixed = scenarios that improved
+    // issues_fixed = scenarios that improved (used as true positives for accuracy)
     let issues_fixed = comparison.improved_count;
-    // issues_verified = scenarios that actually improved (true positives for accuracy)
-    let issues_verified = comparison.improved_count;
 
     SatCycleLearning {
         recorded_at: recorded_at.to_string(),
@@ -127,7 +125,6 @@ pub fn build_cycle_learning(
         cycle_iteration,
         issues_found,
         issues_fixed,
-        issues_verified,
         false_positives,
         score_before: comparison.overall_before,
         score_after: comparison.overall_after,
@@ -144,7 +141,7 @@ pub fn build_cycle_learning(
 /// Accuracy = `true_positives / (true_positives + false_positives)`
 ///
 /// Where:
-/// - `true_positives` = sum of `issues_verified` across all cycles
+/// - `true_positives` = sum of `issues_fixed` across all cycles
 ///   (issues correctly identified as real app bugs that improved after fixing)
 /// - `false_positives` = sum of `false_positives` across all cycles
 ///   (findings misclassified as app bugs but were actually runner/scenario issues)
@@ -168,7 +165,7 @@ pub fn compute_classification_accuracy(learnings: &SatLearningsFile) -> Classifi
 
     for cycle in &learnings.cycle_learnings {
         total_classifications += cycle.issues_found;
-        true_positives += cycle.issues_verified;
+        true_positives += cycle.issues_fixed;
         false_positives += cycle.false_positives;
     }
 
@@ -457,7 +454,7 @@ mod tests {
         assert_eq!(learning.cycle_iteration, 1);
         assert_eq!(learning.issues_found, 6); // 3+1+2 scenarios compared
         assert_eq!(learning.issues_fixed, 3); // improved_count
-        assert_eq!(learning.issues_verified, 3); // improved_count only
+        assert_eq!(learning.issues_fixed, 3); // improved_count
         assert_eq!(learning.false_positives, 2);
         assert_eq!(learning.score_before, 50);
         assert_eq!(learning.score_after, 65);
@@ -489,7 +486,6 @@ mod tests {
                 cycle_iteration: 1,
                 issues_found: 10,
                 issues_fixed: 7,
-                issues_verified: 8,
                 false_positives: 2,
                 score_before: 40,
                 score_after: 75,
@@ -520,8 +516,7 @@ mod tests {
                     cycle_iteration: 1,
                     issues_found: 10,
                     issues_fixed: 7,
-                    issues_verified: 8,
-                    false_positives: 1,
+                        false_positives: 1,
                     score_before: 40,
                     score_after: 75,
                     outcome: VerificationOutcome::Verified,
@@ -534,7 +529,6 @@ mod tests {
                     cycle_iteration: 2,
                     issues_found: 5,
                     issues_fixed: 3,
-                    issues_verified: 4,
                     false_positives: 1,
                     score_before: 75,
                     score_after: 85,
@@ -565,7 +559,6 @@ mod tests {
                 cycle_iteration: 1,
                 issues_found: 5,
                 issues_fixed: 0,
-                issues_verified: 0,
                 false_positives: 0,
                 score_before: 40,
                 score_after: 40,
@@ -595,7 +588,6 @@ mod tests {
             cycle_iteration: 1,
             issues_found: 10,
             issues_fixed: 7,
-            issues_verified: 8,
             false_positives: 2,
             score_before: 40,
             score_after: 75,
@@ -609,7 +601,7 @@ mod tests {
         assert_eq!(loaded.cycle_learnings.len(), 1);
         assert_eq!(loaded.cycle_learnings[0].merged_pr_number, 42);
         assert_eq!(loaded.cycle_learnings[0].issues_found, 10);
-        assert_eq!(loaded.cycle_learnings[0].issues_verified, 8);
+        assert_eq!(loaded.cycle_learnings[0].issues_fixed, 7);
         assert_eq!(loaded.cycle_learnings[0].false_positives, 2);
         assert_eq!(loaded.cycle_learnings[0].score_before, 40);
         assert_eq!(loaded.cycle_learnings[0].score_after, 75);
@@ -628,7 +620,6 @@ mod tests {
             cycle_iteration: 1,
             issues_found: 10,
             issues_fixed: 7,
-            issues_verified: 8,
             false_positives: 2,
             score_before: 40,
             score_after: 75,
@@ -643,7 +634,6 @@ mod tests {
             cycle_iteration: 2,
             issues_found: 5,
             issues_fixed: 3,
-            issues_verified: 4,
             false_positives: 1,
             score_before: 75,
             score_after: 85,
@@ -686,7 +676,6 @@ mod tests {
             cycle_iteration: 1,
             issues_found: 5,
             issues_fixed: 3,
-            issues_verified: 4,
             false_positives: 1,
             score_before: 40,
             score_after: 75,

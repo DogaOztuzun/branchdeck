@@ -105,6 +105,7 @@ pub enum Event {
         repo: String,
         pr_number: u64,
         branch: String,
+        base_branch: String,
         ts: EpochMs,
     },
 }

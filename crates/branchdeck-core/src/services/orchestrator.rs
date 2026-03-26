@@ -1448,6 +1448,7 @@ async fn handle_event(
             repo,
             pr_number,
             branch,
+            base_branch,
             ..
         } => {
             let trigger_events = {
@@ -1511,7 +1512,7 @@ async fn handle_event(
                             started_at: now,
                             attempt: 1,
                             branch: format!("workflow/sat-rescore-{pr_number}"),
-                            base_branch: "main".to_string(),
+                            base_branch: base_branch.clone(),
                         },
                     );
                     drop(orch);

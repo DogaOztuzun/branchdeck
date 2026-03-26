@@ -635,10 +635,9 @@ pub struct SatCycleLearning {
     pub cycle_iteration: u32,
     /// Number of issues found in the original SAT run.
     pub issues_found: usize,
-    /// Number of issues that were fixed (score improved).
+    /// Number of issues that were fixed (score improved). Used as true positives
+    /// for classification accuracy: fixed = correctly identified as real app bugs.
     pub issues_fixed: usize,
-    /// Number of issues verified as resolved (no regression).
-    pub issues_verified: usize,
     /// Number of false positives detected (runner/scenario misclassified as app).
     pub false_positives: usize,
     /// Aggregate score before the fix.
