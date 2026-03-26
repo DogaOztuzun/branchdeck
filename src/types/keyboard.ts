@@ -1,5 +1,5 @@
 /** App view names for navigation */
-export type ViewName = 'workspace' | 'inbox' | 'sat' | 'tasks';
+export type ViewName = 'workspace' | 'inbox' | 'sat' | 'tasks' | 'lifecycle';
 
 /** A registered keyboard shortcut */
 export type ShortcutAction = {

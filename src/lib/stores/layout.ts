@@ -6,7 +6,7 @@ export type RightPanelContext =
   | { kind: 'changes' }
   | { kind: 'agents' };
 
-export type AppView = 'workspace' | 'inbox' | 'sat' | 'tasks' | 'pr-triage';
+export type AppView = 'workspace' | 'inbox' | 'sat' | 'tasks' | 'pr-triage' | 'lifecycle';
 
 const [panelApi, setPanelApi] = createSignal<PanelGroupAPI | null>(null);
 const [repoSidebarOpen, setRepoSidebarOpen] = createSignal(true);

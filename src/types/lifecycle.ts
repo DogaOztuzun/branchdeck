@@ -92,3 +92,24 @@ export type TriageGroups = {
   newPrs: TriagePr[];
   done: TriagePr[];
 };
+
+/** Workflow types that the lifecycle view tracks */
+export type WorkflowType = 'issue-resolution' | 'sat-scoring' | 'verification' | 'manual';
+
+/** Trigger sources for a workflow cycle */
+export type TriggerSource = 'pr-poll' | 'sat-run' | 'ci-failure' | 'manual' | 'regression';
+
+/** A single workflow cycle shown in the lifecycle view */
+export type WorkflowCycle = {
+  id: string;
+  prKey: string;
+  workflowType: WorkflowType;
+  triggerSource: TriggerSource;
+  status: LifecycleStatus;
+  attempt: number;
+  startedAt: EpochMs;
+  updatedAt: EpochMs;
+  completedAt: EpochMs | null;
+  worktreePath: string;
+  description: string;
+};

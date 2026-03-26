@@ -2,6 +2,7 @@ import { Match, onMount, Show, Switch } from 'solid-js';
 import { InboxView } from './components/inbox/InboxView';
 import { Shell } from './components/layout/Shell';
 import { TopBar } from './components/layout/TopBar';
+import { LifecycleView } from './components/lifecycle/LifecycleView';
 import { PrTriageView } from './components/pr/PrTriageView';
 import { SATDashboard } from './components/sat/SATDashboard';
 import { TaskBoard } from './components/task/TaskBoard';
@@ -27,6 +28,7 @@ export function App() {
       { key: '2', view: 'inbox' },
       { key: '3', view: 'sat' },
       { key: '4', view: 'tasks' },
+      { key: '5', view: 'lifecycle' },
     ];
     for (const v of views) {
       keyboard.registerShortcut({
@@ -66,6 +68,9 @@ export function App() {
         </Match>
         <Match when={layout.activeView() === 'tasks'}>
           <TaskBoard />
+        </Match>
+        <Match when={layout.activeView() === 'lifecycle'}>
+          <LifecycleView />
         </Match>
       </Switch>
       <Show when={keyboard.isPaletteOpen()}>
