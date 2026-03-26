@@ -81,7 +81,11 @@ pub fn compute_scenario_comparisons(
 /// Groups scenarios by persona and averages the before/after scores
 /// for each persona.
 #[must_use]
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss
+)]
 pub fn aggregate_persona_deltas(comparisons: &[ScenarioComparison]) -> Vec<PersonaScoreDelta> {
     use std::collections::BTreeMap;
 
@@ -126,8 +130,7 @@ pub fn compute_comparison(
     let regressed_count = scenario_comparisons.iter().filter(|c| c.delta < 0).count();
     let unchanged_count = scenario_comparisons.iter().filter(|c| c.delta == 0).count();
 
-    let overall_delta =
-        score_as_i32(after.aggregate_score) - score_as_i32(before.aggregate_score);
+    let overall_delta = score_as_i32(after.aggregate_score) - score_as_i32(before.aggregate_score);
 
     ScoreComparison {
         before_run_id: before.run_id.clone(),
@@ -155,14 +158,14 @@ pub fn compute_comparison(
 pub fn read_score_result(run_dir: &Path) -> Result<SatScoreResult, AppError> {
     let path = run_dir.join("scores.json");
     let content = std::fs::read_to_string(&path).map_err(|e| {
-        error!(
-            "Failed to read score result from {}: {e}",
-            path.display()
-        );
+        error!("Failed to read score result from {}: {e}", path.display());
         AppError::Sat(format!("failed to read scores: {e}"))
     })?;
     serde_json::from_str(&content).map_err(|e| {
-        error!("Failed to parse score result JSON from {}: {e}", path.display());
+        error!(
+            "Failed to parse score result JSON from {}: {e}",
+            path.display()
+        );
         AppError::Sat(format!("score result parse error: {e}"))
     })
 }
@@ -177,10 +180,7 @@ pub fn run_dir_for_id(runs_dir: &Path, run_id: &str) -> PathBuf {
 ///
 /// # Errors
 /// Returns `AppError::Sat` if serialization or file write fails.
-pub fn write_comparison(
-    comparison: &ScoreComparison,
-    run_dir: &Path,
-) -> Result<PathBuf, AppError> {
+pub fn write_comparison(comparison: &ScoreComparison, run_dir: &Path) -> Result<PathBuf, AppError> {
     let path = run_dir.join("comparison.json");
     let json = serde_json::to_string_pretty(comparison).map_err(|e| {
         error!("Failed to serialize score comparison: {e}");
@@ -214,9 +214,7 @@ pub fn compare_runs(
     let before_dir = run_dir_for_id(runs_dir, before_run_id);
     let after_dir = run_dir_for_id(runs_dir, after_run_id);
 
-    info!(
-        "Comparing SAT scores: {before_run_id} (before) vs {after_run_id} (after)"
-    );
+    info!("Comparing SAT scores: {before_run_id} (before) vs {after_run_id} (after)");
 
     let before = read_score_result(&before_dir)?;
     let after = read_score_result(&after_dir)?;
@@ -269,7 +267,12 @@ mod tests {
         }
     }
 
-    fn make_scenario_score(id: &str, persona: &str, score: u32, dims: SatScoreDimensions) -> SatScenarioScore {
+    fn make_scenario_score(
+        id: &str,
+        persona: &str,
+        score: u32,
+        dims: SatScoreDimensions,
+    ) -> SatScenarioScore {
         SatScenarioScore {
             scenario_id: id.to_string(),
             persona: persona.to_string(),
@@ -280,7 +283,11 @@ mod tests {
         }
     }
 
-    fn make_score_result(run_id: &str, scores: Vec<SatScenarioScore>, aggregate: u32) -> SatScoreResult {
+    fn make_score_result(
+        run_id: &str,
+        scores: Vec<SatScenarioScore>,
+        aggregate: u32,
+    ) -> SatScoreResult {
         SatScoreResult {
             run_id: run_id.to_string(),
             scored_at: "2026-03-26T00:00:00Z".to_string(),
@@ -288,7 +295,10 @@ mod tests {
             aggregate_score: aggregate,
             all_findings: Vec::new(),
             finding_counts: FindingCounts::default(),
-            token_usage: TokenUsage { input_tokens: 0, output_tokens: 0 },
+            token_usage: TokenUsage {
+                input_tokens: 0,
+                output_tokens: 0,
+            },
             estimated_cost_dollars: 0.0,
         }
     }
@@ -321,17 +331,25 @@ mod tests {
 
     #[test]
     fn scenario_comparisons_matched_only() {
-        let before = make_score_result("run-before", vec![
-            make_scenario_score("s1", "newcomer", 31, make_dimensions(30, 25, 20, 40)),
-            make_scenario_score("s2", "power-user", 70, make_dimensions(80, 60, 70, 65)),
-            make_scenario_score("s3", "newcomer", 50, make_dimensions(50, 50, 50, 50)),
-        ], 50);
+        let before = make_score_result(
+            "run-before",
+            vec![
+                make_scenario_score("s1", "newcomer", 31, make_dimensions(30, 25, 20, 40)),
+                make_scenario_score("s2", "power-user", 70, make_dimensions(80, 60, 70, 65)),
+                make_scenario_score("s3", "newcomer", 50, make_dimensions(50, 50, 50, 50)),
+            ],
+            50,
+        );
 
-        let after = make_score_result("run-after", vec![
-            make_scenario_score("s1", "newcomer", 74, make_dimensions(80, 70, 60, 80)),
-            make_scenario_score("s2", "power-user", 85, make_dimensions(90, 80, 85, 80)),
-            // s3 is not in the after run (not re-scored)
-        ], 80);
+        let after = make_score_result(
+            "run-after",
+            vec![
+                make_scenario_score("s1", "newcomer", 74, make_dimensions(80, 70, 60, 80)),
+                make_scenario_score("s2", "power-user", 85, make_dimensions(90, 80, 85, 80)),
+                // s3 is not in the after run (not re-scored)
+            ],
+            80,
+        );
 
         let comparisons = compute_scenario_comparisons(&before, &after);
         assert_eq!(comparisons.len(), 2);
@@ -350,12 +368,26 @@ mod tests {
 
     #[test]
     fn scenario_comparisons_no_overlap() {
-        let before = make_score_result("run-before", vec![
-            make_scenario_score("s1", "newcomer", 50, make_dimensions(50, 50, 50, 50)),
-        ], 50);
-        let after = make_score_result("run-after", vec![
-            make_scenario_score("s99", "expert", 80, make_dimensions(80, 80, 80, 80)),
-        ], 80);
+        let before = make_score_result(
+            "run-before",
+            vec![make_scenario_score(
+                "s1",
+                "newcomer",
+                50,
+                make_dimensions(50, 50, 50, 50),
+            )],
+            50,
+        );
+        let after = make_score_result(
+            "run-after",
+            vec![make_scenario_score(
+                "s99",
+                "expert",
+                80,
+                make_dimensions(80, 80, 80, 80),
+            )],
+            80,
+        );
 
         let comparisons = compute_scenario_comparisons(&before, &after);
         assert!(comparisons.is_empty());
@@ -372,7 +404,12 @@ mod tests {
                 before_score: 30,
                 after_score: 70,
                 delta: 40,
-                dimension_deltas: DimensionDeltas { functionality: 40, usability: 40, error_handling: 40, performance: 40 },
+                dimension_deltas: DimensionDeltas {
+                    functionality: 40,
+                    usability: 40,
+                    error_handling: 40,
+                    performance: 40,
+                },
             },
             ScenarioComparison {
                 scenario_id: "s2".into(),
@@ -380,7 +417,12 @@ mod tests {
                 before_score: 40,
                 after_score: 80,
                 delta: 40,
-                dimension_deltas: DimensionDeltas { functionality: 40, usability: 40, error_handling: 40, performance: 40 },
+                dimension_deltas: DimensionDeltas {
+                    functionality: 40,
+                    usability: 40,
+                    error_handling: 40,
+                    performance: 40,
+                },
             },
             ScenarioComparison {
                 scenario_id: "s3".into(),
@@ -388,7 +430,12 @@ mod tests {
                 before_score: 70,
                 after_score: 85,
                 delta: 15,
-                dimension_deltas: DimensionDeltas { functionality: 15, usability: 15, error_handling: 15, performance: 15 },
+                dimension_deltas: DimensionDeltas {
+                    functionality: 15,
+                    usability: 15,
+                    error_handling: 15,
+                    performance: 15,
+                },
             },
         ];
 
@@ -399,7 +446,7 @@ mod tests {
         let newcomer = &deltas[0];
         assert_eq!(newcomer.persona, "newcomer");
         assert_eq!(newcomer.before, 35); // (30+40)/2 = 35
-        assert_eq!(newcomer.after, 75);  // (70+80)/2 = 75
+        assert_eq!(newcomer.after, 75); // (70+80)/2 = 75
         assert_eq!(newcomer.delta, 40);
 
         let power_user = &deltas[1];
@@ -419,15 +466,33 @@ mod tests {
 
     #[test]
     fn compute_comparison_full() {
-        let before = make_score_result("run-001", vec![
-            make_scenario_score("s1", "confused-newcomer", 31, make_dimensions(30, 25, 20, 40)),
-            make_scenario_score("s2", "power-user", 70, make_dimensions(80, 60, 70, 65)),
-        ], 50);
+        let before = make_score_result(
+            "run-001",
+            vec![
+                make_scenario_score(
+                    "s1",
+                    "confused-newcomer",
+                    31,
+                    make_dimensions(30, 25, 20, 40),
+                ),
+                make_scenario_score("s2", "power-user", 70, make_dimensions(80, 60, 70, 65)),
+            ],
+            50,
+        );
 
-        let after = make_score_result("run-002", vec![
-            make_scenario_score("s1", "confused-newcomer", 74, make_dimensions(80, 70, 60, 80)),
-            make_scenario_score("s2", "power-user", 85, make_dimensions(90, 80, 85, 80)),
-        ], 80);
+        let after = make_score_result(
+            "run-002",
+            vec![
+                make_scenario_score(
+                    "s1",
+                    "confused-newcomer",
+                    74,
+                    make_dimensions(80, 70, 60, 80),
+                ),
+                make_scenario_score("s2", "power-user", 85, make_dimensions(90, 80, 85, 80)),
+            ],
+            80,
+        );
 
         let comparison = compute_comparison(&before, &after, "2026-03-26T12:00:00Z");
 
@@ -443,7 +508,9 @@ mod tests {
         assert_eq!(comparison.persona_deltas.len(), 2);
 
         // Check the confused-newcomer delta specifically (from acceptance criteria)
-        let newcomer = comparison.persona_deltas.iter()
+        let newcomer = comparison
+            .persona_deltas
+            .iter()
             .find(|d| d.persona == "confused-newcomer")
             .expect("confused-newcomer persona delta should exist");
         assert_eq!(newcomer.before, 31);
@@ -453,15 +520,23 @@ mod tests {
 
     #[test]
     fn compute_comparison_with_regression() {
-        let before = make_score_result("run-001", vec![
-            make_scenario_score("s1", "user", 80, make_dimensions(80, 80, 80, 80)),
-            make_scenario_score("s2", "user", 60, make_dimensions(60, 60, 60, 60)),
-        ], 70);
+        let before = make_score_result(
+            "run-001",
+            vec![
+                make_scenario_score("s1", "user", 80, make_dimensions(80, 80, 80, 80)),
+                make_scenario_score("s2", "user", 60, make_dimensions(60, 60, 60, 60)),
+            ],
+            70,
+        );
 
-        let after = make_score_result("run-002", vec![
-            make_scenario_score("s1", "user", 60, make_dimensions(60, 60, 60, 60)),
-            make_scenario_score("s2", "user", 90, make_dimensions(90, 90, 90, 90)),
-        ], 75);
+        let after = make_score_result(
+            "run-002",
+            vec![
+                make_scenario_score("s1", "user", 60, make_dimensions(60, 60, 60, 60)),
+                make_scenario_score("s2", "user", 90, make_dimensions(90, 90, 90, 90)),
+            ],
+            75,
+        );
 
         let comparison = compute_comparison(&before, &after, "2026-03-26T12:00:00Z");
 
@@ -473,13 +548,27 @@ mod tests {
 
     #[test]
     fn compute_comparison_unchanged() {
-        let before = make_score_result("run-001", vec![
-            make_scenario_score("s1", "user", 75, make_dimensions(75, 75, 75, 75)),
-        ], 75);
+        let before = make_score_result(
+            "run-001",
+            vec![make_scenario_score(
+                "s1",
+                "user",
+                75,
+                make_dimensions(75, 75, 75, 75),
+            )],
+            75,
+        );
 
-        let after = make_score_result("run-002", vec![
-            make_scenario_score("s1", "user", 75, make_dimensions(75, 75, 75, 75)),
-        ], 75);
+        let after = make_score_result(
+            "run-002",
+            vec![make_scenario_score(
+                "s1",
+                "user",
+                75,
+                make_dimensions(75, 75, 75, 75),
+            )],
+            75,
+        );
 
         let comparison = compute_comparison(&before, &after, "2026-03-26T12:00:00Z");
 
@@ -496,12 +585,26 @@ mod tests {
         let tmp = tempfile::TempDir::new().unwrap();
         let run_dir = tmp.path();
 
-        let before = make_score_result("run-001", vec![
-            make_scenario_score("s1", "newcomer", 31, make_dimensions(30, 25, 20, 40)),
-        ], 31);
-        let after = make_score_result("run-002", vec![
-            make_scenario_score("s1", "newcomer", 74, make_dimensions(80, 70, 60, 80)),
-        ], 74);
+        let before = make_score_result(
+            "run-001",
+            vec![make_scenario_score(
+                "s1",
+                "newcomer",
+                31,
+                make_dimensions(30, 25, 20, 40),
+            )],
+            31,
+        );
+        let after = make_score_result(
+            "run-002",
+            vec![make_scenario_score(
+                "s1",
+                "newcomer",
+                74,
+                make_dimensions(80, 70, 60, 80),
+            )],
+            74,
+        );
 
         let comparison = compute_comparison(&before, &after, "2026-03-26T12:00:00Z");
         let path = write_comparison(&comparison, run_dir).unwrap();

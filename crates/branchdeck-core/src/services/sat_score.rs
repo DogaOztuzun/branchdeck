@@ -52,10 +52,8 @@ pub trait LlmJudge {
 #[must_use]
 #[allow(clippy::cast_precision_loss)] // Token counts won't exceed f64 mantissa range in practice
 pub fn estimate_cost(budget: &ScoringBudget) -> f64 {
-    let input_cost =
-        (budget.input_tokens_used as f64 / 1000.0) * budget.input_cost_per_1k;
-    let output_cost =
-        (budget.output_tokens_used as f64 / 1000.0) * budget.output_cost_per_1k;
+    let input_cost = (budget.input_tokens_used as f64 / 1000.0) * budget.input_cost_per_1k;
+    let output_cost = (budget.output_tokens_used as f64 / 1000.0) * budget.output_cost_per_1k;
     input_cost + output_cost
 }
 
@@ -141,7 +139,11 @@ pub fn build_scoring_prompt(
 
     let _ = writeln!(prompt, "# Scenario: {}", scenario.meta.title);
     let _ = writeln!(prompt, "**ID:** {}", scenario.meta.id);
-    let _ = writeln!(prompt, "**Persona:** {} ({})", scenario.meta.persona, persona_description);
+    let _ = writeln!(
+        prompt,
+        "**Persona:** {} ({})",
+        scenario.meta.persona, persona_description
+    );
     let _ = writeln!(prompt, "**Priority:** {}", scenario.meta.priority);
     let _ = writeln!(prompt);
 
@@ -393,7 +395,8 @@ pub fn aggregate_scores(scores: &[SatScenarioScore], scenarios: &[SatScenario]) 
             .map_or(1.0, |s| match s.meta.priority {
                 crate::models::sat::ScenarioPriority::Critical => 3.0,
                 crate::models::sat::ScenarioPriority::High => 2.0,
-                crate::models::sat::ScenarioPriority::Medium | crate::models::sat::ScenarioPriority::Low => 1.0,
+                crate::models::sat::ScenarioPriority::Medium
+                | crate::models::sat::ScenarioPriority::Low => 1.0,
             });
 
         weighted_sum += f64::from(scenario_score.score) * weight;
@@ -412,9 +415,18 @@ pub fn aggregate_scores(scores: &[SatScenarioScore], scenarios: &[SatScenario]) 
 /// Count findings by category.
 #[must_use]
 pub fn count_findings(findings: &[SatFinding]) -> FindingCounts {
-    let app = findings.iter().filter(|f| f.category == FindingCategory::App).count();
-    let runner = findings.iter().filter(|f| f.category == FindingCategory::Runner).count();
-    let scenario = findings.iter().filter(|f| f.category == FindingCategory::Scenario).count();
+    let app = findings
+        .iter()
+        .filter(|f| f.category == FindingCategory::App)
+        .count();
+    let runner = findings
+        .iter()
+        .filter(|f| f.category == FindingCategory::Runner)
+        .count();
+    let scenario = findings
+        .iter()
+        .filter(|f| f.category == FindingCategory::Scenario)
+        .count();
 
     FindingCounts {
         app,
@@ -476,16 +488,8 @@ pub fn render_report(result: &SatScoreResult) -> String {
 
     // Cost summary
     let _ = writeln!(out, "## Cost Summary");
-    let _ = writeln!(
-        out,
-        "- Input tokens: {}",
-        result.token_usage.input_tokens
-    );
-    let _ = writeln!(
-        out,
-        "- Output tokens: {}",
-        result.token_usage.output_tokens
-    );
+    let _ = writeln!(out, "- Input tokens: {}", result.token_usage.input_tokens);
+    let _ = writeln!(out, "- Output tokens: {}", result.token_usage.output_tokens);
     let _ = writeln!(
         out,
         "- Estimated cost: ${:.4}",
@@ -498,8 +502,16 @@ pub fn render_report(result: &SatScoreResult) -> String {
     let _ = writeln!(out, "| Category | Count |");
     let _ = writeln!(out, "|:---------|------:|");
     let _ = writeln!(out, "| App bugs | {} |", result.finding_counts.app);
-    let _ = writeln!(out, "| Runner artifacts | {} |", result.finding_counts.runner);
-    let _ = writeln!(out, "| Scenario issues | {} |", result.finding_counts.scenario);
+    let _ = writeln!(
+        out,
+        "| Runner artifacts | {} |",
+        result.finding_counts.runner
+    );
+    let _ = writeln!(
+        out,
+        "| Scenario issues | {} |",
+        result.finding_counts.scenario
+    );
     let _ = writeln!(out, "| **Total** | **{}** |", result.finding_counts.total);
     let _ = writeln!(out);
 
@@ -526,8 +538,11 @@ pub fn render_report(result: &SatScoreResult) -> String {
                 let _ = writeln!(
                     out,
                     "- [{}/{}] (step {}, severity {}) {}",
-                    finding.category, finding.confidence, finding.step_number,
-                    finding.severity, finding.summary
+                    finding.category,
+                    finding.confidence,
+                    finding.step_number,
+                    finding.severity,
+                    finding.summary
                 );
             }
             let _ = writeln!(out);
@@ -565,7 +580,10 @@ pub fn build_learnings(result: &SatScoreResult) -> Vec<SatLearning> {
 /// Returns `AppError::Sat` if the file exists but cannot be parsed.
 pub fn load_learnings(path: &Path) -> Result<SatLearningsFile, AppError> {
     if !path.exists() {
-        debug!("Learnings file not found, starting fresh: {}", path.display());
+        debug!(
+            "Learnings file not found, starting fresh: {}",
+            path.display()
+        );
         return Ok(SatLearningsFile::default());
     }
 
@@ -692,8 +710,7 @@ fn find_persona_description(
     scenario
         .and_then(|s| {
             personas.iter().find(|(name, p)| {
-                p.name.to_lowercase().replace(' ', "-") == s.meta.persona
-                    || name == &s.meta.persona
+                p.name.to_lowercase().replace(' ', "-") == s.meta.persona || name == &s.meta.persona
             })
         })
         .map_or_else(
@@ -720,7 +737,9 @@ fn score_trajectory(
         );
         format!(
             "Score this scenario execution:\n\nScenario ID: {}\nStatus: {}\nSteps: {}\n",
-            trajectory.scenario_id, trajectory.status, trajectory.steps.len()
+            trajectory.scenario_id,
+            trajectory.status,
+            trajectory.steps.len()
         )
     };
 
@@ -732,14 +751,16 @@ fn score_trajectory(
                 trajectory.scenario_id, usage.input_tokens, usage.output_tokens
             );
 
-            let persona_name = scenario
-                .map_or_else(|| "unknown".to_string(), |s| s.meta.persona.clone());
+            let persona_name =
+                scenario.map_or_else(|| "unknown".to_string(), |s| s.meta.persona.clone());
 
             match parse_score_response(&response, &trajectory.scenario_id, &persona_name) {
                 Ok(score) => {
                     info!(
                         "Scored {}: {}/100 ({} findings)",
-                        trajectory.scenario_id, score.score, score.findings.len()
+                        trajectory.scenario_id,
+                        score.score,
+                        score.findings.len()
                     );
                     (Some(score), updated_budget)
                 }
@@ -750,7 +771,10 @@ fn score_trajectory(
             }
         }
         Err(e) => {
-            error!("LLM scoring call failed for {}: {e}", trajectory.scenario_id);
+            error!(
+                "LLM scoring call failed for {}: {e}",
+                trajectory.scenario_id
+            );
             (None, budget.clone())
         }
     }
@@ -775,14 +799,23 @@ pub fn score_run(
     judge: &dyn LlmJudge,
 ) -> Result<SatScoreResult, AppError> {
     let run_dir = config.runs_dir.join(run_id);
-    info!("Starting SAT scoring for run {run_id} in {}", run_dir.display());
+    info!(
+        "Starting SAT scoring for run {run_id} in {}",
+        run_dir.display()
+    );
 
     let run_result = read_run_result(&run_dir)?;
     let personas = crate::services::sat_generate::load_personas(&config.personas_dir)
-        .unwrap_or_else(|e| { warn!("Failed to load personas: {e}"); Vec::new() });
+        .unwrap_or_else(|e| {
+            warn!("Failed to load personas: {e}");
+            Vec::new()
+        });
     let scenarios_dir = config.project_root.join("sat/scenarios");
-    let scenarios = crate::services::sat_generate::load_scenarios(&scenarios_dir)
-        .unwrap_or_else(|e| { warn!("Failed to load scenarios: {e}"); Vec::new() });
+    let scenarios =
+        crate::services::sat_generate::load_scenarios(&scenarios_dir).unwrap_or_else(|e| {
+            warn!("Failed to load scenarios: {e}");
+            Vec::new()
+        });
 
     let system_prompt = build_system_prompt();
     let mut budget = config.budget.clone();
@@ -790,20 +823,36 @@ pub fn score_run(
 
     for trajectory in &run_result.trajectories {
         if trajectory.status == TrajectoryStatus::RunnerFailure && trajectory.steps.is_empty() {
-            debug!("Skipping scoring for {} — runner failure with no steps", trajectory.scenario_id);
+            debug!(
+                "Skipping scoring for {} — runner failure with no steps",
+                trajectory.scenario_id
+            );
             continue;
         }
         if is_budget_exceeded(&budget) {
-            warn!("Budget exceeded (${:.4}) — stopping scoring", estimate_cost(&budget));
+            warn!(
+                "Budget exceeded (${:.4}) — stopping scoring",
+                estimate_cost(&budget)
+            );
             break;
         }
 
-        let scenario = scenarios.iter().find(|s| s.meta.id == trajectory.scenario_id);
+        let scenario = scenarios
+            .iter()
+            .find(|s| s.meta.id == trajectory.scenario_id);
         let persona_desc = find_persona_description(scenario, &personas);
-        let (score, updated_budget) =
-            score_trajectory(trajectory, scenario, &persona_desc, &system_prompt, judge, &budget);
+        let (score, updated_budget) = score_trajectory(
+            trajectory,
+            scenario,
+            &persona_desc,
+            &system_prompt,
+            judge,
+            &budget,
+        );
         budget = updated_budget;
-        if let Some(s) = score { scenario_scores.push(s); }
+        if let Some(s) = score {
+            scenario_scores.push(s);
+        }
     }
 
     let scored_at = chrono::Utc::now().to_rfc3339();
@@ -822,7 +871,9 @@ pub fn score_run(
 
     info!(
         "SAT scoring complete for {run_id}: aggregate {}/100, {} findings (${:.4})",
-        score_result.aggregate_score, score_result.finding_counts.total, score_result.estimated_cost_dollars,
+        score_result.aggregate_score,
+        score_result.finding_counts.total,
+        score_result.estimated_cost_dollars,
     );
     Ok(score_result)
 }
@@ -926,7 +977,10 @@ mod tests {
     fn parse_finding_categories() {
         assert_eq!(parse_finding_category("app"), FindingCategory::App);
         assert_eq!(parse_finding_category("runner"), FindingCategory::Runner);
-        assert_eq!(parse_finding_category("scenario"), FindingCategory::Scenario);
+        assert_eq!(
+            parse_finding_category("scenario"),
+            FindingCategory::Scenario
+        );
         assert_eq!(parse_finding_category("APP"), FindingCategory::App);
         assert_eq!(parse_finding_category("unknown"), FindingCategory::App); // default
     }
@@ -1088,7 +1142,7 @@ mod tests {
                 scenario_id: "s1".into(),
                 step_number: 1,
                 summary: "Bug".into(),
-                detail: "".into(),
+                detail: String::new(),
                 category: FindingCategory::App,
                 confidence: ConfidenceLevel::High,
                 evidence: Vec::new(),
@@ -1098,7 +1152,7 @@ mod tests {
                 scenario_id: "s1".into(),
                 step_number: 2,
                 summary: "Runner issue".into(),
-                detail: "".into(),
+                detail: String::new(),
                 category: FindingCategory::Runner,
                 confidence: ConfidenceLevel::Medium,
                 evidence: Vec::new(),
@@ -1108,7 +1162,7 @@ mod tests {
                 scenario_id: "s2".into(),
                 step_number: 0,
                 summary: "Bad test".into(),
-                detail: "".into(),
+                detail: String::new(),
                 category: FindingCategory::Scenario,
                 confidence: ConfidenceLevel::Low,
                 evidence: Vec::new(),
@@ -1118,7 +1172,7 @@ mod tests {
                 scenario_id: "s2".into(),
                 step_number: 3,
                 summary: "Another bug".into(),
-                detail: "".into(),
+                detail: String::new(),
                 category: FindingCategory::App,
                 confidence: ConfidenceLevel::High,
                 evidence: Vec::new(),
@@ -1187,7 +1241,7 @@ mod tests {
                     scenario_id: "s1".into(),
                     step_number: 1,
                     summary: "High confidence bug".into(),
-                    detail: "".into(),
+                    detail: String::new(),
                     category: FindingCategory::App,
                     confidence: ConfidenceLevel::High,
                     evidence: Vec::new(),
@@ -1197,7 +1251,7 @@ mod tests {
                     scenario_id: "s1".into(),
                     step_number: 2,
                     summary: "Low confidence issue".into(),
-                    detail: "".into(),
+                    detail: String::new(),
                     category: FindingCategory::Runner,
                     confidence: ConfidenceLevel::Low,
                     evidence: Vec::new(),

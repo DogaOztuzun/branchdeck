@@ -229,9 +229,7 @@ pub fn apply_merge_event(
     state.retry_queue.remove(&key);
     state.review_ready.remove(&key);
 
-    info!(
-        "Orchestrator: PR {key} merged, creating PostMerge trigger for re-score"
-    );
+    info!("Orchestrator: PR {key} merged, creating PostMerge trigger for re-score");
 
     vec![TriggerEvent {
         kind: TrackerKind::PostMerge,

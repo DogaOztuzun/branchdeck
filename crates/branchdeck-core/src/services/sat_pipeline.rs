@@ -375,7 +375,10 @@ mod tests {
         );
         assert!(matches!(
             result.status,
-            SatPipelineStatus::Failed { stage: SatPipelineStage::Execute, .. }
+            SatPipelineStatus::Failed {
+                stage: SatPipelineStage::Execute,
+                ..
+            }
         ));
         assert_eq!(result.stages.len(), 2);
         assert!(result.stages[0].success);

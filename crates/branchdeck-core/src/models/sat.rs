@@ -938,3 +938,83 @@ pub struct ScoreComparison {
     /// Number of scenarios unchanged (delta == 0).
     pub unchanged_count: usize,
 }
+
+// ===========================================================================
+// Regression detection types (Story 4.3)
+// ===========================================================================
+
+/// A single regression detected by comparing before/after scores.
+///
+/// A regression is a scenario that previously had a higher score
+/// and now scores lower after a fix was merged.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct RegressionFinding {
+    /// Scenario ID that regressed.
+    pub scenario_id: String,
+    /// Persona associated with the scenario.
+    pub persona: String,
+    /// Score before the fix (from the original SAT run).
+    pub before_score: u32,
+    /// Score after the fix (from the post-merge re-score).
+    pub after_score: u32,
+    /// Magnitude of regression (always positive; before - after).
+    pub regression_magnitude: u32,
+    /// Per-dimension regression details (negative values = regression).
+    pub dimension_deltas: DimensionDeltas,
+    /// The PR number suspected of causing the regression.
+    pub suspected_pr_number: u64,
+    /// Repository in "owner/repo" format.
+    pub repo: String,
+}
+
+/// Outcome of verifying a SAT cycle after a fix is merged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VerificationOutcome {
+    /// All scenarios improved or stayed the same. Cycle is done.
+    Verified,
+    /// Some previously-passing scenarios now score lower. New issues needed.
+    Regressed,
+    /// Mixed: some improved, some regressed. New issues for regressions.
+    Mixed,
+}
+
+impl std::fmt::Display for VerificationOutcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Verified => f.write_str("verified"),
+            Self::Regressed => f.write_str("regressed"),
+            Self::Mixed => f.write_str("mixed"),
+        }
+    }
+}
+
+/// Full regression report for a SAT cycle verification.
+/// Written to `sat/runs/run-{id}/regression-report.json`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct RegressionReport {
+    /// Run ID of the post-merge re-score run.
+    pub after_run_id: String,
+    /// Run ID of the original (before) SAT run.
+    pub before_run_id: String,
+    /// ISO 8601 timestamp when the report was generated.
+    pub generated_at: String,
+    /// PR number that was merged (the fix).
+    pub merged_pr_number: u64,
+    /// Repository in "owner/repo" format.
+    pub repo: String,
+    /// Verification outcome.
+    pub outcome: VerificationOutcome,
+    /// Overall score delta (positive = improvement).
+    pub overall_delta: i32,
+    /// Number of scenarios that improved.
+    pub improved_count: usize,
+    /// Number of scenarios that regressed.
+    pub regressed_count: usize,
+    /// Number of scenarios unchanged.
+    pub unchanged_count: usize,
+    /// Detailed regression findings (empty if outcome is `Verified`).
+    pub regressions: Vec<RegressionFinding>,
+}

@@ -268,11 +268,15 @@ pub fn build_issue_body(
     let _ = writeln!(body, "| **Severity** | {severity_label} |");
     let _ = writeln!(body, "| **Category** | {} |", finding.category);
     let _ = writeln!(body, "| **Confidence** | {} |", finding.confidence);
-    let _ = writeln!(body, "| **Step** | {} |", if finding.step_number == 0 {
-        "Overall".to_string()
-    } else {
-        format!("Step {}", finding.step_number)
-    });
+    let _ = writeln!(
+        body,
+        "| **Step** | {} |",
+        if finding.step_number == 0 {
+            "Overall".to_string()
+        } else {
+            format!("Step {}", finding.step_number)
+        }
+    );
     let _ = writeln!(body, "| **Run** | `{run_id}` |");
     let _ = writeln!(body);
 
@@ -340,10 +344,7 @@ pub fn build_issue_body(
 /// Build the labels for a SAT issue.
 #[must_use]
 pub fn build_issue_labels(finding: &SatFinding) -> Vec<String> {
-    let mut labels = vec![
-        "agent:implement".to_string(),
-        "sat:finding".to_string(),
-    ];
+    let mut labels = vec!["agent:implement".to_string(), "sat:finding".to_string()];
 
     // Add severity label
     match finding.severity {
@@ -420,7 +421,10 @@ pub fn create_issues_from_run(
     creator: &dyn IssueCreator,
 ) -> Result<SatIssueResult, AppError> {
     let run_dir = config.runs_dir.join(run_id);
-    info!("Starting SAT issue creation for run {run_id} in {}", run_dir.display());
+    info!(
+        "Starting SAT issue creation for run {run_id} in {}",
+        run_dir.display()
+    );
 
     let score_result = read_scores(&run_dir)?;
     let eligible = filter_findings_for_issues(&score_result.all_findings, config);
@@ -439,14 +443,16 @@ pub fn create_issues_from_run(
     for finding in &eligible {
         let scenario_score =
             find_scenario_score(&score_result.scenario_scores, &finding.scenario_id);
-        let persona =
-            scenario_score.map_or_else(|| "unknown".to_string(), |s| s.persona.clone());
+        let persona = scenario_score.map_or_else(|| "unknown".to_string(), |s| s.persona.clone());
         let fingerprint = generate_fingerprint(&finding.scenario_id, &persona, run_id);
 
         // Check for duplicate
         match creator.issue_exists_with_fingerprint(owner, repo, &fingerprint) {
             Ok(true) => {
-                debug!("Skipping duplicate issue for {} (fingerprint {fingerprint})", finding.scenario_id);
+                debug!(
+                    "Skipping duplicate issue for {} (fingerprint {fingerprint})",
+                    finding.scenario_id
+                );
                 skipped_count += 1;
                 entries.push(SatIssueEntry {
                     scenario_id: finding.scenario_id.clone(),
@@ -459,7 +465,10 @@ pub fn create_issues_from_run(
             }
             Ok(false) => { /* proceed */ }
             Err(e) => {
-                warn!("Fingerprint check failed for {} — proceeding: {e}", finding.scenario_id);
+                warn!(
+                    "Fingerprint check failed for {} — proceeding: {e}",
+                    finding.scenario_id
+                );
             }
         }
 
@@ -469,14 +478,20 @@ pub fn create_issues_from_run(
 
         match creator.create_issue(owner, repo, &title, &body, &labels) {
             Ok((issue_number, issue_url)) => {
-                info!("Created issue #{issue_number} for {} ({fingerprint})", finding.scenario_id);
+                info!(
+                    "Created issue #{issue_number} for {} ({fingerprint})",
+                    finding.scenario_id
+                );
                 created_count += 1;
                 entries.push(SatIssueEntry {
                     scenario_id: finding.scenario_id.clone(),
                     persona: persona.clone(),
                     fingerprint,
                     summary: finding.summary.clone(),
-                    outcome: IssueCreationOutcome::Created { issue_number, issue_url },
+                    outcome: IssueCreationOutcome::Created {
+                        issue_number,
+                        issue_url,
+                    },
                 });
             }
             Err(e) => {
@@ -487,7 +502,9 @@ pub fn create_issues_from_run(
                     persona: persona.clone(),
                     fingerprint,
                     summary: finding.summary.clone(),
-                    outcome: IssueCreationOutcome::Failed { reason: e.to_string() },
+                    outcome: IssueCreationOutcome::Failed {
+                        reason: e.to_string(),
+                    },
                 });
             }
         }
@@ -645,11 +662,11 @@ mod tests {
     fn filter_mixed_findings() {
         let config = make_config();
         let findings = vec![
-            make_finding("s1", FindingCategory::App, 1, ConfidenceLevel::High),      // pass
-            make_finding("s2", FindingCategory::Runner, 1, ConfidenceLevel::High),    // reject: runner
-            make_finding("s3", FindingCategory::App, 4, ConfidenceLevel::High),       // reject: severity
-            make_finding("s4", FindingCategory::App, 2, ConfidenceLevel::Medium),     // reject: confidence
-            make_finding("s5", FindingCategory::App, 2, ConfidenceLevel::High),       // pass
+            make_finding("s1", FindingCategory::App, 1, ConfidenceLevel::High), // pass
+            make_finding("s2", FindingCategory::Runner, 1, ConfidenceLevel::High), // reject: runner
+            make_finding("s3", FindingCategory::App, 4, ConfidenceLevel::High), // reject: severity
+            make_finding("s4", FindingCategory::App, 2, ConfidenceLevel::Medium), // reject: confidence
+            make_finding("s5", FindingCategory::App, 2, ConfidenceLevel::High),   // pass
         ];
         let result = filter_findings_for_issues(&findings, &config);
         assert_eq!(result.len(), 2);
@@ -700,7 +717,12 @@ mod tests {
 
     #[test]
     fn issue_body_contains_required_fields() {
-        let finding = make_finding("scenario-01", FindingCategory::App, 1, ConfidenceLevel::High);
+        let finding = make_finding(
+            "scenario-01",
+            FindingCategory::App,
+            1,
+            ConfidenceLevel::High,
+        );
         let score = make_scenario_score("scenario-01", "power-user", 45);
         let body = build_issue_body(&finding, Some(&score), "run-20260326", "abc123");
 
@@ -717,7 +739,12 @@ mod tests {
 
     #[test]
     fn issue_body_without_score() {
-        let finding = make_finding("scenario-01", FindingCategory::App, 2, ConfidenceLevel::High);
+        let finding = make_finding(
+            "scenario-01",
+            FindingCategory::App,
+            2,
+            ConfidenceLevel::High,
+        );
         let body = build_issue_body(&finding, None, "run-test", "fp123");
 
         assert!(body.contains("scenario-01"));
@@ -783,7 +810,9 @@ mod tests {
             _repo: &str,
             fingerprint: &str,
         ) -> Result<bool, AppError> {
-            Ok(self.existing_fingerprints.contains(&fingerprint.to_string()))
+            Ok(self
+                .existing_fingerprints
+                .contains(&fingerprint.to_string()))
         }
     }
 
@@ -798,11 +827,22 @@ mod tests {
             scored_at: "2026-03-26T00:00:00Z".into(),
             scenario_scores: vec![make_scenario_score("s1", "power-user", 40)],
             aggregate_score: 40,
-            all_findings: vec![
-                make_finding("s1", FindingCategory::App, 1, ConfidenceLevel::High),
-            ],
-            finding_counts: FindingCounts { app: 1, runner: 0, scenario: 0, total: 1 },
-            token_usage: TokenUsage { input_tokens: 0, output_tokens: 0 },
+            all_findings: vec![make_finding(
+                "s1",
+                FindingCategory::App,
+                1,
+                ConfidenceLevel::High,
+            )],
+            finding_counts: FindingCounts {
+                app: 1,
+                runner: 0,
+                scenario: 0,
+                total: 1,
+            },
+            token_usage: TokenUsage {
+                input_tokens: 0,
+                output_tokens: 0,
+            },
             estimated_cost_dollars: 0.0,
         };
         let json = serde_json::to_string_pretty(&score_result).unwrap();
@@ -812,7 +852,8 @@ mod tests {
         config.runs_dir = tmp.path().to_path_buf();
 
         let creator = MockCreator::new(Vec::new());
-        let result = create_issues_from_run(&config, "run-test", "owner", "repo", &creator).unwrap();
+        let result =
+            create_issues_from_run(&config, "run-test", "owner", "repo", &creator).unwrap();
 
         assert_eq!(result.created_count, 1);
         assert_eq!(result.skipped_count, 0);
@@ -836,11 +877,22 @@ mod tests {
             scored_at: "2026-03-26T00:00:00Z".into(),
             scenario_scores: vec![make_scenario_score("s1", "power-user", 40)],
             aggregate_score: 40,
-            all_findings: vec![
-                make_finding("s1", FindingCategory::App, 1, ConfidenceLevel::High),
-            ],
-            finding_counts: FindingCounts { app: 1, runner: 0, scenario: 0, total: 1 },
-            token_usage: TokenUsage { input_tokens: 0, output_tokens: 0 },
+            all_findings: vec![make_finding(
+                "s1",
+                FindingCategory::App,
+                1,
+                ConfidenceLevel::High,
+            )],
+            finding_counts: FindingCounts {
+                app: 1,
+                runner: 0,
+                scenario: 0,
+                total: 1,
+            },
+            token_usage: TokenUsage {
+                input_tokens: 0,
+                output_tokens: 0,
+            },
             estimated_cost_dollars: 0.0,
         };
         let json = serde_json::to_string_pretty(&score_result).unwrap();
@@ -853,7 +905,8 @@ mod tests {
         let mut config = make_config();
         config.runs_dir = tmp.path().to_path_buf();
 
-        let result = create_issues_from_run(&config, "run-test", "owner", "repo", &creator).unwrap();
+        let result =
+            create_issues_from_run(&config, "run-test", "owner", "repo", &creator).unwrap();
 
         assert_eq!(result.created_count, 0);
         assert_eq!(result.skipped_count, 1);
@@ -872,12 +925,20 @@ mod tests {
             scenario_scores: Vec::new(),
             aggregate_score: 80,
             all_findings: vec![
-                make_finding("s1", FindingCategory::Runner, 1, ConfidenceLevel::High),  // wrong category
-                make_finding("s2", FindingCategory::App, 5, ConfidenceLevel::High),      // wrong severity
-                make_finding("s3", FindingCategory::App, 1, ConfidenceLevel::Low),       // wrong confidence
+                make_finding("s1", FindingCategory::Runner, 1, ConfidenceLevel::High), // wrong category
+                make_finding("s2", FindingCategory::App, 5, ConfidenceLevel::High), // wrong severity
+                make_finding("s3", FindingCategory::App, 1, ConfidenceLevel::Low), // wrong confidence
             ],
-            finding_counts: FindingCounts { app: 2, runner: 1, scenario: 0, total: 3 },
-            token_usage: TokenUsage { input_tokens: 0, output_tokens: 0 },
+            finding_counts: FindingCounts {
+                app: 2,
+                runner: 1,
+                scenario: 0,
+                total: 3,
+            },
+            token_usage: TokenUsage {
+                input_tokens: 0,
+                output_tokens: 0,
+            },
             estimated_cost_dollars: 0.0,
         };
         let json = serde_json::to_string_pretty(&score_result).unwrap();
@@ -887,7 +948,8 @@ mod tests {
         config.runs_dir = tmp.path().to_path_buf();
 
         let creator = MockCreator::new(Vec::new());
-        let result = create_issues_from_run(&config, "run-test", "owner", "repo", &creator).unwrap();
+        let result =
+            create_issues_from_run(&config, "run-test", "owner", "repo", &creator).unwrap();
 
         assert_eq!(result.created_count, 0);
         assert_eq!(result.entries.len(), 0);
