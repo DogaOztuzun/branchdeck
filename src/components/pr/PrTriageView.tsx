@@ -1,9 +1,13 @@
 import { listen } from '@tauri-apps/api/event';
 import { ArrowLeft, RefreshCw } from 'lucide-solid';
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { getActivityStore } from '../../lib/stores/activity';
 import { getLayoutStore } from '../../lib/stores/layout';
 import { getLifecycleStore, groupTriagePrs } from '../../lib/stores/lifecycle';
+import { createOvernightSummary } from '../../lib/stores/overnight';
+import { getSATStore } from '../../lib/stores/sat';
 import type { TriagePr } from '../../types/lifecycle';
+import { SummaryStatsBar } from '../ui/SummaryStatsBar';
 import { AnalysisCard } from './AnalysisCard';
 import { TriageCard } from './TriageCard';
 import { TriageNewRow } from './TriageNewRow';
@@ -28,6 +32,19 @@ type RunStepEvent = {
 export function PrTriageView() {
   const layout = getLayoutStore();
   const lifecycleStore = getLifecycleStore();
+  const activityStore = getActivityStore();
+  const satStore = getSATStore();
+
+  const overnight = createOvernightSummary({
+    getEvents: () => activityStore.events(),
+    getTriagePrs: () => lifecycleStore.getTriagePrs(),
+    getCurrentScore: () => satStore.currentScore(),
+    getPreviousScore: () => {
+      const c = satStore.cycles();
+      if (c.length < 2) return satStore.currentScore();
+      return c[c.length - 2].score;
+    },
+  });
 
   const [lastSteps, setLastSteps] = createSignal<Record<string, RunStepEvent>>({});
   const [tickMs, setTickMs] = createSignal(Date.now());
@@ -39,6 +56,7 @@ export function PrTriageView() {
   onMount(() => {
     lifecycleStore.startListening();
     lifecycleStore.loadInitial();
+    overnight.recordSessionStart();
 
     listen<RunStepEvent>('run:step', (e) => {
       const step = e.payload;
@@ -105,6 +123,14 @@ export function PrTriageView() {
           <RefreshCw size={14} />
         </button>
       </div>
+
+      {/* Overnight summary bar */}
+      <Show when={overnight.hasActivity()}>
+        <SummaryStatsBar
+          stats={overnight.summaryItems()}
+          class="mb-3 bg-bg-surface border border-border-subtle"
+        />
+      </Show>
 
       {/* Summary counts */}
       <div class="text-sm text-text-dim mb-4">

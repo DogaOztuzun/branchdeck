@@ -12,7 +12,7 @@ pub fn now_ms() -> EpochMs {
         .map_or(0, |d| d.as_millis() as u64)
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum Event {
     #[serde(rename_all = "camelCase")]
@@ -110,6 +110,28 @@ pub enum Event {
     },
 }
 
+impl Event {
+    /// Extract the timestamp from any event variant.
+    /// `RetryDue` has no timestamp field — returns 0.
+    #[must_use]
+    pub fn timestamp(&self) -> EpochMs {
+        match self {
+            Self::SessionStart { ts, .. }
+            | Self::ToolStart { ts, .. }
+            | Self::ToolEnd { ts, .. }
+            | Self::SubagentStart { ts, .. }
+            | Self::SubagentStop { ts, .. }
+            | Self::SessionStop { ts, .. }
+            | Self::Notification { ts, .. }
+            | Self::RunComplete { ts, .. }
+            | Self::PrStatusChanged { ts, .. }
+            | Self::IssueDetected { ts, .. }
+            | Self::PrMerged { ts, .. } => *ts,
+            Self::RetryDue { .. } => 0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum AgentStatus {
@@ -118,7 +140,7 @@ pub enum AgentStatus {
     Stopped,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentState {
     pub session_id: String,
@@ -132,7 +154,7 @@ pub struct AgentState {
     pub last_activity: EpochMs,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileAccess {
     pub path: String,

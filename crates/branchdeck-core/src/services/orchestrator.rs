@@ -6,8 +6,8 @@ use log::{debug, error, info};
 use crate::models::agent::EpochMs;
 use crate::models::github::{IssueSummary, PrSummary};
 use crate::models::orchestrator::{
-    is_pr_eligible, issue_key, pr_key, LifecycleEvent, LifecycleStatus, Orchestrator,
-    OrchestratorEffect, RetryEntry, RunningEntry, SessionOutcome,
+    is_pr_eligible, issue_key, pr_key, LifecycleEvent, LifecycleStatus, LifecycleTimelineEntry,
+    Orchestrator, OrchestratorEffect, RetryEntry, RunningEntry, SessionOutcome,
 };
 use crate::models::workflow::{TrackerKind, TriggerContext, TriggerEvent};
 use crate::traits::{self, EventEmitter};
@@ -69,7 +69,8 @@ pub fn apply_pr_event(
         }
 
         // Use workflow registry for trigger matching if available, fallback to hardcoded eligibility
-        let eligible = if let Some(registry) = &state.registry {
+        // Returns (eligible, matched_workflow_name)
+        let (eligible, matched_workflow_name) = if let Some(registry) = &state.registry {
             let trigger = TriggerEvent {
                 kind: TrackerKind::GithubPr,
                 context: TriggerContext::GithubPr {
@@ -81,9 +82,11 @@ pub fn apply_pr_event(
                     review_decision: pr.review_decision.clone(),
                 },
             };
-            !registry.match_workflows(&trigger).is_empty()
+            let matches = registry.match_workflows(&trigger);
+            let wf_name = matches.first().map(|wf| wf.config.name.clone());
+            (!matches.is_empty(), wf_name)
         } else {
-            is_pr_eligible(pr, &state.config)
+            (is_pr_eligible(pr, &state.config), None)
         };
         if !eligible {
             continue;
@@ -125,6 +128,7 @@ pub fn apply_pr_event(
                 },
             },
             attempt: 1,
+            workflow_name: matched_workflow_name.clone(),
         });
 
         effects.push(OrchestratorEffect::EmitLifecycleEvent {
@@ -135,6 +139,9 @@ pub fn apply_pr_event(
                 attempt: 1,
                 started_at: now,
                 session_id: None, // populated by executor after dispatch
+                workflow_name: matched_workflow_name.clone(),
+                display_status: None, // resolved by executor from workflow lifecycle (FR33)
+                completed_at: None,
             },
         });
 
@@ -277,6 +284,7 @@ pub fn apply_session_end(
                     stale: false,
                     branch: entry.branch.clone(),
                     base_branch: entry.base_branch.clone(),
+                    workflow_name: entry.workflow_name.clone(),
                 },
             );
 
@@ -288,6 +296,9 @@ pub fn apply_session_end(
                     attempt: entry.attempt,
                     started_at: entry.started_at,
                     session_id: None,
+                    workflow_name: entry.workflow_name.clone(),
+                    display_status: None,
+                    completed_at: None,
                 },
             });
         }
@@ -302,6 +313,9 @@ pub fn apply_session_end(
                 attempt: entry.attempt,
                 started_at: entry.started_at,
                 session_id: None,
+                workflow_name: entry.workflow_name.clone(),
+                display_status: None,
+                completed_at: None,
             };
             info!("PR {pr_key} completed (fix succeeded), tracking in completed_lifecycles");
             state
@@ -324,6 +338,9 @@ pub fn apply_session_end(
                     attempt: entry.attempt,
                     started_at: entry.started_at,
                     session_id: None,
+                    workflow_name: entry.workflow_name.clone(),
+                    display_status: None,
+                    completed_at: None,
                 };
                 state
                     .completed_lifecycles
@@ -358,6 +375,7 @@ pub fn apply_session_end(
                         worktree_path: worktree_path.clone(),
                         branch: entry.branch.clone(),
                         base_branch: entry.base_branch.clone(),
+                        workflow_name: entry.workflow_name.clone(),
                     },
                 );
 
@@ -369,6 +387,9 @@ pub fn apply_session_end(
                         attempt: entry.attempt + 1,
                         started_at: entry.started_at,
                         session_id: None,
+                        workflow_name: entry.workflow_name.clone(),
+                        display_status: None,
+                        completed_at: None,
                     },
                 });
             }
@@ -411,12 +432,12 @@ pub fn apply_relaunch(
 
     // Recover branch info + attempt from retry or review_ready
     let review_entry = state.review_ready.remove(pr_key);
-    let (prev_attempt, branch, base_branch) = if let Some(ref r) = retry_entry {
-        (r.attempt, r.branch.clone(), r.base_branch.clone())
+    let (prev_attempt, branch, base_branch, wf_name) = if let Some(ref r) = retry_entry {
+        (r.attempt, r.branch.clone(), r.base_branch.clone(), r.workflow_name.clone())
     } else if let Some(ref r) = review_entry {
-        (r.attempt, r.branch.clone(), r.base_branch.clone())
+        (r.attempt, r.branch.clone(), r.base_branch.clone(), r.workflow_name.clone())
     } else {
-        (0, String::new(), String::new())
+        (0, String::new(), String::new(), None)
     };
     let next_attempt = prev_attempt + 1;
 
@@ -437,6 +458,7 @@ pub fn apply_relaunch(
         worktree_path: worktree_path.to_string(),
         pr_context,
         attempt: next_attempt,
+        workflow_name: wf_name.clone(),
     });
 
     effects.push(OrchestratorEffect::EmitLifecycleEvent {
@@ -447,6 +469,9 @@ pub fn apply_relaunch(
             attempt: next_attempt,
             started_at: now,
             session_id: None, // populated by executor after dispatch
+            workflow_name: wf_name,
+            display_status: None,
+            completed_at: None,
         },
     });
 
@@ -551,6 +576,9 @@ pub fn apply_reconciliation(
                         attempt: entry.attempt,
                         started_at: entry.started_at,
                         session_id: None,
+                        workflow_name: None,
+                        display_status: None,
+                        completed_at: None,
                     },
                 });
             }
@@ -598,11 +626,14 @@ pub fn apply_retry_due(
         pr_context.base_branch = retry.base_branch;
     }
 
+    let wf_name = retry.workflow_name.clone();
+
     effects.push(OrchestratorEffect::DispatchSession {
         pr_key: pr_key.to_string(),
         worktree_path: worktree_path.to_string(),
         pr_context,
         attempt: retry.attempt,
+        workflow_name: wf_name.clone(),
     });
 
     effects.push(OrchestratorEffect::EmitLifecycleEvent {
@@ -613,6 +644,9 @@ pub fn apply_retry_due(
             attempt: retry.attempt,
             started_at: now,
             session_id: None, // populated by executor after dispatch
+            workflow_name: wf_name,
+            display_status: None,
+            completed_at: None,
         },
     });
 
@@ -620,27 +654,9 @@ pub fn apply_retry_due(
 }
 
 /// Record a running session. Called by the effect executor after dispatch.
-pub fn record_running(
-    state: &mut Orchestrator,
-    pr_key: &str,
-    worktree_path: &str,
-    tab_id: &str,
-    now: EpochMs,
-    attempt: u32,
-    pr_context: &crate::models::orchestrator::PrContext,
-) {
-    state.running.insert(
-        pr_key.to_string(),
-        RunningEntry {
-            pr_key: pr_key.to_string(),
-            worktree_path: worktree_path.to_string(),
-            tab_id: tab_id.to_string(),
-            started_at: now,
-            attempt,
-            branch: pr_context.branch.clone(),
-            base_branch: pr_context.base_branch.clone(),
-        },
-    );
+pub fn record_running(state: &mut Orchestrator, entry: RunningEntry) {
+    let pr_key = entry.pr_key.clone();
+    state.running.insert(pr_key, entry);
 }
 
 /// Skip a PR — remove from all tracking, no retry.
@@ -668,6 +684,9 @@ pub fn apply_skip(state: &mut Orchestrator, pr_key: &str) -> Vec<OrchestratorEff
         attempt: 0,
         started_at: 0,
         session_id: None,
+        workflow_name: None,
+        display_status: None,
+        completed_at: None,
     };
     info!("PR {pr_key} skipped, tracking in completed_lifecycles");
     state
@@ -958,6 +977,7 @@ async fn execute_dispatch(
     attempt: u32,
     orchestrator: &OrchestratorState,
     run_manager: &crate::services::run_manager::RunManagerState,
+    workflow_name: Option<String>,
 ) {
     use crate::models::agent::now_ms;
 
@@ -1068,12 +1088,16 @@ async fn execute_dispatch(
             let mut orch = orchestrator.lock().await;
             record_running(
                 &mut orch,
-                key,
-                worktree_path,
-                &tab_id,
-                now_ms(),
-                attempt,
-                pr_context,
+                RunningEntry {
+                    pr_key: key.to_string(),
+                    worktree_path: worktree_path.to_string(),
+                    tab_id: tab_id.clone(),
+                    started_at: now_ms(),
+                    attempt,
+                    branch: pr_context.branch.clone(),
+                    base_branch: pr_context.base_branch.clone(),
+                    workflow_name,
+                },
             );
             info!("Dispatched orchestrator session for {key} (tab={tab_id})");
         }
@@ -1100,6 +1124,7 @@ pub async fn execute_effects(
                 worktree_path,
                 pr_context,
                 attempt,
+                workflow_name,
             } => {
                 execute_dispatch(
                     &key,
@@ -1108,6 +1133,7 @@ pub async fn execute_effects(
                     attempt,
                     orchestrator,
                     run_manager,
+                    workflow_name,
                 )
                 .await;
             }
@@ -1175,6 +1201,77 @@ pub async fn execute_effects(
                         event.session_id = Some(entry.tab_id.clone());
                     }
                 }
+
+                // Capture timestamp once for consistent completed_at + timeline entry
+                let now = crate::services::run_manager::now_epoch_ms();
+
+                // Set completed_at for terminal states
+                let is_terminal = matches!(
+                    event.status,
+                    LifecycleStatus::Completed | LifecycleStatus::Failed
+                );
+                if is_terminal && event.completed_at.is_none() {
+                    event.completed_at = Some(now);
+                }
+
+                // Record timeline entry for full lifecycle view (NFR25)
+                {
+                    let mut orch = orchestrator.lock().await;
+                    let status_str = match event.status {
+                        LifecycleStatus::Running => "running",
+                        LifecycleStatus::ReviewReady => "reviewReady",
+                        LifecycleStatus::Approved => "approved",
+                        LifecycleStatus::Fixing => "fixing",
+                        LifecycleStatus::Completed => "completed",
+                        LifecycleStatus::Retrying => "retrying",
+                        LifecycleStatus::Stale => "stale",
+                        LifecycleStatus::Failed => "failed",
+                    };
+
+                    // Resolve display status from workflow lifecycle definition (FR33)
+                    if event.display_status.is_none() {
+                        if let Some(ref wf_name) = event.workflow_name {
+                            if let Some(registry) = &orch.registry {
+                                if let Some(wf) = registry.get_workflow(wf_name) {
+                                    if let Some(ref lifecycle) = wf.config.lifecycle {
+                                        let resolved = lifecycle.resolve_display_status(status_str);
+                                        if resolved != status_str {
+                                            event.display_status = Some(resolved);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    let display = event
+                        .display_status
+                        .clone()
+                        .unwrap_or_else(|| status_str.to_string());
+                    let timeline_entry = LifecycleTimelineEntry {
+                        timestamp: now,
+                        status: status_str.to_string(),
+                        display_status: display,
+                        detail: format!(
+                            "{} (attempt {})",
+                            event
+                                .display_status
+                                .as_deref()
+                                .unwrap_or(status_str),
+                            event.attempt
+                        ),
+                    };
+                    let entries = orch.timelines
+                        .entry(event.pr_key.clone())
+                        .or_default();
+                    entries.push(timeline_entry);
+                    // Cap timeline entries per PR to prevent unbounded growth
+                    if entries.len() > 100 {
+                        let drain_count = entries.len() - 100;
+                        entries.drain(..drain_count);
+                    }
+                }
+
                 if let Err(e) = traits::emit(emitter.as_ref(), "lifecycle:updated", &event) {
                     error!("Failed to emit lifecycle:updated: {e}");
                 }
@@ -1418,6 +1515,7 @@ async fn handle_event(
                                 attempt: 1,
                                 branch: issue_branch,
                                 base_branch: "main".to_string(),
+                                workflow_name: Some(plan.workflow_name.clone()),
                             },
                         );
                         drop(orch);
@@ -1430,6 +1528,9 @@ async fn handle_event(
                             attempt: 1,
                             started_at: now,
                             session_id: None,
+                            workflow_name: Some(plan.workflow_name.clone()),
+                            display_status: None,
+                            completed_at: None,
                         };
                         if let Err(e) = traits::emit(emitter.as_ref(), "lifecycle:updated", &event)
                         {
@@ -1513,6 +1614,7 @@ async fn handle_event(
                             attempt: 1,
                             branch: format!("workflow/sat-rescore-{pr_number}"),
                             base_branch: base_branch.clone(),
+                            workflow_name: Some("sat-rescore".to_string()),
                         },
                     );
                     drop(orch);
@@ -1524,6 +1626,9 @@ async fn handle_event(
                         attempt: 1,
                         started_at: now,
                         session_id: None,
+                        workflow_name: Some("sat-rescore".to_string()),
+                        display_status: None,
+                        completed_at: None,
                     };
                     if let Err(e) = traits::emit(emitter.as_ref(), "lifecycle:updated", &event) {
                         error!("Failed to emit lifecycle:updated for rescore {key}: {e}");

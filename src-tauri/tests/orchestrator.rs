@@ -141,6 +141,7 @@ fn session_end_analysis_written_emits_review_ready() {
             attempt: 1,
             branch: "fix/bug".to_string(),
             base_branch: "main".to_string(),
+            workflow_name: None,
         },
     );
 
@@ -173,6 +174,7 @@ fn session_end_fix_completed_marks_done() {
             attempt: 1,
             branch: "fix/bug".to_string(),
             base_branch: "main".to_string(),
+            workflow_name: None,
         },
     );
 
@@ -205,6 +207,7 @@ fn session_end_fix_incomplete_schedules_retry() {
             attempt: 1,
             branch: "fix/bug".to_string(),
             base_branch: "main".to_string(),
+            workflow_name: None,
         },
     );
 
@@ -234,6 +237,7 @@ fn session_end_no_output_schedules_backoff_retry() {
             attempt: 1,
             branch: "fix/bug".to_string(),
             base_branch: "main".to_string(),
+            workflow_name: None,
         },
     );
 
@@ -281,6 +285,7 @@ fn relaunch_cancels_pending_retry() {
             worktree_path: "/tmp/wt".to_string(),
             branch: "fix/bug".to_string(),
             base_branch: "main".to_string(),
+            workflow_name: None,
         },
     );
 
@@ -309,6 +314,7 @@ fn reconciliation_stops_merged_pr() {
             attempt: 1,
             branch: "fix/bug".to_string(),
             base_branch: "main".to_string(),
+            workflow_name: None,
         },
     );
 
@@ -341,6 +347,7 @@ fn retry_due_redispatches() {
             worktree_path: "/tmp/wt".to_string(),
             branch: "fix/bug".to_string(),
             base_branch: "main".to_string(),
+            workflow_name: None,
         },
     );
 
@@ -369,6 +376,7 @@ fn skip_removes_from_all_tracking() {
             attempt: 1,
             branch: "fix/bug".to_string(),
             base_branch: "main".to_string(),
+            workflow_name: None,
         },
     );
 
@@ -425,6 +433,7 @@ fn interleaved_prs_are_independent() {
                 attempt: 1,
                 branch: format!("fix/{i}"),
                 base_branch: "main".to_string(),
+                workflow_name: None,
             },
         );
     }
@@ -523,6 +532,7 @@ fn session_end_fix_completed_tracks_in_completed_lifecycles() {
             attempt: 1,
             branch: "fix/bug".to_string(),
             base_branch: "main".to_string(),
+            workflow_name: None,
         },
     );
 
@@ -563,6 +573,9 @@ fn reconciliation_removes_completed_on_new_ci_failure() {
             attempt: 1,
             started_at: 1000,
             session_id: None,
+            workflow_name: None,
+            display_status: None,
+            completed_at: None,
         },
     );
 
@@ -653,6 +666,7 @@ fn merge_event_cleans_stale_state() {
             stale: false,
             branch: "fix/thing".to_string(),
             base_branch: "main".to_string(),
+            workflow_name: None,
         },
     );
 

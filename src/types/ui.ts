@@ -18,6 +18,8 @@ export type SummaryStatItem = {
   label: string;
   value: string;
   color?: 'primary' | 'success' | 'warning' | 'error' | 'info';
+  /** Optional sparkline data points (rendered as 80x24px inline SVG) */
+  sparkline?: { data: number[]; color: string };
 };
 
 /** Empty state contextual variant (UX-DR9) */

@@ -1,6 +1,7 @@
 import { Show } from 'solid-js';
 import { cn } from '../../lib/cn';
-import type { SATFinding } from '../../types/sat';
+import { getSATStore } from '../../lib/stores/sat';
+import type { ConfidenceLevel, SATFinding } from '../../types/sat';
 import type { BadgeColor } from '../../types/ui';
 import { InboxBadge } from '../ui/InboxBadge';
 
@@ -31,8 +32,16 @@ const statusColor: Record<string, BadgeColor> = {
   'false-positive': 'muted',
 };
 
+const confidenceBadgeColor: Record<ConfidenceLevel, BadgeColor> = {
+  high: 'success',
+  medium: 'warning',
+  low: 'error',
+};
+
 export function FindingRow(props: FindingRowProps) {
+  const sat = getSATStore();
   const isFalsePositive = () => props.finding.status === 'false-positive';
+  const level = () => sat.confidenceLevel(props.finding.confidence);
 
   return (
     <div>
@@ -59,6 +68,13 @@ export function FindingRow(props: FindingRowProps) {
           color={categoryColor[props.finding.category] ?? 'muted'}
         />
         <span class="text-base text-text-main truncate flex-1">{props.finding.title}</span>
+        <Show when={level() !== 'high'}>
+          <InboxBadge
+            label={level()}
+            structure={level() === 'low' ? 'filled' : 'outlined'}
+            color={confidenceBadgeColor[level()]}
+          />
+        </Show>
         <span class="text-[11px] text-text-dim shrink-0">{props.finding.persona}</span>
         <span class="text-[11px] text-text-dim shrink-0">C{props.finding.cycle}</span>
         <InboxBadge

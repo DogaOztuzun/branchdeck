@@ -2,49 +2,10 @@ import { ArrowLeft, RefreshCw } from 'lucide-solid';
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { getLayoutStore } from '../../lib/stores/layout';
 import { getLifecycleStore } from '../../lib/stores/lifecycle';
-import type {
-  LifecycleEvent,
-  TriggerSource,
-  WorkflowCycle,
-  WorkflowType,
-} from '../../types/lifecycle';
+import { toCycle } from '../../lib/utils/lifecycle';
+import type { WorkflowCycle } from '../../types/lifecycle';
+import { TriageActivityFeed } from '../triage/TriageActivityFeed';
 import { CycleRow } from './CycleRow';
-
-/** Infer workflow type from lifecycle context */
-function inferWorkflowType(event: LifecycleEvent): WorkflowType {
-  if (event.prKey.includes('#rescore')) return 'verification';
-  if (event.prKey.includes('#i')) return 'issue-resolution';
-  // Check for SAT-related worktree paths using path segment match (not substring)
-  const segments = event.worktreePath.split('/');
-  if (segments.some((s) => s.startsWith('sat-') || s === 'sat')) return 'sat-scoring';
-  if (event.status === 'retrying' || event.status === 'fixing') return 'issue-resolution';
-  return 'issue-resolution';
-}
-
-/** Infer trigger source from lifecycle event */
-function inferTriggerSource(event: LifecycleEvent): TriggerSource {
-  if (event.prKey.includes('#rescore')) return 'post-merge';
-  if (event.prKey.includes('#i')) return 'issue-detected';
-  if (event.attempt > 1) return 'retry';
-  return 'pr-poll';
-}
-
-/** Convert a LifecycleEvent to a WorkflowCycle for display */
-function toCycle(event: LifecycleEvent): WorkflowCycle {
-  return {
-    id: `${event.prKey}-${event.attempt}`,
-    prKey: event.prKey,
-    workflowType: inferWorkflowType(event),
-    triggerSource: inferTriggerSource(event),
-    status: event.status,
-    attempt: event.attempt,
-    startedAt: event.startedAt,
-    updatedAt: event.startedAt,
-    completedAt: null, // Backend doesn't expose completedAt; elapsed suppressed for completed cycles
-    worktreePath: event.worktreePath,
-    description: event.worktreePath.split('/').pop() ?? event.prKey,
-  };
-}
 
 export function LifecycleView() {
   const layout = getLayoutStore();
@@ -65,12 +26,16 @@ export function LifecycleView() {
 
   const activeCycles = createMemo((): WorkflowCycle[] => {
     const events = Object.values(lifecycleStore.state.lifecycles);
-    return events.map(toCycle).sort((a, b) => b.startedAt - a.startedAt);
+    return events
+      .map((e) => toCycle(e, lifecycleStore.getTimeline(e.prKey)))
+      .sort((a, b) => b.startedAt - a.startedAt);
   });
 
   const completedCycles = createMemo((): WorkflowCycle[] => {
     const events = Object.values(lifecycleStore.state.completedLifecycles);
-    return events.map(toCycle).sort((a, b) => b.startedAt - a.startedAt);
+    return events
+      .map((e) => toCycle(e, lifecycleStore.getTimeline(e.prKey)))
+      .sort((a, b) => b.startedAt - a.startedAt);
   });
 
   const totalActive = createMemo(() => activeCycles().length);
@@ -121,6 +86,9 @@ export function LifecycleView() {
           <span class="text-[var(--color-success)]">{totalCompleted()}</span>
           <span>completed</span>
         </div>
+
+        {/* Real-time agent activity feed */}
+        <TriageActivityFeed />
 
         {/* Empty state */}
         <Show when={totalAll() === 0}>

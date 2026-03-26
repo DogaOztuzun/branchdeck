@@ -2,6 +2,7 @@ import type { ChartDataPoint } from '../../types/chart';
 
 type SparklineProps = {
   data: ChartDataPoint[];
+  color?: string;
   class?: string;
 };
 
@@ -35,7 +36,12 @@ export function Sparkline(props: SparklineProps) {
       role="img"
     >
       <title>Trend</title>
-      <polyline points={points()} fill="none" stroke="#7aa2f7" stroke-width="1.5" />
+      <polyline
+        points={points()}
+        fill="none"
+        stroke={props.color ?? '#7aa2f7'}
+        stroke-width="1.5"
+      />
     </svg>
   );
 }

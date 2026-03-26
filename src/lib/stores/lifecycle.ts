@@ -2,7 +2,12 @@ import { listen } from '@tauri-apps/api/event';
 import { batch, createMemo } from 'solid-js';
 import { createStore, produce } from 'solid-js/store';
 import type { PrSummary } from '../../types/github';
-import type { AnalysisPlan, LifecycleEvent, TriagePr } from '../../types/lifecycle';
+import type {
+  AnalysisPlan,
+  LifecycleEvent,
+  LifecycleTimelineEntry,
+  TriagePr,
+} from '../../types/lifecycle';
 import { listOpenPrs } from '../commands/github';
 import {
   getLifecycles,
@@ -19,6 +24,8 @@ type LifecycleStoreState = {
   completedLifecycles: Record<string, LifecycleEvent>;
   sessionByPr: Record<string, string>;
   repoNameToPath: Record<string, string>;
+  /** Timeline entries per prKey: records every lifecycle transition for full lifecycle view */
+  timelines: Record<string, LifecycleTimelineEntry[]>;
 };
 
 function createLifecycleStore() {
@@ -29,6 +36,7 @@ function createLifecycleStore() {
     completedLifecycles: {},
     sessionByPr: {},
     repoNameToPath: {},
+    timelines: {},
   });
 
   let lifecycleUnlisten: (() => void) | null = null;
@@ -55,6 +63,17 @@ function createLifecycleStore() {
           } else {
             s.lifecycles[event.prKey] = event;
           }
+
+          // Record timeline entry for full lifecycle view (NFR25)
+          if (!s.timelines[event.prKey]) {
+            s.timelines[event.prKey] = [];
+          }
+          s.timelines[event.prKey].push({
+            timestamp: Date.now(),
+            status: event.status,
+            displayStatus: event.displayStatus ?? event.status,
+            detail: `${event.displayStatus ?? event.status} (attempt ${event.attempt})`,
+          });
         }),
       );
 
@@ -205,6 +224,10 @@ function createLifecycleStore() {
     return Object.values(state.lifecycles);
   }
 
+  function getTimeline(prKey: string): LifecycleTimelineEntry[] {
+    return state.timelines[prKey] ?? [];
+  }
+
   const triagePrs = createMemo((): TriagePr[] => {
     const result: TriagePr[] = [];
     const seen = new Set<string>();
@@ -274,6 +297,7 @@ function createLifecycleStore() {
     getLifecycleForPr,
     getAnalysisPlan,
     getAllLifecycles,
+    getTimeline,
     getTriagePrs,
     getAttentionCount,
   };
