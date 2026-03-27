@@ -65,6 +65,14 @@ async fn main() {
             get(routes::activity::get_active_agents),
         )
         .route("/api/runs/cancel", post(routes::runs::cancel_run))
+        .route(
+            "/api/sat/false-positive",
+            post(routes::sat::label_false_positive),
+        )
+        .route(
+            "/api/sat/false-positive/metrics",
+            get(routes::sat::get_false_positive_metrics),
+        )
         .with_state(app_state);
 
     info!("branchdeck-daemon starting on 127.0.0.1:13371");
