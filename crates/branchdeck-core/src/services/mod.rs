@@ -5,6 +5,7 @@ pub mod event_bridge;
 pub mod event_bus;
 pub mod git;
 pub mod github;
+pub mod github_retry;
 pub mod hook_config;
 pub mod hook_receiver;
 pub mod issue_poller;

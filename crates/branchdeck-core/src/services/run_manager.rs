@@ -197,7 +197,7 @@ impl RunManager {
         }
 
         if run_stale::check_run_stale(self.last_activity_ms, now_epoch_ms()) {
-            self.mark_run_failed_with_reason("stalled: no heartbeat for 120s");
+            self.mark_run_failed_with_reason("network-timeout");
             return;
         }
 
@@ -317,7 +317,8 @@ impl RunManager {
         if let Some(ref mut run) = self.active_run {
             let now = now_epoch_ms();
             warn!("Marking active run as failed: {reason}");
-            let effects = run_effects::apply_mark_failed(run, self.started_at_epoch_ms, now);
+            let effects =
+                run_effects::apply_mark_failed(run, reason, self.started_at_epoch_ms, now);
             run_effects::execute_effects(effects, self.emitter.as_ref(), &self.event_bus);
         }
         self.active_run = None;
@@ -584,6 +585,7 @@ pub async fn launch_run(
         last_heartbeat: None,
         elapsed_secs: 0,
         tab_id: Some(tab_id),
+        failure_reason: None,
     };
 
     task::increment_run_count(task_path);
@@ -723,6 +725,7 @@ pub async fn resume_run(
         last_heartbeat: None,
         elapsed_secs: 0,
         tab_id: Some(tab_id),
+        failure_reason: None,
     };
 
     manager.started_at_epoch_ms = now_ms;

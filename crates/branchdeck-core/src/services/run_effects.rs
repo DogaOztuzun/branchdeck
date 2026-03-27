@@ -192,12 +192,15 @@ pub fn apply_permission_request(
 ///
 /// Unlike `apply_run_error`, this does NOT capture cost because it's called
 /// when the sidecar is unresponsive — cost data is unavailable.
+/// The `reason` is stored in `RunInfo.failure_reason` for downstream retry logic.
 pub fn apply_mark_failed(
     run: &mut RunInfo,
+    reason: &str,
     started_at_epoch_ms: u64,
     now_ms: u64,
 ) -> Vec<RunEffect> {
     run.status = RunStatus::Failed;
+    run.failure_reason = Some(reason.to_owned());
     if started_at_epoch_ms > 0 {
         run.elapsed_secs = (now_ms.saturating_sub(started_at_epoch_ms)) / 1000;
     }
