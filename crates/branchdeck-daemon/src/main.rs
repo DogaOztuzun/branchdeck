@@ -322,7 +322,7 @@ async fn run_serve(port: u16, bind: &str, workspace_arg: Option<PathBuf>, static
 
     // Swagger UI is auth-protected (leaks full API surface)
     let protected_with_docs = protected.merge(
-        SwaggerUi::new("/api/docs/{tail:.*}")
+        SwaggerUi::new("/api/docs")
             .url("/api/openapi.json", ApiDoc::openapi()),
     );
 
