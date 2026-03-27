@@ -44,6 +44,12 @@ jobs:
             echo "::error::Working tree is dirty"
             exit 1
           fi
+      - name: Verify updater signing key is configured
+        run: |
+          if grep -q "REPLACE_BEFORE_RELEASE" src-tauri/tauri.conf.json; then
+            echo "::error::Updater public key is still a placeholder — generate a signing keypair and set the real pubkey in src-tauri/tauri.conf.json before releasing"
+            exit 1
+          fi
 
   version:
     name: Bump version
@@ -138,6 +144,11 @@ jobs:
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
+      # IMPORTANT: Before the first release with auto-update enabled, you MUST:
+      # 1. Generate a signing keypair: `tauri signer generate -w ~/.tauri/branchdeck.key`
+      # 2. Set repository secrets: TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+      # 3. Replace "REPLACE_BEFORE_RELEASE" in src-tauri/tauri.conf.json with the public key
+      # 4. Set includeUpdaterJson: true below
       - name: Build Tauri app (deb + AppImage)
         uses: tauri-apps/tauri-action@v0
         env:

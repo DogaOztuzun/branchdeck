@@ -24,11 +24,11 @@ pub fn is_transient(err: &AppError) -> bool {
     // Rate limit — match specific HTTP status patterns to avoid false positives
     // from unrelated numbers (e.g., port 50300, PR #5030)
     if lower.contains("rate limit")
-        || contains_http_status(&lower, "429")
-        || contains_http_status(&lower, "500")
-        || contains_http_status(&lower, "502")
-        || contains_http_status(&lower, "503")
-        || contains_http_status(&lower, "504")
+        || crate::util::contains_http_status(&lower, "429")
+        || crate::util::contains_http_status(&lower, "500")
+        || crate::util::contains_http_status(&lower, "502")
+        || crate::util::contains_http_status(&lower, "503")
+        || crate::util::contains_http_status(&lower, "504")
     {
         return true;
     }
@@ -44,20 +44,6 @@ pub fn is_transient(err: &AppError) -> bool {
         return true;
     }
 
-    false
-}
-
-/// Check if a lowercased error message contains an HTTP status code
-/// at a word boundary (not as part of a larger number like port 50300).
-fn contains_http_status(msg: &str, code: &str) -> bool {
-    for (i, _) in msg.match_indices(code) {
-        let before_ok = i == 0 || !msg.as_bytes()[i - 1].is_ascii_digit();
-        let after_pos = i + code.len();
-        let after_ok = after_pos >= msg.len() || !msg.as_bytes()[after_pos].is_ascii_digit();
-        if before_ok && after_ok {
-            return true;
-        }
-    }
     false
 }
 

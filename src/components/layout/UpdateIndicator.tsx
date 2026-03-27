@@ -1,6 +1,8 @@
 import { Match, Switch } from 'solid-js';
+import { installUpdate } from '../../lib/commands/update';
 import { getTaskStore } from '../../lib/stores/task';
 import { getUpdateStore } from '../../lib/stores/update';
+import { Button } from '../ui/Button';
 
 export function UpdateIndicator() {
   const update = getUpdateStore();
@@ -11,8 +13,11 @@ export function UpdateIndicator() {
   return (
     <Switch>
       <Match when={update.status() === 'available'}>
-        <span class="text-[11px] text-accent-info ml-2">
-          Update available {update.version() ? `v${update.version()}` : ''}
+        <span class="text-[11px] text-accent-info ml-2 inline-flex items-center gap-1.5">
+          Update {update.version() ? `v${update.version()}` : ''} available
+          <Button variant="ghost" size="compact" onClick={() => installUpdate()}>
+            Install
+          </Button>
         </span>
       </Match>
       <Match when={update.status() === 'downloading'}>

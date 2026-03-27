@@ -1,4 +1,4 @@
-export type SetupStep = 'repo' | 'workflows' | 'tokens' | 'review' | 'complete';
+export type SetupStep = 'repo' | 'workflows' | 'tokens' | 'review';
 
 export type TokenSourceKind = 'env-var' | 'gh-cli' | 'none';
 

@@ -18,27 +18,21 @@ pub fn plan_dispatch(
     registry: &WorkflowRegistry,
     event: &TriggerEvent,
     repo_path: &str,
+    enabled_workflows: Option<&[String]>,
 ) -> DispatchPlan {
     let all_matches = registry.match_workflows(event);
 
-    // Filter by per-project enabled_workflows if configured
-    let mut matches: Vec<&WorkflowDef> =
-        if let Ok(config) = crate::services::project_config::load_project_config(repo_path) {
-            if config.enabled_workflows.is_empty() {
-                all_matches
-            } else {
-                debug!(
-                    "Filtering workflows by project config: {:?}",
-                    config.enabled_workflows
-                );
-                all_matches
-                    .into_iter()
-                    .filter(|wf| config.enabled_workflows.contains(&wf.config.name))
-                    .collect()
-            }
-        } else {
+    // Filter by per-project enabled_workflows if provided
+    let mut matches: Vec<&WorkflowDef> = match enabled_workflows {
+        Some(enabled) if !enabled.is_empty() => {
+            debug!("Filtering workflows by project config: {enabled:?}");
             all_matches
-        };
+                .into_iter()
+                .filter(|wf| enabled.contains(&wf.config.name))
+                .collect()
+        }
+        _ => all_matches,
+    };
     matches.sort_by_key(|d| d.config.name.clone());
 
     if matches.is_empty() {
@@ -390,7 +384,7 @@ mod tests {
         let registry = build_registry(&[make_issue_workflow()]);
         let event = make_issue_event("agent:implement");
 
-        let plan = plan_dispatch(&registry, &event, "/tmp/repo");
+        let plan = plan_dispatch(&registry, &event, "/tmp/repo", None);
         assert_eq!(plan.workflow_name, "implement-issue");
         assert!(plan.effects.len() >= 4);
 
@@ -418,7 +412,7 @@ mod tests {
         let registry = build_registry(&[make_issue_workflow()]);
         let event = make_issue_event("agent:implement");
 
-        let plan = plan_dispatch(&registry, &event, "/tmp/repo");
+        let plan = plan_dispatch(&registry, &event, "/tmp/repo", None);
 
         let context_effect = plan.effects.iter().find(|e| {
             matches!(
@@ -452,7 +446,7 @@ mod tests {
         let registry = build_registry(&[make_issue_workflow()]);
         let event = make_issue_event("unrelated-label");
 
-        let plan = plan_dispatch(&registry, &event, "/tmp/repo");
+        let plan = plan_dispatch(&registry, &event, "/tmp/repo", None);
         assert!(plan
             .effects
             .iter()
@@ -464,7 +458,7 @@ mod tests {
         let registry = build_registry(&[make_pr_workflow()]);
         let event = make_pr_event("FAILURE");
 
-        let plan = plan_dispatch(&registry, &event, "/tmp/repo");
+        let plan = plan_dispatch(&registry, &event, "/tmp/repo", None);
         assert_eq!(plan.workflow_name, "pr-shepherd");
     }
 
@@ -473,7 +467,7 @@ mod tests {
         let registry = build_registry(&[make_pr_workflow()]);
         let event = make_pr_event("SUCCESS");
 
-        let plan = plan_dispatch(&registry, &event, "/tmp/repo");
+        let plan = plan_dispatch(&registry, &event, "/tmp/repo", None);
         assert!(plan
             .effects
             .iter()
@@ -491,7 +485,7 @@ mod tests {
             },
         };
 
-        let plan = plan_dispatch(&registry, &event, "/tmp/repo");
+        let plan = plan_dispatch(&registry, &event, "/tmp/repo", None);
         assert!(plan
             .effects
             .iter()
@@ -521,7 +515,7 @@ mod tests {
             },
         };
 
-        let plan = plan_dispatch(&registry, &event, "/tmp/repo");
+        let plan = plan_dispatch(&registry, &event, "/tmp/repo", None);
         assert_eq!(plan.workflow_name, "sat-cycle");
     }
 }

@@ -1,4 +1,6 @@
+use crate::error::AppError;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 /// Project-specific configuration stored in `.branchdeck/config.yaml`.
 /// Created by the guided setup flow and persisted per-project.
@@ -50,6 +52,27 @@ fn default_min_severity() -> Severity {
 
 fn default_confidence_threshold() -> u8 {
     70
+}
+
+impl ProjectConfig {
+    /// Validate semantic constraints that serde cannot enforce.
+    ///
+    /// # Errors
+    /// Returns `AppError::Config` if `repo_path` is not absolute or
+    /// `confidence_threshold` exceeds 100.
+    pub fn validate(&self) -> Result<(), AppError> {
+        if !Path::new(&self.repo_path).is_absolute() {
+            return Err(AppError::Config(
+                "repo_path must be absolute".to_string(),
+            ));
+        }
+        if self.confidence_threshold > 100 {
+            return Err(AppError::Config(
+                "confidence_threshold must be 0-100".to_string(),
+            ));
+        }
+        Ok(())
+    }
 }
 
 impl Default for ProjectConfig {

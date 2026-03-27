@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 
 use crate::models::agent::EpochMs;
 use crate::models::github::{IssueSummary, PrSummary};
@@ -11,6 +11,22 @@ use crate::models::orchestrator::{
 };
 use crate::models::workflow::{TrackerKind, TriggerContext, TriggerEvent};
 use crate::traits::{self, EventEmitter};
+
+/// Load the enabled-workflows list from the project config.
+///
+/// Returns `None` if no config exists or no workflows are explicitly enabled
+/// (meaning all workflows should be dispatched). Logs a warning on read/parse
+/// failure and falls back to dispatching all workflows.
+fn load_enabled_workflows(repo_path: &str, repo_label: &str) -> Option<Vec<String>> {
+    let enabled = match crate::services::project_config::load_project_config(repo_path) {
+        Ok(c) => c.enabled_workflows,
+        Err(e) => {
+            warn!("Project config unreadable for {repo_label}, dispatching all workflows: {e}");
+            return None;
+        }
+    };
+    if enabled.is_empty() { None } else { Some(enabled) }
+}
 
 // --- Retry backoff constants ---
 
@@ -1469,8 +1485,10 @@ async fn handle_event(
                         break;
                     }
                 }
+                let enabled = load_enabled_workflows(&repo_path, repo);
+                let enabled_ref = enabled.as_deref();
                 let plan = crate::services::workflow_dispatch::plan_dispatch(
-                    &registry, trigger, &repo_path,
+                    &registry, trigger, &repo_path, enabled_ref,
                 );
                 if plan.workflow_name.is_empty() {
                     debug!(
@@ -1587,9 +1605,11 @@ async fn handle_event(
                 crate::services::workflow::WorkflowRegistry::scan(&dirs)
             });
 
+            let enabled = load_enabled_workflows(&repo_path, repo);
+            let enabled_ref = enabled.as_deref();
             for trigger in &trigger_events {
                 let plan = crate::services::workflow_dispatch::plan_dispatch(
-                    &registry, trigger, &repo_path,
+                    &registry, trigger, &repo_path, enabled_ref,
                 );
                 if plan.workflow_name.is_empty() {
                     debug!("No workflow matched post-merge trigger for {repo}");

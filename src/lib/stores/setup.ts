@@ -9,7 +9,7 @@ import type {
 } from '../../types/setup';
 import { apiGet, apiPost } from '../api/client';
 
-const STEPS: SetupStep[] = ['repo', 'workflows', 'tokens', 'review', 'complete'];
+const STEPS: SetupStep[] = ['repo', 'workflows', 'tokens', 'review'];
 
 /** Map a validated token source string to the correct TokenSource shape. */
 function mapTokenSource(available?: boolean, source?: string): TokenSource {
@@ -45,7 +45,7 @@ function createSetupStore() {
   }
 
   function canGoBack(): boolean {
-    return stepIndex() > 0 && currentStep() !== 'complete';
+    return stepIndex() > 0;
   }
 
   function goNext() {

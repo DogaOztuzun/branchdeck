@@ -2,6 +2,21 @@ use crate::error::AppError;
 use std::io::Write;
 use std::path::Path;
 
+/// Check if a lowercased error message contains an HTTP status code
+/// at a word boundary (not as part of a larger number like port 50300).
+#[must_use]
+pub fn contains_http_status(msg: &str, code: &str) -> bool {
+    for (i, _) in msg.match_indices(code) {
+        let before_ok = i == 0 || !msg.as_bytes()[i - 1].is_ascii_digit();
+        let after_pos = i + code.len();
+        let after_ok = after_pos >= msg.len() || !msg.as_bytes()[after_pos].is_ascii_digit();
+        if before_ok && after_ok {
+            return true;
+        }
+    }
+    false
+}
+
 /// Atomically write `content` to `path` using a tmp-then-rename pattern.
 ///
 /// # Errors

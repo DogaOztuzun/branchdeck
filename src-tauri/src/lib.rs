@@ -222,41 +222,6 @@ async fn check_for_update(app_handle: &tauri::AppHandle) {
                     "version": version,
                 }),
             );
-
-            let _ = app_handle.emit(
-                "update:status",
-                serde_json::json!({
-                    "status": "downloading",
-                    "version": version,
-                }),
-            );
-
-            // Download the update
-            let err_version = version.clone();
-            match update.download_and_install(|_, _| {}, || {}).await {
-                Ok(()) => {
-                    log::info!("Update v{version} downloaded and ready to install on restart");
-                    let _ = app_handle.emit(
-                        "update:status",
-                        serde_json::json!({
-                            "status": "ready",
-                            "version": version,
-                        }),
-                    );
-                }
-                Err(e) => {
-                    let msg = format!("{e}");
-                    log::error!("Failed to download update v{err_version}: {msg}");
-                    let _ = app_handle.emit(
-                        "update:status",
-                        serde_json::json!({
-                            "status": "error",
-                            "version": err_version,
-                            "error": msg,
-                        }),
-                    );
-                }
-            }
         }
         Ok(None) => {
             log::debug!("No update available");
@@ -264,7 +229,55 @@ async fn check_for_update(app_handle: &tauri::AppHandle) {
         }
         Err(e) => {
             log::debug!("Update check failed: {e}");
-            let _ = app_handle.emit("update:status", "idle");
+            let _ = app_handle.emit("update:status", "error");
+        }
+    }
+}
+
+#[tauri::command]
+async fn install_update(app_handle: tauri::AppHandle) -> Result<(), String> {
+    let updater = app_handle.updater().map_err(|e| format!("{e}"))?;
+
+    let update = updater
+        .check()
+        .await
+        .map_err(|e| format!("{e}"))?
+        .ok_or_else(|| "No update available".to_string())?;
+
+    let version = update.version.clone();
+
+    let _ = app_handle.emit(
+        "update:status",
+        serde_json::json!({
+            "status": "downloading",
+            "version": version,
+        }),
+    );
+
+    match update.download_and_install(|_, _| {}, || {}).await {
+        Ok(()) => {
+            log::info!("Update v{version} downloaded and ready to install on restart");
+            let _ = app_handle.emit(
+                "update:status",
+                serde_json::json!({
+                    "status": "ready",
+                    "version": version,
+                }),
+            );
+            Ok(())
+        }
+        Err(e) => {
+            let msg = format!("{e}");
+            log::error!("Failed to download update v{version}: {msg}");
+            let _ = app_handle.emit(
+                "update:status",
+                serde_json::json!({
+                    "status": "error",
+                    "version": version,
+                    "error": msg,
+                }),
+            );
+            Err(msg)
         }
     }
 }
@@ -554,6 +567,8 @@ pub fn run() {
             commands::orchestrator::write_approval_cmd,
             commands::orchestrator::list_discovered_prs_cmd,
             commands::orchestrator::get_running_entries_cmd,
+            // Update
+            install_update,
             // SAT
             commands::sat::trigger_sat_cycle,
             // Task

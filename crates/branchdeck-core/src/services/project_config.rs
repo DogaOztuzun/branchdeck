@@ -65,6 +65,7 @@ pub fn load_project_config(repo_path: &str) -> Result<ProjectConfig, AppError> {
         AppError::Config(format!("failed to parse {}: {e}", path.display()))
     })?;
 
+    config.validate()?;
     debug!("Loaded project config for {repo_path:?}");
     Ok(config)
 }
@@ -76,8 +77,9 @@ pub fn load_project_config(repo_path: &str) -> Result<ProjectConfig, AppError> {
 /// at workflow dispatch time to filter which workflows are active for this project.
 ///
 /// # Errors
-/// Returns `AppError` if serialization or file write fails.
+/// Returns `AppError` if validation, serialization, or file write fails.
 pub fn save_project_config(config: &ProjectConfig) -> Result<(), AppError> {
+    config.validate()?;
     let path = config_path(&config.repo_path);
     let yaml = serde_yaml::to_string(config).map_err(|e| {
         error!("Failed to serialize project config: {e}");
@@ -221,6 +223,55 @@ mod tests {
         assert_eq!(loaded.enabled_workflows, vec!["pr-shepherd"]);
         assert_eq!(loaded.min_severity, Severity::High);
         assert_eq!(loaded.confidence_threshold, 70);
+    }
+
+    #[test]
+    fn save_rejects_relative_path() {
+        let config = ProjectConfig {
+            repo_path: "relative/path".to_string(),
+            ..ProjectConfig::default()
+        };
+        let err = save_project_config(&config).unwrap_err();
+        assert!(
+            err.to_string().contains("repo_path must be absolute"),
+            "expected absolute path error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn save_rejects_empty_path() {
+        let config = ProjectConfig::default();
+        let err = save_project_config(&config).unwrap_err();
+        assert!(
+            err.to_string().contains("repo_path must be absolute"),
+            "expected absolute path error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn save_rejects_threshold_over_100() {
+        let tmp = TempDir::new().unwrap();
+        let config = ProjectConfig {
+            repo_path: tmp.path().to_str().unwrap().to_string(),
+            confidence_threshold: 101,
+            ..ProjectConfig::default()
+        };
+        let err = save_project_config(&config).unwrap_err();
+        assert!(
+            err.to_string().contains("confidence_threshold must be 0-100"),
+            "expected threshold error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn save_accepts_threshold_100() {
+        let tmp = TempDir::new().unwrap();
+        let config = ProjectConfig {
+            repo_path: tmp.path().to_str().unwrap().to_string(),
+            confidence_threshold: 100,
+            ..ProjectConfig::default()
+        };
+        save_project_config(&config).unwrap();
     }
 
     #[test]

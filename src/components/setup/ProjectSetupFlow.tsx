@@ -9,7 +9,6 @@ const STEP_LABELS: Record<SetupStep, string> = {
   workflows: 'Workflows',
   tokens: 'Credentials',
   review: 'Review',
-  complete: 'Complete',
 };
 
 const VISIBLE_STEPS: SetupStep[] = ['repo', 'workflows', 'tokens', 'review'];
@@ -270,19 +269,6 @@ function ReviewStep() {
   );
 }
 
-function CompleteStep() {
-  return (
-    <div class="flex flex-col items-center justify-center py-8">
-      <span class="text-3xl font-light text-accent-success mb-4">&#10003;</span>
-      <h2 class="text-base font-semibold text-text-main mb-2">Setup Complete</h2>
-      <p class="text-xs text-text-dim text-center max-w-sm">
-        Your project is configured. Branchdeck will use .branchdeck/config.yaml for project-specific
-        settings. You can re-run setup from the Settings view.
-      </p>
-    </div>
-  );
-}
-
 export function ProjectSetupFlow(props: { onComplete?: () => void }) {
   const setup = getSetupStore();
 
@@ -291,7 +277,6 @@ export function ProjectSetupFlow(props: { onComplete?: () => void }) {
     if (step === 'review') {
       const ok = await setup.saveConfig();
       if (ok) {
-        setup.goNext();
         props.onComplete?.();
       }
     } else {
@@ -323,35 +308,35 @@ export function ProjectSetupFlow(props: { onComplete?: () => void }) {
             <Match when={setup.currentStep() === 'review'}>
               <ReviewStep />
             </Match>
-            <Match when={setup.currentStep() === 'complete'}>
-              <CompleteStep />
-            </Match>
           </Switch>
 
           <Show when={setup.error()}>
             <p class="text-xs text-accent-error mt-4">{setup.error()}</p>
           </Show>
 
-          <Show when={setup.currentStep() !== 'complete'}>
-            <div class="flex items-center justify-between mt-6 pt-4 border-t border-border-subtle">
-              <Show when={setup.canGoBack()} fallback={<div />}>
+          <div class="flex items-center justify-between mt-6 pt-4 border-t border-border-subtle">
+            <div class="flex items-center gap-2">
+              <Show when={setup.canGoBack()}>
                 <Button variant="secondary" onClick={() => setup.goBack()}>
                   Back
                 </Button>
               </Show>
-              <Button
-                variant="primary"
-                disabled={!setup.canGoNext() || setup.isSaving()}
-                onClick={handleNext}
-              >
-                {setup.currentStep() === 'review'
-                  ? setup.isSaving()
-                    ? 'Saving...'
-                    : 'Save Configuration'
-                  : 'Next'}
+              <Button variant="ghost" size="compact" onClick={() => props.onComplete?.()}>
+                Skip for now
               </Button>
             </div>
-          </Show>
+            <Button
+              variant="primary"
+              disabled={!setup.canGoNext() || setup.isSaving()}
+              onClick={handleNext}
+            >
+              {setup.currentStep() === 'review'
+                ? setup.isSaving()
+                  ? 'Saving...'
+                  : 'Save Configuration'
+                : 'Next'}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

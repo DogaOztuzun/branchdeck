@@ -35,6 +35,10 @@ export function App() {
     on(
       () => connection.status(),
       (status) => {
+        if (status === 'disconnected') {
+          setupChecked = false;
+          return;
+        }
         if (status !== 'connected' || setupChecked) return;
         const activeRepo = repo.getActiveRepo();
         if (activeRepo) {

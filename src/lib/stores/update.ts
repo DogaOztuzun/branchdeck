@@ -32,9 +32,11 @@ function init() {
         setError(undefined);
       }
     }
-  }).then((fn) => {
-    unlisten = fn;
-  });
+  })
+    .then((fn) => {
+      unlisten = fn;
+    })
+    .catch(() => {});
 }
 
 export function getUpdateStore() {

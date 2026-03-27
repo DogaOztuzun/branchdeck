@@ -97,7 +97,7 @@ get_download_url() {
 
   url=$(curl -fsSL "${GITHUB_API}/repos/${REPO}/releases/tags/${tag}" 2>/dev/null \
     | grep "browser_download_url" \
-    | grep "$pattern" \
+    | grep "\"${pattern}\"" \
     | head -1 \
     | cut -d'"' -f4)
 

@@ -24,7 +24,7 @@ export type RunLogEntry = {
 };
 
 /** Failure reasons that are eligible for retry on reconnect. */
-const RETRYABLE_REASONS = new Set(['heartbeat-stalled', 'network-timeout']);
+const RETRYABLE_REASONS = new Set(['heartbeat-stalled']);
 
 type TaskStoreState = {
   tasksByWorktree: Record<string, TaskInfo>;
