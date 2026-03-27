@@ -32,6 +32,9 @@ RUN cargo build --release --package branchdeck-daemon 2>/dev/null || true
 # Copy actual source code
 COPY crates/ crates/
 
+# Copy files referenced by include_str! macros (outside crates/ tree)
+COPY .claude/skills/pr-shepherd/SKILL.md .claude/skills/pr-shepherd/SKILL.md
+
 # Build the real daemon binary
 RUN cargo build --release --package branchdeck-daemon
 

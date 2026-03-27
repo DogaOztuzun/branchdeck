@@ -9,6 +9,8 @@ e2e/
 docs/
 *.md
 !sidecar/package.json
-.claude/
-!.claude/skills/pr-shepherd/SKILL.md
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/pr-shepherd/
 .github/
