@@ -16,6 +16,9 @@ log = "0.4"
 env_logger = "0.11"
 dirs = "6"
 
+[package.metadata.generate-rpm]
+assets = [{ source = "../../target/release/branchdeck-daemon", dest = "/usr/local/bin/branchdeck-daemon", mode = "0755" }]
+
 [lints.rust]
 unsafe_code = "deny"
 
