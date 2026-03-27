@@ -9,10 +9,15 @@ pub mod github_retry;
 pub mod hook_config;
 pub mod hook_receiver;
 pub mod issue_poller;
+#[cfg(feature = "knowledge")]
 pub mod knowledge;
+#[cfg(feature = "knowledge")]
 pub mod knowledge_ingestion;
+#[cfg(feature = "knowledge")]
 pub mod knowledge_mcp;
+#[cfg(feature = "knowledge")]
 pub mod knowledge_merge;
+#[cfg(feature = "knowledge")]
 pub mod knowledge_query;
 pub mod merge_poller;
 pub mod orchestrator;

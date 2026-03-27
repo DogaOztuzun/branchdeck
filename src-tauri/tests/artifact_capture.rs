@@ -13,7 +13,7 @@
 
 mod common;
 
-use branchdeck_lib::services::task;
+use branchdeck_core::services::task;
 use git2::{Repository, Signature};
 use std::path::Path;
 use tempfile::TempDir;

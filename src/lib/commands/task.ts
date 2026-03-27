@@ -1,6 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
-import { error as logError } from '@tauri-apps/plugin-log';
 import type { TaskInfo, TaskType } from '../../types/task';
+import { apiGet, apiPost } from '../api/client';
 
 export async function createTask(
   worktreePath: string,
@@ -11,7 +10,7 @@ export async function createTask(
   description?: string,
 ): Promise<TaskInfo> {
   try {
-    return await invoke<TaskInfo>('create_task_cmd', {
+    return await apiPost<TaskInfo>('/tasks', {
       worktreePath,
       taskType,
       repo,
@@ -20,52 +19,52 @@ export async function createTask(
       description: description || null,
     });
   } catch (e) {
-    logError(`createTask failed: ${e}`);
+    console.error(`createTask failed: ${e}`);
     throw e;
   }
 }
 
 export async function getTask(worktreePath: string): Promise<TaskInfo> {
   try {
-    return await invoke<TaskInfo>('get_task_cmd', { worktreePath });
+    return await apiGet<TaskInfo>(`/tasks/detail?worktreePath=${encodeURIComponent(worktreePath)}`);
   } catch (e) {
-    logError(`getTask failed: ${e}`);
+    console.error(`getTask failed: ${e}`);
     throw e;
   }
 }
 
 export async function listTasks(worktreePaths: string[]): Promise<TaskInfo[]> {
   try {
-    return await invoke<TaskInfo[]>('list_tasks_cmd', { worktreePaths });
+    return await apiPost<TaskInfo[]>('/tasks/list', { worktreePaths });
   } catch (e) {
-    logError(`listTasks failed: ${e}`);
+    console.error(`listTasks failed: ${e}`);
     throw e;
   }
 }
 
 export async function startTaskWatcher(worktreePaths: string[]): Promise<void> {
   try {
-    await invoke('start_task_watcher', { worktreePaths });
+    await apiPost('/tasks/watcher/start', { worktreePaths });
   } catch (e) {
-    logError(`startTaskWatcher failed: ${e}`);
+    console.error(`startTaskWatcher failed: ${e}`);
     throw e;
   }
 }
 
 export async function stopTaskWatcher(): Promise<void> {
   try {
-    await invoke('stop_task_watcher');
+    await apiPost('/tasks/watcher/stop');
   } catch (e) {
-    logError(`stopTaskWatcher failed: ${e}`);
+    console.error(`stopTaskWatcher failed: ${e}`);
     throw e;
   }
 }
 
 export async function watchTaskPath(worktreePath: string): Promise<boolean> {
   try {
-    return await invoke<boolean>('watch_task_path', { worktreePath });
+    return await apiPost<boolean>('/tasks/watcher/add', { worktreePath });
   } catch (e) {
-    logError(`watchTaskPath failed: ${e}`);
+    console.error(`watchTaskPath failed: ${e}`);
     throw e;
   }
 }

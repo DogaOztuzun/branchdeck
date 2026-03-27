@@ -24,6 +24,66 @@ use crate::models::sat::{
 };
 
 // ---------------------------------------------------------------------------
+// Latest score loading (used by daemon REST + MCP routes)
+// ---------------------------------------------------------------------------
+
+/// Summary of the latest SAT run scores, suitable for API responses.
+#[derive(Debug, Clone)]
+pub struct LatestSatScores {
+    /// Aggregate satisfaction score (0-100).
+    pub aggregate_score: u32,
+    /// Number of scored scenarios.
+    pub scenario_count: usize,
+    /// Number of findings (app bugs).
+    pub finding_count: usize,
+    /// Run ID of the latest scored run.
+    pub run_id: String,
+}
+
+/// Load the latest SAT scores from `{workspace_root}/sat/runs/`.
+///
+/// Returns `None` if no runs exist or scores cannot be parsed.
+#[must_use]
+pub fn load_latest_scores(workspace_root: &Path) -> Option<LatestSatScores> {
+    let sat_runs_dir = workspace_root.join("sat").join("runs");
+    let run_dir = find_latest_run_dir(&sat_runs_dir)?;
+    let scores_path = run_dir.join("scores.json");
+
+    let content = std::fs::read_to_string(&scores_path)
+        .map_err(|e| {
+            debug!("Failed to read {}: {e}", scores_path.display());
+            e
+        })
+        .ok()?;
+
+    let result = serde_json::from_str::<SatScoreResult>(&content)
+        .map_err(|e| {
+            debug!("Failed to parse {}: {e}", scores_path.display());
+            e
+        })
+        .ok()?;
+
+    Some(LatestSatScores {
+        aggregate_score: result.aggregate_score,
+        scenario_count: result.scenario_scores.len(),
+        finding_count: result.all_findings.len(),
+        run_id: result.run_id,
+    })
+}
+
+/// Find the latest run directory by lexicographic sort (timestamps sort naturally).
+pub fn find_latest_run_dir(runs_dir: &Path) -> Option<PathBuf> {
+    let entries = std::fs::read_dir(runs_dir).ok()?;
+    let mut dirs: Vec<PathBuf> = entries
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .filter(|p| p.is_dir())
+        .collect();
+    dirs.sort();
+    dirs.pop()
+}
+
+// ---------------------------------------------------------------------------
 // LLM Judge trait (integration boundary)
 // ---------------------------------------------------------------------------
 

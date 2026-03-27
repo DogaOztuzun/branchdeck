@@ -1,7 +1,11 @@
-import { openUrl } from '@tauri-apps/plugin-opener';
 import { createSignal, onCleanup, onMount } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import type { PrInfo } from '../../types/github';
+
+/** Open a URL in the default browser. Works in both desktop and web modes. */
+function openUrl(url: string) {
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
 
 type PrTooltipProps = {
   pr: PrInfo;

@@ -1,22 +1,22 @@
 #![allow(dead_code)]
 
-use branchdeck_lib::models::run::{RunInfo, RunStatus};
+use branchdeck_core::models::run::{RunInfo, RunStatus};
 
 /// No-op emitter for tests that don't need real event emission.
 pub struct NoopEmitter;
 
-impl branchdeck_lib::traits::EventEmitter for NoopEmitter {
+impl branchdeck_core::traits::EventEmitter for NoopEmitter {
     fn emit_raw(
         &self,
         _event: &str,
         _payload: serde_json::Value,
-    ) -> Result<(), branchdeck_lib::error::AppError> {
+    ) -> Result<(), branchdeck_core::error::AppError> {
         Ok(())
     }
 }
 
 /// Create a test-only `Arc<dyn EventEmitter>`.
-pub fn test_emitter() -> std::sync::Arc<dyn branchdeck_lib::traits::EventEmitter> {
+pub fn test_emitter() -> std::sync::Arc<dyn branchdeck_core::traits::EventEmitter> {
     std::sync::Arc::new(NoopEmitter)
 }
 
@@ -62,8 +62,8 @@ run-count: {run_count}
 }
 
 /// Build a `PrSummary` for orchestrator tests.
-pub fn make_pr_status(number: u64, failing: bool) -> branchdeck_lib::models::github::PrSummary {
-    branchdeck_lib::models::github::PrSummary {
+pub fn make_pr_status(number: u64, failing: bool) -> branchdeck_core::models::github::PrSummary {
+    branchdeck_core::models::github::PrSummary {
         number,
         title: format!("PR #{number}"),
         branch: format!("fix/pr-{number}"),
@@ -82,8 +82,8 @@ pub fn make_pr_status(number: u64, failing: bool) -> branchdeck_lib::models::git
 }
 
 /// Build a `RunningEntry` for orchestrator tests.
-pub fn make_running_entry(pr_key: &str) -> branchdeck_lib::models::orchestrator::RunningEntry {
-    branchdeck_lib::models::orchestrator::RunningEntry {
+pub fn make_running_entry(pr_key: &str) -> branchdeck_core::models::orchestrator::RunningEntry {
+    branchdeck_core::models::orchestrator::RunningEntry {
         pr_key: pr_key.to_string(),
         worktree_path: format!("/tmp/wt/{pr_key}"),
         tab_id: format!("tab-{pr_key}"),

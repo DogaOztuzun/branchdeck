@@ -1,4 +1,3 @@
-import { listen } from '@tauri-apps/api/event';
 import { batch } from 'solid-js';
 import { createStore, produce } from 'solid-js/store';
 import type {
@@ -58,7 +57,7 @@ function createTaskStore() {
   });
 
   let logCounter = 0;
-  const listenPromises: Promise<() => void>[] = [];
+  const sseUnsubscribes: (() => void)[] = [];
   let listening = false;
 
   async function loadTasks(worktreePaths: string[]) {
@@ -87,6 +86,7 @@ function createTaskStore() {
     }
   }
 
+  // biome-ignore lint/correctness/noUnusedVariables: re-enable when RunManager SSE events land
   function handleTaskUpdated(task: TaskInfo) {
     const wtPath = worktreePathFromTaskPath(task.path);
     const prevTask = state.tasksByWorktree[wtPath];
@@ -118,6 +118,7 @@ function createTaskStore() {
     setState('tasksByWorktree', wtPath, task);
   }
 
+  // biome-ignore lint/correctness/noUnusedVariables: re-enable when RunManager SSE events land
   function handlePermissionRequest(perm: PermissionRequestEvent) {
     setState(
       produce((s) => {
@@ -138,6 +139,7 @@ function createTaskStore() {
     );
   }
 
+  // biome-ignore lint/correctness/noUnusedVariables: re-enable when RunManager SSE events land
   function handleRunStatusChanged(run: RunInfo) {
     batch(() => {
       setState('activeRun', run);
@@ -189,6 +191,7 @@ function createTaskStore() {
     });
   }
 
+  // biome-ignore lint/correctness/noUnusedVariables: re-enable when RunManager SSE events land
   function handleRunStep(event: RunStepEvent | AssistantTextEvent | ToolCallEvent) {
     let detail: string;
     let type: RunLogEntry['type'];
@@ -227,48 +230,26 @@ function createTaskStore() {
     );
   }
 
-  async function startListening() {
+  function startListening() {
     if (listening) return;
     listening = true;
 
-    try {
-      listenPromises.push(
-        listen<TaskInfo>('task:updated', (e) => {
-          handleTaskUpdated(e.payload);
-        }),
-      );
-      listenPromises.push(
-        listen<RunInfo>('run:status_changed', (e) => {
-          handleRunStatusChanged(e.payload);
-        }),
-      );
-      listenPromises.push(
-        listen<RunStepEvent | AssistantTextEvent | ToolCallEvent>('run:step', (e) => {
-          handleRunStep(e.payload);
-        }),
-      );
-      listenPromises.push(
-        listen<PermissionRequestEvent>('run:permission_request', (e) => {
-          handlePermissionRequest(e.payload);
-        }),
-      );
-      await Promise.all(listenPromises);
-    } catch {
-      listening = false;
-    }
+    // TODO: Re-add SSE event subscriptions when RunManager is wired (stories 8.1-8.4).
+    // The daemon does not yet emit these events:
+    //   - workflow:task_updated
+    //   - run:status_changed
+    //   - run:step
+    //   - run:permission_request
+    // When RunManager lands, subscribe here and wire to:
+    //   handleTaskUpdated, handleRunStatusChanged, handleRunStep, handlePermissionRequest
   }
 
-  async function stopListening() {
+  function stopListening() {
     if (!listening) return;
-    for (const promise of listenPromises) {
-      try {
-        const unlisten = await promise;
-        unlisten();
-      } catch {
-        // listener never registered
-      }
+    for (const unsub of sseUnsubscribes) {
+      unsub();
     }
-    listenPromises.length = 0;
+    sseUnsubscribes.length = 0;
     listening = false;
   }
 

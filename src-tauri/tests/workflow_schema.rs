@@ -13,10 +13,10 @@
     clippy::needless_raw_string_hashes
 )]
 
-use branchdeck_lib::models::workflow::{
+use branchdeck_core::models::workflow::{
     BackoffStrategy, OutcomeAction, OutcomeDetector, TrackerKind,
 };
-use branchdeck_lib::services::workflow::{parse_workflow_md, validate_workflow_def};
+use branchdeck_core::services::workflow::{parse_workflow_md, validate_workflow_def};
 
 const VALID_WORKFLOW: &str = r#"---
 name: pr-shepherd

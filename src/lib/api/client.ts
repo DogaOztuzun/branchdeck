@@ -6,6 +6,10 @@
 const BASE_URL =
   import.meta.env.VITE_API_URL ?? `${window.location.protocol}//${window.location.host}/api`;
 
+export function getBaseUrl(): string {
+  return BASE_URL;
+}
+
 /** Maximum retry attempts for transient errors. */
 const MAX_RETRIES = 3;
 
@@ -60,24 +64,32 @@ async function fetchWithRetry(url: string, opts?: RequestInit): Promise<Response
   throw lastError ?? new Error('Request failed after retries');
 }
 
-/** Extract the RFC 7807 `detail` field from an error response, falling back to status text. */
-async function extractErrorDetail(res: Response): Promise<string> {
-  try {
-    const body = await res.json();
-    if (typeof body?.detail === 'string') return body.detail;
-  } catch {
-    // Response body not JSON — fall through
+async function handleResponse<T>(res: Response, method: string, path: string): Promise<T> {
+  if (!res.ok) {
+    // Extract RFC 7807 detail field if available
+    let detail: string;
+    try {
+      const body = await res.json();
+      detail = typeof body?.detail === 'string' ? body.detail : `${res.status} ${res.statusText}`;
+    } catch {
+      detail = `${res.status} ${res.statusText}`;
+    }
+    throw new Error(`API ${method} ${path}: ${detail}`);
   }
-  return `${res.status} ${res.statusText}`;
+  // 204 No Content — return undefined (callers expecting void)
+  if (res.status === 204) return undefined as T;
+  const text = await res.text();
+  if (!text) return undefined as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(`API ${method} ${path}: invalid JSON response`);
+  }
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
   const res = await fetchWithRetry(`${BASE_URL}${path}`);
-  if (!res.ok) {
-    const detail = await extractErrorDetail(res);
-    throw new Error(`API GET ${path}: ${detail}`);
-  }
-  return res.json() as Promise<T>;
+  return handleResponse<T>(res, 'GET', path);
 }
 
 export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
@@ -85,15 +97,21 @@ export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: body ? JSON.stringify(body) : undefined,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
   });
-  if (!res.ok) {
-    const detail = await extractErrorDetail(res);
-    throw new Error(`API POST ${path}: ${detail}`);
-  }
-  return res.json() as Promise<T>;
+  return handleResponse<T>(res, 'POST', path);
 }
 
-export function getBaseUrl(): string {
-  return BASE_URL;
+export async function apiPut<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  return handleResponse<T>(res, 'PUT', path);
+}
+
+export async function apiDelete<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, { method: 'DELETE' });
+  return handleResponse<T>(res, 'DELETE', path);
 }

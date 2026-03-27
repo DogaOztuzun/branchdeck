@@ -1,48 +1,49 @@
-import { invoke } from '@tauri-apps/api/core';
-import { error as logError } from '@tauri-apps/plugin-log';
 import type { AgentDefinition, AgentState, FileAccess } from '../../types/agent';
+import { apiGet, apiPost } from '../api/client';
 
 export async function getAgents(tabId: string): Promise<AgentState[]> {
   try {
-    return await invoke<AgentState[]>('get_agents', { tabId });
+    return await apiGet<AgentState[]>(`/activity/sessions/${encodeURIComponent(tabId)}/agents`);
   } catch (e) {
-    logError(`getAgents failed: ${e}`);
+    console.error(`getAgents failed: ${e}`);
     throw e;
   }
 }
 
 export async function getFileActivity(): Promise<FileAccess[]> {
   try {
-    return await invoke<FileAccess[]>('get_file_activity');
+    return await apiGet<FileAccess[]>('/activity/files');
   } catch (e) {
-    logError(`getFileActivity failed: ${e}`);
+    console.error(`getFileActivity failed: ${e}`);
     throw e;
   }
 }
 
 export async function listAgentDefinitions(repoPath: string): Promise<AgentDefinition[]> {
   try {
-    return await invoke<AgentDefinition[]>('list_agent_definitions', { repoPath });
+    return await apiGet<AgentDefinition[]>(
+      `/agents/definitions?repoPath=${encodeURIComponent(repoPath)}`,
+    );
   } catch (e) {
-    logError(`listAgentDefinitions failed: ${e}`);
+    console.error(`listAgentDefinitions failed: ${e}`);
     throw e;
   }
 }
 
 export async function installAgentHooks(repoPath: string): Promise<void> {
   try {
-    await invoke('install_agent_hooks', { repoPath });
+    await apiPost('/agents/hooks/install', { repoPath });
   } catch (e) {
-    logError(`installAgentHooks failed: ${e}`);
+    console.error(`installAgentHooks failed: ${e}`);
     throw e;
   }
 }
 
 export async function removeAgentHooks(repoPath: string): Promise<void> {
   try {
-    await invoke('remove_agent_hooks', { repoPath });
+    await apiPost('/agents/hooks/remove', { repoPath });
   } catch (e) {
-    logError(`removeAgentHooks failed: ${e}`);
+    console.error(`removeAgentHooks failed: ${e}`);
     throw e;
   }
 }

@@ -2,13 +2,13 @@
 
 mod common;
 
-use branchdeck_lib::models::github::PrSummary;
-use branchdeck_lib::models::orchestrator::{
+use branchdeck_core::models::github::PrSummary;
+use branchdeck_core::models::orchestrator::{
     is_pr_eligible, LifecycleStatus, Orchestrator, OrchestratorConfig, OrchestratorEffect,
     SessionOutcome,
 };
-use branchdeck_lib::models::workflow::{TrackerKind, TriggerContext};
-use branchdeck_lib::services::orchestrator::{
+use branchdeck_core::models::workflow::{TrackerKind, TriggerContext};
+use branchdeck_core::services::orchestrator::{
     apply_merge_event, apply_pr_event, apply_reconciliation, apply_relaunch, apply_retry_due,
     apply_session_end, apply_skip, retry_backoff,
 };
@@ -133,7 +133,7 @@ fn session_end_analysis_written_emits_review_ready() {
     let mut state = make_orchestrator(true, 1);
     state.running.insert(
         "test/repo#1".to_string(),
-        branchdeck_lib::models::orchestrator::RunningEntry {
+        branchdeck_core::models::orchestrator::RunningEntry {
             pr_key: "test/repo#1".to_string(),
             worktree_path: "/tmp/wt".to_string(),
             tab_id: "tab-1".to_string(),
@@ -155,7 +155,7 @@ fn session_end_analysis_written_emits_review_ready() {
     assert!(effects.iter().any(|e| matches!(
         e,
         OrchestratorEffect::EmitLifecycleEvent { event }
-            if event.status == branchdeck_lib::models::orchestrator::LifecycleStatus::ReviewReady
+            if event.status == branchdeck_core::models::orchestrator::LifecycleStatus::ReviewReady
     )));
     assert!(!state.running.contains_key("test/repo#1"));
 }
@@ -166,7 +166,7 @@ fn session_end_fix_completed_marks_done() {
     state.claimed.insert("test/repo#1".to_string());
     state.running.insert(
         "test/repo#1".to_string(),
-        branchdeck_lib::models::orchestrator::RunningEntry {
+        branchdeck_core::models::orchestrator::RunningEntry {
             pr_key: "test/repo#1".to_string(),
             worktree_path: "/tmp/wt".to_string(),
             tab_id: "tab-1".to_string(),
@@ -190,7 +190,7 @@ fn session_end_fix_completed_marks_done() {
     assert!(effects.iter().any(|e| matches!(
         e,
         OrchestratorEffect::EmitLifecycleEvent { event }
-            if event.status == branchdeck_lib::models::orchestrator::LifecycleStatus::Completed
+            if event.status == branchdeck_core::models::orchestrator::LifecycleStatus::Completed
     )));
 }
 
@@ -199,7 +199,7 @@ fn session_end_fix_incomplete_schedules_retry() {
     let mut state = make_orchestrator(true, 1);
     state.running.insert(
         "test/repo#1".to_string(),
-        branchdeck_lib::models::orchestrator::RunningEntry {
+        branchdeck_core::models::orchestrator::RunningEntry {
             pr_key: "test/repo#1".to_string(),
             worktree_path: "/tmp/wt".to_string(),
             tab_id: "tab-1".to_string(),
@@ -229,7 +229,7 @@ fn session_end_no_output_schedules_backoff_retry() {
     let mut state = make_orchestrator(true, 1);
     state.running.insert(
         "test/repo#1".to_string(),
-        branchdeck_lib::models::orchestrator::RunningEntry {
+        branchdeck_core::models::orchestrator::RunningEntry {
             pr_key: "test/repo#1".to_string(),
             worktree_path: "/tmp/wt".to_string(),
             tab_id: "tab-1".to_string(),
@@ -268,7 +268,7 @@ fn relaunch_dispatches_fix_session() {
     assert!(effects.iter().any(|e| matches!(
         e,
         OrchestratorEffect::EmitLifecycleEvent { event }
-            if event.status == branchdeck_lib::models::orchestrator::LifecycleStatus::Fixing
+            if event.status == branchdeck_core::models::orchestrator::LifecycleStatus::Fixing
     )));
 }
 
@@ -277,7 +277,7 @@ fn relaunch_cancels_pending_retry() {
     let mut state = make_orchestrator(true, 1);
     state.retry_queue.insert(
         "test/repo#1".to_string(),
-        branchdeck_lib::models::orchestrator::RetryEntry {
+        branchdeck_core::models::orchestrator::RetryEntry {
             pr_key: "test/repo#1".to_string(),
             attempt: 2,
             due_at_ms: 5000,
@@ -306,7 +306,7 @@ fn reconciliation_stops_merged_pr() {
     state.claimed.insert("test/repo#1".to_string());
     state.running.insert(
         "test/repo#1".to_string(),
-        branchdeck_lib::models::orchestrator::RunningEntry {
+        branchdeck_core::models::orchestrator::RunningEntry {
             pr_key: "test/repo#1".to_string(),
             worktree_path: "/tmp/wt".to_string(),
             tab_id: "tab-1".to_string(),
@@ -339,7 +339,7 @@ fn retry_due_redispatches() {
     let mut state = make_orchestrator(true, 1);
     state.retry_queue.insert(
         "test/repo#1".to_string(),
-        branchdeck_lib::models::orchestrator::RetryEntry {
+        branchdeck_core::models::orchestrator::RetryEntry {
             pr_key: "test/repo#1".to_string(),
             attempt: 2,
             due_at_ms: 5000,
@@ -368,7 +368,7 @@ fn skip_removes_from_all_tracking() {
     state.claimed.insert("test/repo#1".to_string());
     state.running.insert(
         "test/repo#1".to_string(),
-        branchdeck_lib::models::orchestrator::RunningEntry {
+        branchdeck_core::models::orchestrator::RunningEntry {
             pr_key: "test/repo#1".to_string(),
             worktree_path: "/tmp/wt".to_string(),
             tab_id: "tab-1".to_string(),
@@ -425,7 +425,7 @@ fn interleaved_prs_are_independent() {
         let key = format!("test/repo#{i}");
         state.running.insert(
             key.clone(),
-            branchdeck_lib::models::orchestrator::RunningEntry {
+            branchdeck_core::models::orchestrator::RunningEntry {
                 pr_key: key,
                 worktree_path: format!("/tmp/wt{i}"),
                 tab_id: format!("tab-{i}"),
@@ -462,7 +462,7 @@ fn interleaved_prs_are_independent() {
 #[test]
 fn determine_outcome_no_file() {
     let outcome =
-        branchdeck_lib::services::orchestrator::determine_session_outcome("/nonexistent/path");
+        branchdeck_core::services::orchestrator::determine_session_outcome("/nonexistent/path");
     assert_eq!(outcome, SessionOutcome::NoOutput);
 }
 
@@ -477,7 +477,7 @@ fn determine_outcome_analysis_written() {
     )
     .unwrap();
 
-    let outcome = branchdeck_lib::services::orchestrator::determine_session_outcome(
+    let outcome = branchdeck_core::services::orchestrator::determine_session_outcome(
         &dir.path().display().to_string(),
     );
     assert_eq!(outcome, SessionOutcome::AnalysisWritten);
@@ -494,7 +494,7 @@ fn determine_outcome_fix_completed() {
     )
     .unwrap();
 
-    let outcome = branchdeck_lib::services::orchestrator::determine_session_outcome(
+    let outcome = branchdeck_core::services::orchestrator::determine_session_outcome(
         &dir.path().display().to_string(),
     );
     assert_eq!(outcome, SessionOutcome::FixCompleted);
@@ -511,7 +511,7 @@ fn determine_outcome_fix_incomplete() {
     )
     .unwrap();
 
-    let outcome = branchdeck_lib::services::orchestrator::determine_session_outcome(
+    let outcome = branchdeck_core::services::orchestrator::determine_session_outcome(
         &dir.path().display().to_string(),
     );
     assert_eq!(outcome, SessionOutcome::FixIncomplete);
@@ -524,7 +524,7 @@ fn session_end_fix_completed_tracks_in_completed_lifecycles() {
     let mut state = make_orchestrator(true, 1);
     state.running.insert(
         "test/repo#1".to_string(),
-        branchdeck_lib::models::orchestrator::RunningEntry {
+        branchdeck_core::models::orchestrator::RunningEntry {
             pr_key: "test/repo#1".to_string(),
             worktree_path: "/tmp/wt".to_string(),
             tab_id: "tab-1".to_string(),
@@ -566,7 +566,7 @@ fn reconciliation_removes_completed_on_new_ci_failure() {
     state.completed.insert("test/repo#1".to_string());
     state.completed_lifecycles.insert(
         "test/repo#1".to_string(),
-        branchdeck_lib::models::orchestrator::LifecycleEvent {
+        branchdeck_core::models::orchestrator::LifecycleEvent {
             pr_key: "test/repo#1".to_string(),
             worktree_path: "/tmp/wt".to_string(),
             status: LifecycleStatus::Completed,
@@ -658,7 +658,7 @@ fn merge_event_cleans_stale_state() {
     state.claimed.insert("test/repo#42".to_string());
     state.review_ready.insert(
         "test/repo#42".to_string(),
-        branchdeck_lib::models::orchestrator::ReviewReadyEntry {
+        branchdeck_core::models::orchestrator::ReviewReadyEntry {
             pr_key: "test/repo#42".to_string(),
             worktree_path: "/tmp/wt".to_string(),
             attempt: 1,

@@ -1,6 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
-import { error as logError } from '@tauri-apps/plugin-log';
 import type { SatPipelineResult } from '../../types/sat';
+import { apiPost } from '../api/client';
 
 /**
  * Trigger a complete SAT quality audit cycle.
@@ -10,9 +9,9 @@ import type { SatPipelineResult } from '../../types/sat';
  */
 export async function triggerSatCycle(projectRoot: string): Promise<SatPipelineResult> {
   try {
-    return await invoke<SatPipelineResult>('trigger_sat_cycle', { projectRoot });
+    return await apiPost<SatPipelineResult>('/sat/cycle', { projectRoot });
   } catch (e) {
-    logError(`triggerSatCycle failed: ${e}`);
+    console.error(`triggerSatCycle failed: ${e}`);
     throw e;
   }
 }

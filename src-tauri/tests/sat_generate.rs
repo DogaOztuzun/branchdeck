@@ -13,8 +13,8 @@
 
 use std::fs;
 
-use branchdeck_lib::models::sat::SatGenerationConfig;
-use branchdeck_lib::services::sat_generate::{generate_manifest, load_personas, load_scenarios};
+use branchdeck_core::models::sat::SatGenerationConfig;
+use branchdeck_core::services::sat_generate::{generate_manifest, load_personas, load_scenarios};
 
 /// Set up a temp directory with persona files and scenario files.
 fn setup_sat_dir() -> tempfile::TempDir {

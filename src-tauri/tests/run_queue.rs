@@ -6,8 +6,8 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use branchdeck_lib::services::event_bus::EventBus;
-use branchdeck_lib::services::run_manager::{QueuedRun, RunManager};
+use branchdeck_core::services::event_bus::EventBus;
+use branchdeck_core::services::run_manager::{QueuedRun, RunManager};
 use std::path::PathBuf;
 use std::sync::Arc;
 

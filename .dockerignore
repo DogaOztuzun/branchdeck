@@ -1,0 +1,16 @@
+target/
+node_modules/
+.git/
+.branchdeck/
+_bmad/
+_bmad-output/
+sat/
+e2e/
+docs/
+*.md
+!sidecar/package.json
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/pr-shepherd/
+.github/

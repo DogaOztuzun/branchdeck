@@ -1,6 +1,6 @@
-import { listen } from '@tauri-apps/api/event';
 import { PanelLeft, PanelRight } from 'lucide-solid';
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { onEvent } from '../../lib/api/events';
 import { cn } from '../../lib/cn';
 import { cancelQueue } from '../../lib/commands/run';
 import type { AppView } from '../../lib/stores/layout';
@@ -26,20 +26,18 @@ export function TopBar() {
   const lifecycleStore = getLifecycleStore();
   const [queue, setQueue] = createSignal<QueueStatus | null>(null);
 
-  let unlistenQueue: (() => void) | null = null;
+  let unsubQueue: (() => void) | null = null;
   onMount(() => {
-    listen<QueueStatus>('run:queue_status', (e) => {
-      const qs = e.payload;
+    unsubQueue = onEvent<QueueStatus>('run:queue_status', (envelope) => {
+      const qs = envelope.data;
       if (qs.queued.length === 0 && !qs.active) {
         setQueue(null);
       } else {
         setQueue(qs);
       }
-    }).then((fn) => {
-      unlistenQueue = fn;
     });
   });
-  onCleanup(() => unlistenQueue?.());
+  onCleanup(() => unsubQueue?.());
 
   const queueBadgeColor = () => {
     const qs = queue();

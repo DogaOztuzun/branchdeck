@@ -1,0 +1,29 @@
+[advisories]
+# Ignore all unmaintained advisories. Tauri pulls in dozens of GTK3/GLib
+# bindings on Linux, all flagged as unmaintained (RUSTSEC-2024-0411 through
+# 0420, etc.). These are transitive dependencies we cannot control.
+# Vulnerability advisories still error.
+ignore = [
+    # GTK3 bindings family (Tauri/Linux) — unmaintained, no security impact
+    { id = "RUSTSEC-2024-0411", reason = "transitive: Tauri GTK3" },
+    { id = "RUSTSEC-2024-0412", reason = "transitive: Tauri GTK3" },
+    { id = "RUSTSEC-2024-0413", reason = "transitive: Tauri GTK3" },
+    { id = "RUSTSEC-2024-0414", reason = "transitive: Tauri GTK3" },
+    { id = "RUSTSEC-2024-0415", reason = "transitive: Tauri GTK3" },
+    { id = "RUSTSEC-2024-0416", reason = "transitive: Tauri GTK3" },
+    { id = "RUSTSEC-2024-0417", reason = "transitive: Tauri GTK3" },
+    { id = "RUSTSEC-2024-0418", reason = "transitive: Tauri GTK3" },
+    { id = "RUSTSEC-2024-0419", reason = "transitive: Tauri GTK3" },
+    { id = "RUSTSEC-2024-0420", reason = "transitive: Tauri GTK3" },
+    { id = "RUSTSEC-2024-0436", reason = "transitive: Tauri GLib" },
+    # Other unmaintained transitive deps
+    { id = "RUSTSEC-2024-0320", reason = "transitive: yaml-rust via yaml-front-matter" },
+    { id = "RUSTSEC-2024-0370", reason = "transitive: proc-macro-error" },
+    { id = "RUSTSEC-2025-0057", reason = "transitive: fxhash" },
+    { id = "RUSTSEC-2025-0075", reason = "transitive: Tauri" },
+    { id = "RUSTSEC-2025-0080", reason = "transitive: Tauri" },
+    { id = "RUSTSEC-2025-0081", reason = "transitive: Tauri" },
+    { id = "RUSTSEC-2025-0098", reason = "transitive: Tauri" },
+    { id = "RUSTSEC-2025-0100", reason = "transitive: Tauri" },
+    { id = "RUSTSEC-2025-0141", reason = "transitive: bincode" },
+]

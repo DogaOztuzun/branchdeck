@@ -1,7 +1,6 @@
-import { invoke } from '@tauri-apps/api/core';
-import { error as logError } from '@tauri-apps/plugin-log';
 import type { QueueStatus, ShepherdResult } from '../../types/github';
 import type { RunInfo } from '../../types/run';
+import { apiGet, apiPost } from '../api/client';
 
 export async function launchRun(
   taskPath: string,
@@ -10,59 +9,59 @@ export async function launchRun(
   maxBudgetUsd?: number,
 ): Promise<RunInfo> {
   try {
-    return await invoke<RunInfo>('launch_run_cmd', {
+    return await apiPost<RunInfo>('/runs', {
       taskPath,
       worktreePath,
       maxTurns: maxTurns ?? null,
       maxBudgetUsd: maxBudgetUsd ?? null,
     });
   } catch (e) {
-    logError(`launchRun failed: ${e}`);
+    console.error(`launchRun failed: ${e}`);
     throw e;
   }
 }
 
-export async function cancelRun(): Promise<void> {
+export async function cancelRun(sessionId: string): Promise<void> {
   try {
-    await invoke('cancel_run_cmd');
+    await apiPost(`/runs/${encodeURIComponent(sessionId)}/cancel`);
   } catch (e) {
-    logError(`cancelRun failed: ${e}`);
+    console.error(`cancelRun failed: ${e}`);
     throw e;
   }
 }
 
 export async function getRunStatus(): Promise<RunInfo | null> {
   try {
-    return await invoke<RunInfo | null>('get_run_status_cmd');
+    return await apiGet<RunInfo | null>('/runs/status');
   } catch (e) {
-    logError(`getRunStatus failed: ${e}`);
+    console.error(`getRunStatus failed: ${e}`);
     throw e;
   }
 }
 
 export async function recoverRuns(worktreePaths: string[]): Promise<RunInfo[]> {
   try {
-    return await invoke<RunInfo[]>('recover_runs_cmd', { worktreePaths });
+    return await apiPost<RunInfo[]>('/runs/recover', { worktreePaths });
   } catch (e) {
-    logError(`recoverRuns failed: ${e}`);
+    console.error(`recoverRuns failed: ${e}`);
     throw e;
   }
 }
 
 export async function retryRun(taskPath: string, worktreePath: string): Promise<RunInfo> {
   try {
-    return await invoke<RunInfo>('retry_run_cmd', { taskPath, worktreePath });
+    return await apiPost<RunInfo>('/runs/retry', { taskPath, worktreePath });
   } catch (e) {
-    logError(`retryRun failed: ${e}`);
+    console.error(`retryRun failed: ${e}`);
     throw e;
   }
 }
 
 export async function resumeRun(taskPath: string, worktreePath: string): Promise<RunInfo> {
   try {
-    return await invoke<RunInfo>('resume_run_cmd', { taskPath, worktreePath });
+    return await apiPost<RunInfo>('/runs/resume', { taskPath, worktreePath });
   } catch (e) {
-    logError(`resumeRun failed: ${e}`);
+    console.error(`resumeRun failed: ${e}`);
     throw e;
   }
 }
@@ -73,40 +72,40 @@ export async function shepherdPr(
   autoLaunch?: boolean,
 ): Promise<ShepherdResult> {
   try {
-    return await invoke<ShepherdResult>('shepherd_pr_cmd', {
+    return await apiPost<ShepherdResult>('/runs/shepherd', {
       repoPath,
       prNumber,
       autoLaunch: autoLaunch ?? null,
     });
   } catch (e) {
-    logError(`shepherdPr failed: ${e}`);
+    console.error(`shepherdPr failed: ${e}`);
     throw e;
   }
 }
 
 export async function batchLaunch(pairs: [string, string][]): Promise<QueueStatus> {
   try {
-    return await invoke<QueueStatus>('batch_launch_cmd', { pairs });
+    return await apiPost<QueueStatus>('/runs/batch', { pairs });
   } catch (e) {
-    logError(`batchLaunch failed: ${e}`);
+    console.error(`batchLaunch failed: ${e}`);
     throw e;
   }
 }
 
 export async function cancelQueue(): Promise<void> {
   try {
-    await invoke('cancel_queue_cmd');
+    await apiPost('/runs/queue/cancel');
   } catch (e) {
-    logError(`cancelQueue failed: ${e}`);
+    console.error(`cancelQueue failed: ${e}`);
     throw e;
   }
 }
 
 export async function getQueueStatus(): Promise<QueueStatus> {
   try {
-    return await invoke<QueueStatus>('queue_status_cmd');
+    return await apiGet<QueueStatus>('/runs/queue/status');
   } catch (e) {
-    logError(`getQueueStatus failed: ${e}`);
+    console.error(`getQueueStatus failed: ${e}`);
     throw e;
   }
 }
@@ -117,13 +116,13 @@ export async function respondToPermission(
   reason?: string,
 ): Promise<void> {
   try {
-    await invoke('respond_to_permission_cmd', {
+    await apiPost('/runs/permission', {
       toolUseId,
       decision,
       reason: reason ?? null,
     });
   } catch (e) {
-    logError(`respondToPermission failed: ${e}`);
+    console.error(`respondToPermission failed: ${e}`);
     throw e;
   }
 }

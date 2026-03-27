@@ -1,5 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
-import { error as logError } from '@tauri-apps/plugin-log';
+import { apiGet, apiPost } from '../api/client';
 
 export type GlobalConfig = {
   window: { width: number; height: number; x: number; y: number };
@@ -23,54 +22,54 @@ export type Preset = {
 
 export async function getAppConfig(): Promise<GlobalConfig> {
   try {
-    return await invoke<GlobalConfig>('get_app_config');
+    return await apiGet<GlobalConfig>('/config/app');
   } catch (e) {
-    logError(`getAppConfig failed: ${e}`);
+    console.error(`getAppConfig failed: ${e}`);
     throw e;
   }
 }
 
 export async function saveAppConfig(config: GlobalConfig): Promise<void> {
   try {
-    await invoke('save_app_config', { config });
+    await apiPost('/config/app', config);
   } catch (e) {
-    logError(`saveAppConfig failed: ${e}`);
+    console.error(`saveAppConfig failed: ${e}`);
     throw e;
   }
 }
 
 export async function getRepoConfig(repoPath: string): Promise<RepoConfig> {
   try {
-    return await invoke<RepoConfig>('get_repo_config', { repoPath });
+    return await apiGet<RepoConfig>(`/config/repo?repoPath=${encodeURIComponent(repoPath)}`);
   } catch (e) {
-    logError(`getRepoConfig failed: ${e}`);
+    console.error(`getRepoConfig failed: ${e}`);
     throw e;
   }
 }
 
 export async function saveRepoConfig(repoPath: string, config: RepoConfig): Promise<void> {
   try {
-    await invoke('save_repo_config_cmd', { repoPath, config });
+    await apiPost(`/config/repo?repoPath=${encodeURIComponent(repoPath)}`, config);
   } catch (e) {
-    logError(`saveRepoConfig failed: ${e}`);
+    console.error(`saveRepoConfig failed: ${e}`);
     throw e;
   }
 }
 
 export async function getPresets(repoPath: string): Promise<Preset[]> {
   try {
-    return await invoke<Preset[]>('get_presets', { repoPath });
+    return await apiGet<Preset[]>(`/config/presets?repoPath=${encodeURIComponent(repoPath)}`);
   } catch (e) {
-    logError(`getPresets failed: ${e}`);
+    console.error(`getPresets failed: ${e}`);
     throw e;
   }
 }
 
 export async function savePresets(repoPath: string, presets: Preset[]): Promise<void> {
   try {
-    await invoke('save_presets', { repoPath, presets });
+    await apiPost(`/config/presets?repoPath=${encodeURIComponent(repoPath)}`, presets);
   } catch (e) {
-    logError(`savePresets failed: ${e}`);
+    console.error(`savePresets failed: ${e}`);
     throw e;
   }
 }

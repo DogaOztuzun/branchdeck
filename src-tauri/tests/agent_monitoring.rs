@@ -8,12 +8,12 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use branchdeck_lib::models::agent::{AgentStatus, Event};
-use branchdeck_lib::services::activity_store::ActivityStore;
-use branchdeck_lib::services::agent_scanner;
-use branchdeck_lib::services::event_bus::EventBus;
-use branchdeck_lib::services::hook_config;
-use branchdeck_lib::services::hook_receiver;
+use branchdeck_core::models::agent::{AgentStatus, Event};
+use branchdeck_core::services::activity_store::ActivityStore;
+use branchdeck_core::services::agent_scanner;
+use branchdeck_core::services::event_bus::EventBus;
+use branchdeck_core::services::hook_config;
+use branchdeck_core::services::hook_receiver;
 
 /// Test: `EventBus` pub/sub delivers events to subscribers.
 #[tokio::test]

@@ -1,51 +1,33 @@
-import { Channel, invoke } from '@tauri-apps/api/core';
-import { error as logError } from '@tauri-apps/plugin-log';
 import type { PtyEvent } from '../../types/terminal';
 
+// Terminal PTY requires the daemon WebSocket route which is not yet implemented.
+// Desktop mode previously used Tauri IPC for PTY; that was removed in the daemon
+// migration (Epic 8). These stubs throw with a clear message until the WS route
+// lands (tracked for a future story).
+
+const NOT_AVAILABLE = 'Terminal is not available — daemon WebSocket PTY route not yet implemented.';
+
 export async function createTerminalSession(
-  cwd: string,
-  shell: string,
-  env: Record<string, string>,
-  onEvent: (event: PtyEvent) => void,
+  _cwd: string,
+  _shell: string,
+  _env: Record<string, string>,
+  _onEvent: (event: PtyEvent) => void,
 ): Promise<string> {
-  try {
-    const channel = new Channel<PtyEvent>();
-    channel.onmessage = onEvent;
-    return await invoke<string>('create_terminal_session', {
-      cwd,
-      shell,
-      env,
-      onOutput: channel,
-    });
-  } catch (e) {
-    logError(`createTerminalSession failed: ${e}`);
-    throw e;
-  }
+  throw new Error(NOT_AVAILABLE);
 }
 
-export async function writeTerminal(sessionId: string, data: Uint8Array): Promise<void> {
-  try {
-    await invoke('write_terminal', { sessionId, data: Array.from(data) });
-  } catch (e) {
-    logError(`writeTerminal failed: ${e}`);
-    throw e;
-  }
+export async function writeTerminal(_sessionId: string, _data: Uint8Array): Promise<void> {
+  throw new Error(NOT_AVAILABLE);
 }
 
-export async function resizeTerminal(sessionId: string, rows: number, cols: number): Promise<void> {
-  try {
-    await invoke('resize_terminal', { sessionId, rows, cols });
-  } catch (e) {
-    logError(`resizeTerminal failed: ${e}`);
-    throw e;
-  }
+export async function resizeTerminal(
+  _sessionId: string,
+  _rows: number,
+  _cols: number,
+): Promise<void> {
+  throw new Error(NOT_AVAILABLE);
 }
 
-export async function closeTerminal(sessionId: string): Promise<void> {
-  try {
-    await invoke('close_terminal', { sessionId });
-  } catch (e) {
-    logError(`closeTerminal failed: ${e}`);
-    throw e;
-  }
+export async function closeTerminal(_sessionId: string): Promise<void> {
+  // No-op: nothing to close when terminal is not available
 }

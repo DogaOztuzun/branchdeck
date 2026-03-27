@@ -50,7 +50,6 @@ function createAgentStore() {
   });
 
   let logCounter = 0;
-  let tauriUnlisten: (() => void) | null = null;
   const sseUnsubscribes: (() => void)[] = [];
 
   let isKnownTab: ((tabId: string) => boolean) | null = null;
@@ -207,49 +206,29 @@ function createAgentStore() {
     queueEvent(event);
   }
 
-  async function startListening() {
+  function startListening() {
     // Re-entry guard: prevent duplicate listeners on remount
-    if (tauriUnlisten || sseUnsubscribes.length > 0) return;
+    if (sseUnsubscribes.length > 0) return;
 
-    // Try Tauri listen first (desktop mode)
-    let tauriAvailable = false;
-    try {
-      const { listen } = await import('@tauri-apps/api/event');
-      const unlisten = await listen<AgentEvent>('agent:event', (e) => {
-        handleEvent(e.payload);
+    const agentEventTypes = [
+      'agent:session_start',
+      'agent:tool_start',
+      'agent:tool_end',
+      'agent:subagent_start',
+      'agent:subagent_stop',
+      'agent:session_stop',
+      'agent:notification',
+    ];
+
+    for (const eventType of agentEventTypes) {
+      const unsub = onEvent<AgentEvent>(eventType, (envelope) => {
+        handleEvent(envelope.data);
       });
-      tauriUnlisten = unlisten;
-      tauriAvailable = true;
-    } catch {
-      // Not in Tauri — use SSE
-    }
-
-    // Only subscribe via SSE if Tauri is unavailable (avoid duplicate events)
-    if (!tauriAvailable) {
-      const agentEventTypes = [
-        'agent:session_start',
-        'agent:tool_start',
-        'agent:tool_end',
-        'agent:subagent_start',
-        'agent:subagent_stop',
-        'agent:session_stop',
-        'agent:notification',
-      ];
-
-      for (const eventType of agentEventTypes) {
-        const unsub = onEvent<AgentEvent>(eventType, (envelope) => {
-          handleEvent(envelope.data);
-        });
-        sseUnsubscribes.push(unsub);
-      }
+      sseUnsubscribes.push(unsub);
     }
   }
 
-  async function stopListening() {
-    if (tauriUnlisten) {
-      tauriUnlisten();
-      tauriUnlisten = null;
-    }
+  function stopListening() {
     for (const unsub of sseUnsubscribes) {
       unsub();
     }

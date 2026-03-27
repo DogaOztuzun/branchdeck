@@ -3,50 +3,72 @@ use axum::response::{IntoResponse, Response};
 use branchdeck_core::error::AppError;
 use log::error;
 use serde::Serialize;
+use utoipa::ToSchema;
 
-/// Wrapper around `branchdeck_core::error::AppError` that implements
-/// Axum's `IntoResponse` for RFC 7807 Problem Details responses.
-#[derive(Debug)]
-pub struct ApiError(pub AppError);
-
-#[derive(Serialize)]
-struct ProblemDetail {
-    r#type: &'static str,
-    title: String,
-    status: u16,
-    detail: String,
+/// RFC 7807 Problem Details response body.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ProblemDetails {
+    /// URI reference identifying the problem type.
+    #[serde(rename = "type")]
+    pub problem_type: String,
+    /// Short human-readable summary.
+    pub title: String,
+    /// HTTP status code.
+    pub status: u16,
+    /// Human-readable explanation specific to this occurrence.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
 }
 
-impl From<AppError> for ApiError {
-    fn from(err: AppError) -> Self {
+/// Wrapper around `AppError` that implements `IntoResponse` with RFC 7807 format.
+pub struct ApiError(pub branchdeck_core::error::AppError);
+
+impl From<branchdeck_core::error::AppError> for ApiError {
+    fn from(err: branchdeck_core::error::AppError) -> Self {
         Self(err)
     }
 }
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        let status = match &self.0 {
-            AppError::TaskNotFound(_) => StatusCode::NOT_FOUND,
-            AppError::TaskAlreadyExists(_) => StatusCode::CONFLICT,
-            AppError::Config(_) => StatusCode::BAD_REQUEST,
-            AppError::RunError(_) => StatusCode::CONFLICT,
-            AppError::SidecarError(_) => StatusCode::BAD_GATEWAY,
-            AppError::Sat(_) => StatusCode::UNPROCESSABLE_ENTITY,
-            _ => classify_upstream_error(&self.0),
+        use branchdeck_core::error::AppError;
+
+        let (status, title) = match &self.0 {
+            AppError::TaskNotFound(_) | AppError::RunError(_) => {
+                // Distinguish "not implemented" stubs from actual not-found errors
+                let msg = self.0.to_string();
+                if msg.contains("Not implemented") {
+                    (StatusCode::NOT_IMPLEMENTED, "Not Implemented")
+                } else {
+                    (StatusCode::NOT_FOUND, "Not Found")
+                }
+            }
+            AppError::TaskAlreadyExists(_) => (StatusCode::CONFLICT, "Conflict"),
+            AppError::Config(_) | AppError::TaskParseError(_) | AppError::Workflow(_) => {
+                (StatusCode::BAD_REQUEST, "Bad Request")
+            }
+            AppError::SidecarError(_) => (StatusCode::BAD_GATEWAY, "Sidecar Error"),
+            AppError::Sat(_) => (StatusCode::UNPROCESSABLE_ENTITY, "SAT Error"),
+            _ => {
+                // Inspect upstream errors to surface HTTP semantics instead of
+                // collapsing everything to 500.
+                let upstream = classify_upstream_error(&self.0);
+                (
+                    upstream,
+                    upstream.canonical_reason().unwrap_or("Internal Server Error"),
+                )
+            }
         };
 
         if status.is_server_error() {
             error!("API error {status}: {}", self.0);
         }
 
-        let body = ProblemDetail {
-            r#type: "about:blank",
-            title: status
-                .canonical_reason()
-                .unwrap_or("Error")
-                .to_owned(),
+        let problem = ProblemDetails {
+            problem_type: format!("https://branchdeck.dev/problems/{}", slug_from_status(status)),
+            title: title.to_string(),
             status: status.as_u16(),
-            detail: self.0.to_string(),
+            detail: Some(self.0.to_string()),
         };
 
         (
@@ -55,9 +77,24 @@ impl IntoResponse for ApiError {
                 axum::http::header::CONTENT_TYPE,
                 "application/problem+json",
             )],
-            axum::Json(body),
+            axum::Json(problem),
         )
             .into_response()
+    }
+}
+
+fn slug_from_status(status: StatusCode) -> &'static str {
+    match status {
+        StatusCode::UNAUTHORIZED => "unauthorized",
+        StatusCode::FORBIDDEN => "forbidden",
+        StatusCode::NOT_FOUND => "not-found",
+        StatusCode::NOT_IMPLEMENTED => "not-implemented",
+        StatusCode::CONFLICT => "conflict",
+        StatusCode::BAD_REQUEST => "bad-request",
+        StatusCode::BAD_GATEWAY => "sidecar-error",
+        StatusCode::UNPROCESSABLE_ENTITY => "sat-error",
+        StatusCode::TOO_MANY_REQUESTS => "rate-limited",
+        _ => "internal-error",
     }
 }
 

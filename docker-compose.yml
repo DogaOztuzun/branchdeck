@@ -1,0 +1,15 @@
+services:
+  branchdeck:
+    build: .
+    ports:
+      - "13371:13371"
+    volumes:
+      - ./repos:/repos
+      - ./config:/home/branchdeck/.config/branchdeck
+    environment:
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - BRANCHDECK_PORT=13371
+      - BRANCHDECK_BIND=0.0.0.0
+      - BRANCHDECK_WORKSPACE=/repos
+    restart: unless-stopped
