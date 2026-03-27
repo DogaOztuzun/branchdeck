@@ -120,16 +120,22 @@ jobs:
         run: docker build -t branchdeck-test .
       - name: Run container and health check
         run: |
-          CONTAINER_ID=$(docker run --rm -d --network host \
+          CONTAINER_ID=$(docker run -d --network host \
             -e BRANCHDECK_BIND=127.0.0.1 \
             -e BRANCHDECK_WORKSPACE=/repos \
+            -e RUST_LOG=info \
             branchdeck-test \
             branchdeck-daemon serve --bind 127.0.0.1 --workspace /repos)
+          sleep 3
+          echo "=== Container logs ==="
+          docker logs "$CONTAINER_ID" 2>&1 || true
+          echo "=== Health check ==="
           for i in $(seq 1 15); do
             curl -sf http://localhost:13371/api/health && break || sleep 2
           done
           curl -f http://localhost:13371/api/health
-          docker stop "$CONTAINER_ID"
+          docker stop "$CONTAINER_ID" || true
+          docker rm "$CONTAINER_ID" 2>/dev/null || true
 
   check-rust-full:
     name: Rust (test + build)
