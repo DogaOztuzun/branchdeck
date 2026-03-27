@@ -764,6 +764,36 @@ pub async fn list_all_issues_with_label(
     Ok(all_issues)
 }
 
+/// Add labels to a GitHub issue.
+///
+/// Uses the octocrab client to apply one or more labels to the specified issue.
+/// This is non-fatal by design — callers should handle errors gracefully since
+/// local persistence of the FP record is the primary concern.
+///
+/// # Errors
+/// Returns `AppError::GitHub` if the API call fails.
+pub async fn add_labels_to_issue(
+    owner: &str,
+    repo: &str,
+    issue_number: u64,
+    labels: &[String],
+) -> Result<(), AppError> {
+    let client = get_client_pub().await?;
+    client
+        .issues(owner, repo)
+        .add_labels(issue_number, labels)
+        .await
+        .map_err(|e| {
+            error!("Failed to add labels {labels:?} to {owner}/{repo}#{issue_number}: {e}");
+            AppError::GitHub(format!(
+                "failed to add labels to {owner}/{repo}#{issue_number}: {e}"
+            ))
+        })?;
+
+    info!("Added labels {labels:?} to {owner}/{repo}#{issue_number}");
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

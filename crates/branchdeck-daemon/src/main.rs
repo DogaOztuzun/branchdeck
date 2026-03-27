@@ -2,9 +2,12 @@ use axum::routing::{get, post};
 use axum::Router;
 use branchdeck_core::services::activity_store::ActivityStore;
 use branchdeck_core::services::event_bus::EventBus;
+use branchdeck_core::services::run_manager;
+use branchdeck_core::traits::EventEmitter;
 use log::{error, info, warn};
 use std::sync::Arc;
 
+mod emitter;
 mod error;
 mod routes;
 mod state;
@@ -35,9 +38,25 @@ async fn main() {
     activity_store.start_subscriber(&event_bus);
     activity_store.start_gc(300_000); // 5 minute TTL
 
+    // Sidecar path — resolve from data dir; placeholder until CLI config is added
+    let sidecar_path = data_dir.join("sidecar").join("index.js");
+    let daemon_emitter: Arc<dyn EventEmitter> = Arc::new(emitter::DaemonEmitter);
+    let run_manager_state = run_manager::create_run_manager_state(
+        sidecar_path,
+        Arc::clone(&event_bus),
+        daemon_emitter,
+        0, // hook_port — configured at runtime via CLI args
+    );
+
+    let update_state = Arc::new(tokio::sync::Mutex::new(
+        branchdeck_core::services::update_manager::UpdateState::default(),
+    ));
+
     let app_state = AppState {
         event_bus,
         activity_store,
+        run_manager: run_manager_state,
+        update_state,
     };
 
     let app = Router::new()
@@ -65,6 +84,19 @@ async fn main() {
         .route(
             "/api/setup/save",
             post(routes::setup::save_config),
+        )
+        .route("/api/runs/{run_id}/cancel", post(routes::runs::cancel_run))
+        .route(
+            "/api/sat/false-positive",
+            post(routes::sat::label_false_positive),
+        )
+        .route(
+            "/api/sat/false-positive/metrics",
+            get(routes::sat::get_false_positive_metrics),
+        )
+        .route(
+            "/api/updates/status",
+            get(routes::updates::get_update_status),
         )
         .with_state(app_state);
 

@@ -745,13 +745,17 @@ pub struct SatIssueConfig {
     pub runs_dir: PathBuf,
     /// Path to the git repository (for resolving owner/repo).
     pub repo_path: PathBuf,
-    /// Minimum severity threshold (1 = critical, 2 = high). Findings with
+    /// Default severity threshold (1 = critical, 2 = high). Findings with
     /// severity <= this value are eligible for issue creation.
     pub max_severity: u8,
     /// Only create issues for findings in these categories.
     pub allowed_categories: Vec<FindingCategory>,
     /// Only create issues for findings with these confidence levels.
     pub allowed_confidences: Vec<ConfidenceLevel>,
+    /// Per-scenario severity overrides. Maps `scenario_id` to the max severity
+    /// for that scenario, computed from threshold config + scenario tags.
+    /// When a scenario has an override, it takes precedence over `max_severity`.
+    pub severity_overrides: std::collections::HashMap<String, u8>,
 }
 
 impl SatIssueConfig {
@@ -767,6 +771,54 @@ impl SatIssueConfig {
             max_severity: 2, // critical (1) and high (2)
             allowed_categories: vec![FindingCategory::App],
             allowed_confidences: vec![ConfidenceLevel::High],
+            severity_overrides: std::collections::HashMap::new(),
+        }
+    }
+}
+
+// ===========================================================================
+// Severity threshold configuration (Story 6.1)
+// ===========================================================================
+
+/// Persistent severity threshold configuration stored in
+/// `.branchdeck/sat-thresholds.json` in the project directory.
+///
+/// Controls which SAT findings are promoted to GitHub issues.
+/// Changes take effect on the next SAT cycle without restart.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SatThresholdConfig {
+    /// Default max severity for issue creation (1 = critical only,
+    /// 2 = critical + high, etc.). Default: 2.
+    #[serde(default = "default_max_severity")]
+    pub default_max_severity: u8,
+    /// Only create issues for findings with these confidence levels.
+    /// Default: `["high"]`.
+    #[serde(default = "default_allowed_confidences")]
+    pub allowed_confidences: Vec<ConfidenceLevel>,
+    /// Per-scenario-tag severity overrides. Maps a scenario tag
+    /// (e.g., `"terminal"`, `"onboarding"`) to a max severity.
+    /// Scenarios matching a tag use that tag's threshold instead of
+    /// the default. If a scenario matches multiple tags, the strictest
+    /// (lowest numeric) threshold wins.
+    #[serde(default)]
+    pub tag_overrides: std::collections::HashMap<String, u8>,
+}
+
+fn default_max_severity() -> u8 {
+    2
+}
+
+fn default_allowed_confidences() -> Vec<ConfidenceLevel> {
+    vec![ConfidenceLevel::High]
+}
+
+impl Default for SatThresholdConfig {
+    fn default() -> Self {
+        Self {
+            default_max_severity: 2,
+            allowed_confidences: vec![ConfidenceLevel::High],
+            tag_overrides: std::collections::HashMap::new(),
         }
     }
 }
@@ -1097,6 +1149,129 @@ impl std::fmt::Display for VerificationOutcome {
             Self::Mixed => f.write_str("mixed"),
         }
     }
+}
+
+// ===========================================================================
+// False positive labeling types (Story 6.3)
+// ===========================================================================
+
+/// Label applied to a false positive issue on GitHub.
+///
+/// Maps to `false-positive:runner` or `false-positive:scenario` GitHub labels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum FalsePositiveLabel {
+    /// The finding was a runner/infrastructure artifact, not a real app bug.
+    Runner,
+    /// The finding was a bad test scenario, not a real app bug.
+    Scenario,
+}
+
+impl FalsePositiveLabel {
+    /// Return the GitHub label string for this false positive type.
+    #[must_use]
+    pub fn github_label(self) -> &'static str {
+        match self {
+            Self::Runner => "false-positive:runner",
+            Self::Scenario => "false-positive:scenario",
+        }
+    }
+}
+
+impl std::fmt::Display for FalsePositiveLabel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Runner => f.write_str("runner"),
+            Self::Scenario => f.write_str("scenario"),
+        }
+    }
+}
+
+/// A recorded false positive event, persisted for metric computation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct FalsePositiveRecord {
+    /// ISO 8601 timestamp when the FP was labeled.
+    pub recorded_at: String,
+    /// GitHub issue number that was labeled as false positive.
+    pub issue_number: u64,
+    /// Repository in "owner/repo" format.
+    pub repo: String,
+    /// Which type of false positive this is.
+    pub label: FalsePositiveLabel,
+    /// The scenario ID from the original SAT finding (if extractable).
+    #[serde(default)]
+    pub scenario_id: Option<String>,
+    /// Optional user-provided reason for the FP classification.
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+/// Persisted false positive data file.
+/// Stored at `.branchdeck/sat-false-positives.json` in the project directory.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct FalsePositiveData {
+    /// All recorded false positive events.
+    pub records: Vec<FalsePositiveRecord>,
+}
+
+/// Computed false positive rate metrics.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct FalsePositiveMetrics {
+    /// Total issues created by SAT (from cycle learnings `issues_found`).
+    pub total_issues_created: usize,
+    /// Total false positives recorded (from FP data + cycle learnings).
+    pub total_false_positives: usize,
+    /// False positive rate: `total_false_positives / total_issues_created`.
+    /// `None` if no issues have been created.
+    pub false_positive_rate: Option<f64>,
+    /// Breakdown by label type.
+    pub runner_count: usize,
+    /// Breakdown by label type.
+    pub scenario_count: usize,
+}
+
+/// Request body for labeling a false positive via the API.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct FalsePositiveRequest {
+    /// GitHub issue number to label.
+    pub issue_number: u64,
+    /// Repository path on disk (for resolving owner/repo).
+    pub repo_path: String,
+    /// Type of false positive.
+    pub label: FalsePositiveLabel,
+    /// Optional scenario ID from the original SAT finding.
+    #[serde(default)]
+    pub scenario_id: Option<String>,
+    /// Optional user-provided reason.
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+/// Response from labeling a false positive.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct FalsePositiveResponse {
+    /// The recorded false positive event.
+    pub record: FalsePositiveRecord,
+    /// Updated classification accuracy after recording.
+    pub classification_accuracy: ClassificationAccuracy,
+    /// Updated false positive metrics.
+    pub false_positive_metrics: FalsePositiveMetrics,
+}
+
+/// Response for the false positive metrics GET endpoint.
+/// Unlike `FalsePositiveResponse`, this does not require a record.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct FalsePositiveMetricsResponse {
+    /// Updated classification accuracy.
+    pub classification_accuracy: ClassificationAccuracy,
+    /// Current false positive metrics.
+    pub false_positive_metrics: FalsePositiveMetrics,
 }
 
 /// Full regression report for a SAT cycle verification.

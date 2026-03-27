@@ -2,10 +2,20 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use branchdeck_core::error::AppError;
 use log::error;
+use serde::Serialize;
 
-/// Newtype wrapper for RFC 7807 Problem Details responses.
+/// Wrapper around `branchdeck_core::error::AppError` that implements
+/// Axum's `IntoResponse` for RFC 7807 Problem Details responses.
 #[derive(Debug)]
 pub struct ApiError(pub AppError);
+
+#[derive(Serialize)]
+struct ProblemDetail {
+    r#type: &'static str,
+    title: String,
+    status: u16,
+    detail: String,
+}
 
 impl From<AppError> for ApiError {
     fn from(err: AppError) -> Self {
@@ -19,6 +29,9 @@ impl IntoResponse for ApiError {
             AppError::TaskNotFound(_) => StatusCode::NOT_FOUND,
             AppError::TaskAlreadyExists(_) => StatusCode::CONFLICT,
             AppError::Config(_) => StatusCode::BAD_REQUEST,
+            AppError::RunError(_) => StatusCode::CONFLICT,
+            AppError::SidecarError(_) => StatusCode::BAD_GATEWAY,
+            AppError::Sat(_) => StatusCode::UNPROCESSABLE_ENTITY,
             _ => classify_upstream_error(&self.0),
         };
 
@@ -26,15 +39,25 @@ impl IntoResponse for ApiError {
             error!("API error {status}: {}", self.0);
         }
 
-        let body = serde_json::json!({
-            "type": "about:blank",
-            "title": status.canonical_reason().unwrap_or("Error"),
-            "status": status.as_u16(),
-            "detail": self.0.to_string(),
-        });
+        let body = ProblemDetail {
+            r#type: "about:blank",
+            title: status
+                .canonical_reason()
+                .unwrap_or("Error")
+                .to_owned(),
+            status: status.as_u16(),
+            detail: self.0.to_string(),
+        };
 
-        let headers = [(axum::http::header::CONTENT_TYPE, "application/problem+json")];
-        (status, headers, axum::Json(body)).into_response()
+        (
+            status,
+            [(
+                axum::http::header::CONTENT_TYPE,
+                "application/problem+json",
+            )],
+            axum::Json(body),
+        )
+            .into_response()
     }
 }
 

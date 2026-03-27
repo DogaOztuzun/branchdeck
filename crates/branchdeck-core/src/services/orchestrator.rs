@@ -1163,7 +1163,7 @@ pub async fn execute_effects(
                 // Cancel if the active run matches this tab_id
                 if let Some(active) = rm.get_status() {
                     if active.tab_id.as_deref() == Some(&tab_id) {
-                        if let Err(e) = rm.cancel_run().await {
+                        if let Err(e) = rm.cancel_run() {
                             error!("Failed to cancel run for {key}: {e}");
                         }
                     }
