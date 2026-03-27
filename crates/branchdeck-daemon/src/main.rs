@@ -1,10 +1,14 @@
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::Router;
 use branchdeck_core::services::activity_store::ActivityStore;
 use branchdeck_core::services::event_bus::EventBus;
+use branchdeck_core::services::run_manager;
+use branchdeck_core::traits::EventEmitter;
 use log::{error, info, warn};
 use std::sync::Arc;
 
+mod emitter;
+mod error;
 mod routes;
 mod state;
 
@@ -34,9 +38,20 @@ async fn main() {
     activity_store.start_subscriber(&event_bus);
     activity_store.start_gc(300_000); // 5 minute TTL
 
+    // Sidecar path — resolve from data dir; placeholder until CLI config is added
+    let sidecar_path = data_dir.join("sidecar").join("index.js");
+    let daemon_emitter: Arc<dyn EventEmitter> = Arc::new(emitter::DaemonEmitter);
+    let run_manager_state = run_manager::create_run_manager_state(
+        sidecar_path,
+        Arc::clone(&event_bus),
+        daemon_emitter,
+        0, // hook_port — configured at runtime via CLI args
+    );
+
     let app_state = AppState {
         event_bus,
         activity_store,
+        run_manager: run_manager_state,
     };
 
     let app = Router::new()
@@ -49,6 +64,7 @@ async fn main() {
             "/api/agents/active",
             get(routes::activity::get_active_agents),
         )
+        .route("/api/runs/cancel", post(routes::runs::cancel_run))
         .with_state(app_state);
 
     info!("branchdeck-daemon starting on 127.0.0.1:13371");

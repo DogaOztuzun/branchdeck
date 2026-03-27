@@ -364,14 +364,22 @@ impl RunManager {
     }
 
     /// Cancel the queue — cancels the active run and clears remaining queued items.
-    /// Queued tasks remain in Created status.
+    /// Queued tasks remain in Created status. The active run is force-killed.
     pub fn cancel_queue(&mut self) {
         let cleared = self.run_queue.len();
         self.run_queue.clear();
         self.queue_completed = 0;
         self.queue_failed = 0;
         self.queue_cancelled = true;
-        info!("Cancelled queue: cleared {cleared} queued items");
+
+        // Also cancel the active run if one exists
+        if self.active_run.is_some() {
+            if let Err(e) = self.cancel_run() {
+                error!("Failed to cancel active run during queue cancel: {e}");
+            }
+        }
+
+        info!("Cancelled queue: cleared {cleared} queued items, cancelled active run");
     }
 
     /// Remove a queued run by worktree path. Returns true if found and removed.
@@ -400,27 +408,52 @@ impl RunManager {
         }
     }
 
-    /// Cancel the active run.
+    /// Cancel the active run immediately.
+    ///
+    /// Kills the sidecar process, marks the run as cancelled, records elapsed
+    /// time, and emits lifecycle events. Does NOT wait for graceful completion.
     ///
     /// # Errors
     ///
     /// Returns `RunError` if no run is active.
-    /// Returns `SidecarError` if the cancel command cannot be sent.
-    pub async fn cancel_run(&mut self) -> Result<(), AppError> {
-        let session_id = self
-            .active_run
-            .as_ref()
-            .map(|r| r.session_id.clone())
-            .ok_or_else(|| {
-                error!("Cannot cancel: no active run");
-                AppError::RunError("No active run to cancel".to_owned())
-            })?;
+    pub fn cancel_run(&mut self) -> Result<RunInfo, AppError> {
+        if self.active_run.is_none() {
+            error!("Cannot cancel: no active run");
+            return Err(AppError::RunError("No active run to cancel".to_owned()));
+        }
 
-        let request = SidecarRequest::CancelRun { session_id };
-        self.send_request(&request).await?;
+        // Kill sidecar child process immediately
+        if let Some(ref mut child) = self.process {
+            info!("Killing sidecar process for cancellation");
+            if let Err(e) = child.start_kill() {
+                error!("Failed to kill sidecar process during cancel: {e}");
+            }
+        }
 
-        info!("Sent cancel request for active run");
-        Ok(())
+        // Apply cancellation effects
+        let cancelled_run = if let Some(ref mut run) = self.active_run {
+            let now = now_epoch_ms();
+            let effects = run_effects::apply_cancel(run, self.started_at_epoch_ms, now);
+            run_effects::execute_effects(effects, self.emitter.as_ref(), &self.event_bus);
+            info!(
+                "Cancelled run for task {} after {}s",
+                run.task_path, run.elapsed_secs
+            );
+            run.clone()
+        } else {
+            // Unreachable — guarded above
+            return Err(AppError::RunError("No active run to cancel".to_owned()));
+        };
+
+        // Clean up manager state
+        self.active_run = None;
+        self.process = None;
+        self.stdin = None;
+        self.last_activity_ms = 0;
+        self.started_at_epoch_ms = 0;
+        self.pending_permissions.clear();
+
+        Ok(cancelled_run)
     }
 
     /// Respond to a pending permission request.
@@ -973,6 +1006,17 @@ pub async fn enqueue_run(
 
     let manager = state.lock().await;
     Ok(manager.get_queue_status())
+}
+
+/// Cancel the active run immediately. Kills the sidecar process, marks the
+/// run as cancelled, and returns the cancelled `RunInfo`.
+///
+/// # Errors
+///
+/// Returns `RunError` if no run is active.
+pub async fn force_cancel_run(state: RunManagerState) -> Result<RunInfo, AppError> {
+    let mut manager = state.lock().await;
+    manager.cancel_run()
 }
 
 /// Type alias for the managed state.

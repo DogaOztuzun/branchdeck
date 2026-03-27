@@ -28,7 +28,8 @@ pub async fn launch_run_cmd(
 #[tauri::command]
 pub async fn cancel_run_cmd(run_manager: State<'_, RunManagerState>) -> Result<(), AppError> {
     let mut rm = run_manager.lock().await;
-    rm.cancel_run().await
+    rm.cancel_run()?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -123,10 +124,7 @@ pub async fn batch_launch_cmd(
 #[tauri::command]
 pub async fn cancel_queue_cmd(run_manager: State<'_, RunManagerState>) -> Result<(), AppError> {
     let mut rm = run_manager.lock().await;
-    // Cancel active run first (if any), then clear the queue
-    if rm.get_status().is_some() {
-        rm.cancel_run().await?;
-    }
+    // cancel_queue now also cancels the active run internally
     rm.cancel_queue();
     Ok(())
 }

@@ -188,6 +188,35 @@ pub fn apply_permission_request(
     (pending, effects)
 }
 
+/// Pure: apply immediate cancellation transition.
+///
+/// Sets status to Cancelled, captures elapsed time, and emits lifecycle events.
+/// Cost data may be unavailable because the sidecar was killed, so it's best-effort.
+pub fn apply_cancel(
+    run: &mut RunInfo,
+    started_at_epoch_ms: u64,
+    now_ms: u64,
+) -> Vec<RunEffect> {
+    run.status = RunStatus::Cancelled;
+    if started_at_epoch_ms > 0 {
+        run.elapsed_secs = (now_ms.saturating_sub(started_at_epoch_ms)) / 1000;
+    }
+    vec![
+        RunEffect::PublishRunComplete {
+            run: run.clone(),
+            status: "cancelled".to_owned(),
+        },
+        RunEffect::CaptureArtifacts {
+            task_path: run.task_path.clone(),
+            status: "cancelled".to_owned(),
+            started_at: started_at_epoch_ms,
+        },
+        RunEffect::UpdateTaskStatus(run.task_path.clone(), TaskStatus::Cancelled),
+        RunEffect::SaveRunState(run.task_path.clone(), run.clone()),
+        RunEffect::EmitStatusChanged(run.clone()),
+    ]
+}
+
 /// Pure: apply mark-run-failed transition (sidecar crash or stale detection).
 ///
 /// Unlike `apply_run_error`, this does NOT capture cost because it's called
@@ -215,4 +244,70 @@ pub fn apply_mark_failed(
         RunEffect::SaveRunState(run.task_path.clone(), run.clone()),
         RunEffect::EmitStatusChanged(run.clone()),
     ]
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    fn make_run(task_path: &str) -> RunInfo {
+        RunInfo {
+            session_id: Some("sess-1".to_owned()),
+            task_path: task_path.to_owned(),
+            status: RunStatus::Running,
+            started_at: "2026-03-27T00:00:00Z".to_owned(),
+            cost_usd: 0.05,
+            last_heartbeat: None,
+            elapsed_secs: 0,
+            tab_id: Some("tab-1".to_owned()),
+        }
+    }
+
+    #[test]
+    fn cancel_sets_status_and_elapsed() {
+        let mut run = make_run("/tmp/test/.branchdeck/task.md");
+        let started = 1_000_000;
+        let now = 1_030_000; // 30 seconds later
+
+        let effects = apply_cancel(&mut run, started, now);
+
+        assert_eq!(run.status, RunStatus::Cancelled);
+        assert_eq!(run.elapsed_secs, 30);
+        assert!(effects
+            .iter()
+            .any(|e| matches!(e, RunEffect::UpdateTaskStatus(_, TaskStatus::Cancelled))));
+        assert!(effects.iter().any(
+            |e| matches!(e, RunEffect::PublishRunComplete { status, .. } if status == "cancelled")
+        ));
+        assert!(effects
+            .iter()
+            .any(|e| matches!(e, RunEffect::EmitStatusChanged(_))));
+        assert!(effects
+            .iter()
+            .any(|e| matches!(e, RunEffect::SaveRunState(..))));
+    }
+
+    #[test]
+    fn cancel_with_zero_start_skips_elapsed() {
+        let mut run = make_run("/tmp/test/.branchdeck/task.md");
+        let effects = apply_cancel(&mut run, 0, 1_000_000);
+
+        assert_eq!(run.status, RunStatus::Cancelled);
+        assert_eq!(run.elapsed_secs, 0);
+        assert!(!effects.is_empty());
+    }
+
+    #[test]
+    fn complete_sets_succeeded_status() {
+        let mut run = make_run("/tmp/test/.branchdeck/task.md");
+        let effects = apply_run_complete(&mut run, Some(&0.12), 1_000_000, 1_060_000);
+
+        assert_eq!(run.status, RunStatus::Succeeded);
+        assert!((run.cost_usd - 0.12).abs() < f64::EPSILON);
+        assert_eq!(run.elapsed_secs, 60);
+        assert!(effects
+            .iter()
+            .any(|e| matches!(e, RunEffect::DeleteRunState(..))));
+    }
 }
