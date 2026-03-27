@@ -1263,6 +1263,17 @@ pub struct FalsePositiveResponse {
     pub false_positive_metrics: FalsePositiveMetrics,
 }
 
+/// Response for the false positive metrics GET endpoint.
+/// Unlike `FalsePositiveResponse`, this does not require a record.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct FalsePositiveMetricsResponse {
+    /// Updated classification accuracy.
+    pub classification_accuracy: ClassificationAccuracy,
+    /// Current false positive metrics.
+    pub false_positive_metrics: FalsePositiveMetrics,
+}
+
 /// Full regression report for a SAT cycle verification.
 /// Written to `sat/runs/run-{id}/regression-report.json`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
