@@ -21,7 +21,11 @@ async function handleResponse<T>(res: Response, method: string, path: string): P
   if (res.status === 204) return undefined as T;
   const text = await res.text();
   if (!text) return undefined as T;
-  return JSON.parse(text) as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(`API ${method} ${path}: invalid JSON response`);
+  }
 }
 
 export async function apiGet<T>(path: string): Promise<T> {

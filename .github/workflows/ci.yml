@@ -121,7 +121,9 @@ jobs:
       - name: Run container and health check
         run: |
           CONTAINER_ID=$(docker run --rm -d -p 13371:13371 branchdeck-test)
-          sleep 5
+          for i in $(seq 1 15); do
+            curl -sf http://localhost:13371/api/health && break || sleep 2
+          done
           curl -f http://localhost:13371/api/health
           docker stop "$CONTAINER_ID"
 

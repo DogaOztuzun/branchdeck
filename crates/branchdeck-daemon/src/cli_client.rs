@@ -6,14 +6,20 @@ pub struct DaemonClient {
     base_url: String,
     client: reqwest::Client,
     json_output: bool,
+    auth_token: Option<String>,
 }
 
 impl DaemonClient {
     pub fn new(port: u16, json_output: bool) -> Self {
+        // Load auth token so CLI subcommands work when auth is enabled
+        let auth_token = crate::auth::load_token()
+            .ok()
+            .flatten();
         Self {
             base_url: format!("http://127.0.0.1:{port}/api"),
             client: reqwest::Client::new(),
             json_output,
+            auth_token,
         }
     }
 
@@ -185,9 +191,11 @@ impl DaemonClient {
 
     async fn get<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T, String> {
         let url = format!("{}/{path}", self.base_url);
-        let resp = self
-            .client
-            .get(&url)
+        let mut req = self.client.get(&url);
+        if let Some(token) = &self.auth_token {
+            req = req.header("Authorization", format!("Bearer {token}"));
+        }
+        let resp = req
             .send()
             .await
             .map_err(|e| {
@@ -214,10 +222,11 @@ impl DaemonClient {
         body: &B,
     ) -> Result<T, String> {
         let url = format!("{}/{path}", self.base_url);
-        let resp = self
-            .client
-            .post(&url)
-            .json(body)
+        let mut req = self.client.post(&url).json(body);
+        if let Some(token) = &self.auth_token {
+            req = req.header("Authorization", format!("Bearer {token}"));
+        }
+        let resp = req
             .send()
             .await
             .map_err(|e| {
