@@ -47,6 +47,7 @@ const SCHEMA_VERSION: &str = "0.2.0";
         routes::runs::approve_run,
         routes::repos::get_repo,
         routes::sat::get_sat_scores,
+        routes::mcp::mcp_handler,
     ),
     components(schemas(
         routes::events::SseEnvelope,
@@ -82,7 +83,8 @@ const SCHEMA_VERSION: &str = "0.2.0";
         (name = "workflows", description = "Workflow management"),
         (name = "runs", description = "Run management"),
         (name = "repos", description = "Repository information"),
-        (name = "sat", description = "SAT satisfaction scores")
+        (name = "sat", description = "SAT satisfaction scores"),
+        (name = "mcp", description = "MCP-over-HTTP endpoint (JSON-RPC 2.0)")
     )
 )]
 struct ApiDoc;
@@ -202,6 +204,7 @@ async fn run_serve(port: u16, bind: &str, workspace_arg: Option<PathBuf>, static
         )
         .route("/api/repos", get(routes::repos::get_repo))
         .route("/api/sat/scores", get(routes::sat::get_sat_scores))
+        .route("/mcp", post(routes::mcp::mcp_handler))
         .merge(
             SwaggerUi::new("/api/docs/{_:.*}")
                 .url("/api/openapi.json", ApiDoc::openapi()),
