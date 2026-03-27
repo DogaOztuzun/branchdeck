@@ -35,6 +35,7 @@ const SCHEMA_VERSION: &str = "0.2.0";
     ),
     paths(
         routes::health::health,
+        routes::events::sse_handler,
         routes::workflows::list_workflows,
         routes::workflows::get_workflow,
         routes::runs::create_run,
@@ -46,6 +47,7 @@ const SCHEMA_VERSION: &str = "0.2.0";
         routes::sat::get_sat_scores,
     ),
     components(schemas(
+        routes::events::SseEnvelope,
         routes::health::HealthResponse,
         routes::workflows::WorkflowSummary,
         routes::workflows::WorkflowDetail,
@@ -73,6 +75,7 @@ const SCHEMA_VERSION: &str = "0.2.0";
         branchdeck_core::models::WorktreeInfo,
     )),
     tags(
+        (name = "events", description = "Server-Sent Events stream"),
         (name = "health", description = "Health check endpoints"),
         (name = "workflows", description = "Workflow management"),
         (name = "runs", description = "Run management"),

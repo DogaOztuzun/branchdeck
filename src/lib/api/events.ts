@@ -9,6 +9,7 @@ export type SseEnvelope<T = unknown> = {
   id: string;
   type: string;
   timestamp: number;
+  run_id?: string;
   data: T;
 };
 
