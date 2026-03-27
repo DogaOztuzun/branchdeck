@@ -5,7 +5,7 @@ edition = "2021"
 description = "Standalone daemon for Branchdeck — HTTP + SSE + WebSocket API"
 
 [dependencies]
-branchdeck-core = { path = "../branchdeck-core", features = ["openapi"] }
+branchdeck-core = { path = "../branchdeck-core", default-features = false, features = ["openapi"] }
 axum = { version = "0.8", features = ["macros"] }
 tokio = { version = "1", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
