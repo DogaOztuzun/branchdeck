@@ -35,6 +35,7 @@ function StatusDot(props: { status: string | undefined }) {
 
 export function TriageCard(props: TriageCardProps) {
   const status = () => props.item.lifecycle?.status;
+  // biome-ignore lint/style/noNonNullAssertion: guarded by ternary — status() is checked truthy
   const label = () => (status() ? LIFECYCLE_STATUS_LABELS[status()!] : '');
 
   const branchName = () => props.item.pr?.branch ?? props.item.prKey;
@@ -53,7 +54,7 @@ export function TriageCard(props: TriageCardProps) {
     status() === 'approved' ||
     status() === 'retrying';
 
-  const repoShort = () => props.item.pr?.repoName?.split('/').pop() ?? '';
+  const _repoShort = () => props.item.pr?.repoName?.split('/').pop() ?? '';
 
   const statusColor = () => {
     const s = status();
@@ -72,7 +73,7 @@ export function TriageCard(props: TriageCardProps) {
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2">
           <Show when={props.item.pr}>
-            <span class="text-sm text-accent-info shrink-0">#{props.item.pr!.number}</span>
+            <span class="text-sm text-accent-info shrink-0">#{props.item.pr?.number}</span>
           </Show>
           <span class="text-text-main truncate font-medium">{branchName()}</span>
         </div>

@@ -688,6 +688,7 @@ version = "0.2.0"
 dependencies = [
  "axum",
  "branchdeck-core",
+ "dirs",
  "env_logger",
  "futures",
  "log",
