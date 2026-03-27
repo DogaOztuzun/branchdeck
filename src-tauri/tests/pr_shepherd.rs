@@ -7,7 +7,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use branchdeck_lib::services::git;
+use branchdeck_core::services::git;
 use git2::Repository;
 use std::path::Path;
 use tempfile::TempDir;

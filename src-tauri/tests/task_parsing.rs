@@ -7,8 +7,8 @@
 
 mod common;
 
-use branchdeck_lib::models::task::{TaskScope, TaskStatus, TaskType};
-use branchdeck_lib::services::task;
+use branchdeck_core::models::task::{TaskScope, TaskStatus, TaskType};
+use branchdeck_core::services::task;
 
 // ─── T1-UNIT-001: Parse valid task.md with all frontmatter fields ───
 

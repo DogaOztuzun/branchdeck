@@ -14,7 +14,7 @@
 
 mod common;
 
-use branchdeck_lib::services::git;
+use branchdeck_core::services::git;
 use git2::{Repository, Signature};
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;

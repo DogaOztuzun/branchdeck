@@ -8,7 +8,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use branchdeck_lib::services::workflow::WorkflowRegistry;
+use branchdeck_core::services::workflow::WorkflowRegistry;
 use tempfile::TempDir;
 
 /// Helper: create a workflow directory with a WORKFLOW.md inside.

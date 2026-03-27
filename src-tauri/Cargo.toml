@@ -13,7 +13,6 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-branchdeck-core = { path = "../crates/branchdeck-core" }
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
@@ -23,13 +22,13 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 log = "0.4"
+reqwest = { version = "0.12", features = ["json"] }
 
 [features]
-default = ["knowledge"]
-knowledge = ["branchdeck-core/knowledge"]
-sona = ["branchdeck-core/sona", "knowledge"]
+default = []
 
 [dev-dependencies]
+branchdeck-core = { path = "../crates/branchdeck-core" }
 reqwest = { version = "0.12", features = ["json"] }
 tempfile = "3.27.0"
 serde_yaml = "0.9"
