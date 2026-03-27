@@ -10,6 +10,8 @@ use clap::Parser;
 use log::{error, info, warn};
 use std::path::PathBuf;
 use std::sync::Arc;
+use tower_http::limit::RequestBodyLimitLayer;
+use tower_http::timeout::TimeoutLayer;
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::SetResponseHeaderLayer;
 use utoipa::OpenApi;
@@ -151,6 +153,7 @@ async fn main() {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 async fn run_serve(port: u16, bind: &str, workspace_arg: Option<PathBuf>, static_dir: Option<PathBuf>, require_auth_flag: bool) {
     let workspace_root = workspace_arg.unwrap_or_else(|| {
         std::env::current_dir().unwrap_or_else(|e| {
@@ -204,9 +207,18 @@ async fn run_serve(port: u16, bind: &str, workspace_arg: Option<PathBuf>, static
         None
     };
 
+    let search_dirs = branchdeck_core::services::workflow::default_search_dirs(
+        &workspace_root.display().to_string(),
+    );
+    let workflow_registry = Arc::new(
+        branchdeck_core::services::workflow::WorkflowRegistry::scan(&search_dirs),
+    );
+    info!("Loaded {} workflow(s)", workflow_registry.list_workflows().len());
+
     let app_state = AppState {
         event_bus,
         activity_store,
+        workflow_registry,
         workspace_root: workspace_root.clone(),
         require_auth,
         auth_token,
@@ -217,9 +229,8 @@ async fn run_serve(port: u16, bind: &str, workspace_arg: Option<PathBuf>, static
             http::HeaderValue::from_static("unknown")
         });
 
-    let mut app = Router::new()
-        .route("/api/health", get(routes::health::health))
-        .route("/api/events", get(routes::events::sse_handler))
+    // Auth-protected routes with timeout + body limit
+    let protected_api = Router::new()
         .route(
             "/api/runs/{session_id}/activity",
             get(routes::activity::get_session_activity),
@@ -246,6 +257,25 @@ async fn run_serve(port: u16, bind: &str, workspace_arg: Option<PathBuf>, static
         .route("/api/repos", get(routes::repos::get_repo))
         .route("/api/sat/scores", get(routes::sat::get_sat_scores))
         .route("/mcp", post(routes::mcp::mcp_handler))
+        .layer(RequestBodyLimitLayer::new(10 * 1024 * 1024))
+        .layer(TimeoutLayer::with_status_code(
+            http::StatusCode::REQUEST_TIMEOUT,
+            std::time::Duration::from_secs(30),
+        ));
+
+    // SSE is auth-protected but exempt from timeout (long-lived stream)
+    let protected = Router::new()
+        .route("/api/events", get(routes::events::sse_handler))
+        .merge(protected_api)
+        .layer(axum::middleware::from_fn_with_state(
+            app_state.clone(),
+            auth::auth_middleware,
+        ));
+
+    // Health endpoint is exempt from auth so monitoring tools and desktop startup can probe
+    let mut app = Router::new()
+        .route("/api/health", get(routes::health::health))
+        .merge(protected)
         .merge(
             SwaggerUi::new("/api/docs/{_:.*}")
                 .url("/api/openapi.json", ApiDoc::openapi()),
@@ -253,10 +283,6 @@ async fn run_serve(port: u16, bind: &str, workspace_arg: Option<PathBuf>, static
         .layer(SetResponseHeaderLayer::overriding(
             http::HeaderName::from_static("x-branchdeck-schema"),
             schema_header_value,
-        ))
-        .layer(axum::middleware::from_fn_with_state(
-            app_state.clone(),
-            auth::auth_middleware,
         ))
         .with_state(app_state);
 

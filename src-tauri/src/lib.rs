@@ -34,9 +34,19 @@ pub fn run() {
                 .build(),
         )
         .setup(move |app| {
+            // Manage DaemonState immediately so window close handler always finds it,
+            // even if the user closes the window before connect_or_spawn completes.
+            app.manage(Mutex::new(daemon::DaemonState {
+                child: None,
+                stop_with_desktop,
+            }));
+
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                let connection = daemon::connect_or_spawn(port, None).await;
+                let workspace = std::env::current_dir()
+                    .ok()
+                    .map(|p| p.to_string_lossy().to_string());
+                let connection = daemon::connect_or_spawn(port, workspace.as_deref()).await;
                 match connection {
                     daemon::DaemonConnection::Connected(health) => {
                         log::info!(
@@ -44,10 +54,6 @@ pub fn run() {
                             health.version,
                             health.pid
                         );
-                        handle.manage(Mutex::new(daemon::DaemonState {
-                            child: None,
-                            stop_with_desktop,
-                        }));
                     }
                     daemon::DaemonConnection::Spawned { child, health } => {
                         log::info!(
@@ -55,19 +61,14 @@ pub fn run() {
                             health.version,
                             health.pid
                         );
-                        handle.manage(Mutex::new(daemon::DaemonState {
-                            child: Some(child),
-                            stop_with_desktop,
-                        }));
+                        if let Some(state) = handle.try_state::<Mutex<daemon::DaemonState>>() {
+                            if let Ok(mut daemon) = state.lock() {
+                                daemon.child = Some(child);
+                            }
+                        }
                     }
                     daemon::DaemonConnection::Failed(reason) => {
                         log::error!("Failed to connect to daemon: {reason}");
-                        // Manage state anyway so shutdown doesn't panic
-                        handle.manage(Mutex::new(daemon::DaemonState {
-                            child: None,
-                            stop_with_desktop,
-                        }));
-
                         // Emit an error event so the frontend can display it
                         if let Err(e) = handle.emit("daemon:connection_failed", &reason) {
                             log::error!("Failed to emit connection error: {e}");

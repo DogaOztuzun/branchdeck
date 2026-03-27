@@ -33,7 +33,13 @@ impl IntoResponse for ApiError {
 
         let (status, title) = match &self.0 {
             AppError::TaskNotFound(_) | AppError::RunError(_) => {
-                (StatusCode::NOT_FOUND, "Not Found")
+                // Distinguish "not implemented" stubs from actual not-found errors
+                let msg = self.0.to_string();
+                if msg.contains("Not implemented") {
+                    (StatusCode::NOT_IMPLEMENTED, "Not Implemented")
+                } else {
+                    (StatusCode::NOT_FOUND, "Not Found")
+                }
             }
             AppError::TaskAlreadyExists(_) => (StatusCode::CONFLICT, "Conflict"),
             AppError::Config(_) | AppError::TaskParseError(_) | AppError::Workflow(_) => {
@@ -65,6 +71,7 @@ fn slug_from_status(status: StatusCode) -> &'static str {
     match status {
         StatusCode::UNAUTHORIZED => "unauthorized",
         StatusCode::NOT_FOUND => "not-found",
+        StatusCode::NOT_IMPLEMENTED => "not-implemented",
         StatusCode::CONFLICT => "conflict",
         StatusCode::BAD_REQUEST => "bad-request",
         _ => "internal-error",

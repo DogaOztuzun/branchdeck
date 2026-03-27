@@ -55,18 +55,13 @@ impl From<&RunInfo> for RunSummary {
 )]
 pub async fn create_run(
     State(_state): State<AppState>,
-    Json(req): Json<CreateRunRequest>,
+    Json(_req): Json<CreateRunRequest>,
 ) -> Result<(axum::http::StatusCode, Json<RunSummary>), ApiError> {
-    // Stub: RunManager requires process orchestration (Arc<Mutex>, child processes)
-    // which is not available in the stateless daemon yet. Return a placeholder.
-    let summary = RunSummary {
-        session_id: None,
-        task_path: req.task_path,
-        status: RunStatus::Created,
-        started_at: chrono::Utc::now().to_rfc3339(),
-        cost_usd: 0.0,
-    };
-    Ok((axum::http::StatusCode::CREATED, Json(summary)))
+    // RunManager requires process orchestration not yet wired (stories 8.1-8.4)
+    Err(branchdeck_core::error::AppError::RunError(
+        "Not implemented: RunManager not yet wired (requires stories 8.1-8.4)".to_string(),
+    )
+    .into())
 }
 
 #[utoipa::path(
@@ -77,9 +72,9 @@ pub async fn create_run(
     ),
     tag = "runs"
 )]
-pub async fn list_runs(State(_state): State<AppState>) -> Json<Vec<RunSummary>> {
-    // Stub: RunManager is not yet wired into AppState
-    Json(Vec::new())
+pub async fn list_runs(State(_state): State<AppState>) -> Result<Json<Vec<RunSummary>>, ApiError> {
+    // RunManager not yet wired (stories 8.1-8.4) — return empty list (not an error, just no runs)
+    Ok(Json(Vec::new()))
 }
 
 #[utoipa::path(
@@ -95,11 +90,14 @@ pub async fn list_runs(State(_state): State<AppState>) -> Json<Vec<RunSummary>> 
     tag = "runs"
 )]
 pub async fn get_run(
-    Path(id): Path<String>,
+    Path(_id): Path<String>,
     State(_state): State<AppState>,
 ) -> Result<Json<RunSummary>, ApiError> {
-    // Stub: RunManager is not yet wired into AppState
-    Err(branchdeck_core::error::AppError::RunError(format!("run not found: {id}")).into())
+    // RunManager not yet wired (stories 8.1-8.4)
+    Err(branchdeck_core::error::AppError::RunError(
+        "Not implemented: RunManager not yet wired (requires stories 8.1-8.4)".to_string(),
+    )
+    .into())
 }
 
 #[utoipa::path(
@@ -115,11 +113,14 @@ pub async fn get_run(
     tag = "runs"
 )]
 pub async fn cancel_run(
-    Path(id): Path<String>,
+    Path(_id): Path<String>,
     State(_state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    // Stub: RunManager is not yet wired into AppState
-    Err(branchdeck_core::error::AppError::RunError(format!("run not found: {id}")).into())
+    // RunManager not yet wired (stories 8.1-8.4)
+    Err(branchdeck_core::error::AppError::RunError(
+        "Not implemented: RunManager not yet wired (requires stories 8.1-8.4)".to_string(),
+    )
+    .into())
 }
 
 #[utoipa::path(
@@ -135,9 +136,12 @@ pub async fn cancel_run(
     tag = "runs"
 )]
 pub async fn approve_run(
-    Path(id): Path<String>,
+    Path(_id): Path<String>,
     State(_state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    // Stub: RunManager is not yet wired into AppState
-    Err(branchdeck_core::error::AppError::RunError(format!("run not found: {id}")).into())
+    // RunManager not yet wired (stories 8.1-8.4)
+    Err(branchdeck_core::error::AppError::RunError(
+        "Not implemented: RunManager not yet wired (requires stories 8.1-8.4)".to_string(),
+    )
+    .into())
 }

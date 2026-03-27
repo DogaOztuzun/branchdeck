@@ -1,9 +1,14 @@
 import type { PtyEvent } from '../../types/terminal';
 import { getBaseUrl } from '../api/client';
 
-// TODO: Terminal commands use WebSocket, not REST.
-// The daemon will expose WS at /api/terminal/:session_id for PTY streaming.
-// For now, these are stubs that warn and throw — terminal requires WS transport.
+// Terminal uses WebSocket for PTY streaming. The daemon WS route is not yet
+// implemented — terminal is desktop-only via Tauri PTY. In web/Docker mode,
+// these functions throw with a clear message.
+
+/** Returns true when running inside the Tauri desktop shell. */
+function isTauriEnv(): boolean {
+  return '__TAURI__' in window;
+}
 
 export async function createTerminalSession(
   cwd: string,
@@ -11,6 +16,10 @@ export async function createTerminalSession(
   env: Record<string, string>,
   onEvent: (event: PtyEvent) => void,
 ): Promise<string> {
+  if (!isTauriEnv()) {
+    throw new Error('Terminal is not available in web mode. PTY requires the desktop app.');
+  }
+
   const baseUrl = getBaseUrl();
   const wsUrl = baseUrl.replace(/^http/, 'ws');
   const sessionId = crypto.randomUUID();

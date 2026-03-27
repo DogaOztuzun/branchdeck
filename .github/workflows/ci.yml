@@ -86,16 +86,33 @@ jobs:
         working-directory: src-tauri
         run: cargo test
 
+  check-cargo-deny:
+    name: Rust (cargo-deny)
+    needs: changes
+    if: needs.changes.outputs.rust == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories
+          manifest-path: src-tauri/Cargo.toml
+
   docker-smoke:
     name: Docker (build + health check)
-    needs: changes
+    needs: [changes, check-rust-fast, check-frontend]
     if: >-
-      github.event_name == 'push' ||
-      (github.event_name == 'pull_request' && (
-        needs.changes.outputs.frontend == 'true' ||
-        needs.changes.outputs.rust == 'true' ||
-        needs.changes.outputs.docker == 'true'
-      ))
+      always() &&
+      needs.check-rust-fast.result != 'failure' &&
+      needs.check-frontend.result != 'failure' &&
+      (
+        github.event_name == 'push' ||
+        (github.event_name == 'pull_request' && (
+          needs.changes.outputs.frontend == 'true' ||
+          needs.changes.outputs.rust == 'true' ||
+          needs.changes.outputs.docker == 'true'
+        ))
+      )
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

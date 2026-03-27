@@ -2,7 +2,8 @@ use axum::extract::{Query, Request, State};
 use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
-use log::{error, info, warn};
+use branchdeck_core::util::write_atomic;
+use log::{debug, error, info};
 use rand::Rng;
 use std::path::{Path, PathBuf};
 use subtle::ConstantTimeEq;
@@ -39,7 +40,7 @@ pub fn save_token(token: &str) -> Result<(), String> {
             .map_err(|e| format!("Failed to create config directory: {e}"))?;
     }
 
-    std::fs::write(&path, token)
+    write_atomic(&path, token.as_bytes())
         .map_err(|e| format!("Failed to write token file: {e}"))?;
 
     set_file_permissions(&path)?;
@@ -127,7 +128,7 @@ pub async fn auth_middleware(
             next.run(request).await
         }
         Some(_) => {
-            warn!("Authentication failed: invalid token");
+            debug!("Authentication failed: invalid token");
             unauthorized_response("Invalid authentication token")
         }
         None => {
@@ -148,11 +149,22 @@ fn extract_token<'a>(request: &'a Request, query: &'a TokenQuery) -> Option<&'a 
     }
 
     // Fall back to query parameter (for SSE/WebSocket)
-    query.token.as_deref()
+    if query.token.is_some() {
+        debug!("Auth token provided via query parameter — prefer Authorization header where possible");
+    }
+    query.token.as_deref().map(str::trim)
 }
 
 /// Constant-time comparison to prevent timing attacks.
+/// Checks length first to avoid the `subtle` crate's short-circuit on mismatched lengths,
+/// then pads the shorter slice to ensure constant-time comparison regardless of input length.
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        // Lengths differ — compare against a dummy to consume constant time,
+        // then return false. This prevents a length oracle.
+        let _ = a.ct_eq(a);
+        return false;
+    }
     a.ct_eq(b).into()
 }
 

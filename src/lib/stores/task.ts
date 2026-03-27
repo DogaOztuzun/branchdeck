@@ -8,7 +8,6 @@ import type {
   ToolCallEvent,
 } from '../../types/run';
 import type { TaskInfo } from '../../types/task';
-import { onEvent } from '../api/events';
 import { getRunStatus } from '../commands/run';
 import { listTasks } from '../commands/task';
 import { getAgentStore } from './agent';
@@ -82,6 +81,7 @@ function createTaskStore() {
     }
   }
 
+  // biome-ignore lint/correctness/noUnusedVariables: re-enable when RunManager SSE events land
   function handleTaskUpdated(task: TaskInfo) {
     const wtPath = worktreePathFromTaskPath(task.path);
     const prevTask = state.tasksByWorktree[wtPath];
@@ -113,6 +113,7 @@ function createTaskStore() {
     setState('tasksByWorktree', wtPath, task);
   }
 
+  // biome-ignore lint/correctness/noUnusedVariables: re-enable when RunManager SSE events land
   function handlePermissionRequest(perm: PermissionRequestEvent) {
     setState(
       produce((s) => {
@@ -133,6 +134,7 @@ function createTaskStore() {
     );
   }
 
+  // biome-ignore lint/correctness/noUnusedVariables: re-enable when RunManager SSE events land
   function handleRunStatusChanged(run: RunInfo) {
     batch(() => {
       setState('activeRun', run);
@@ -175,6 +177,7 @@ function createTaskStore() {
     });
   }
 
+  // biome-ignore lint/correctness/noUnusedVariables: re-enable when RunManager SSE events land
   function handleRunStep(event: RunStepEvent | AssistantTextEvent | ToolCallEvent) {
     let detail: string;
     let type: RunLogEntry['type'];
@@ -217,26 +220,14 @@ function createTaskStore() {
     if (listening) return;
     listening = true;
 
-    sseUnsubscribes.push(
-      onEvent<TaskInfo>('workflow:task_updated', (envelope) => {
-        handleTaskUpdated(envelope.data);
-      }),
-    );
-    sseUnsubscribes.push(
-      onEvent<RunInfo>('run:status_changed', (envelope) => {
-        handleRunStatusChanged(envelope.data);
-      }),
-    );
-    sseUnsubscribes.push(
-      onEvent<RunStepEvent | AssistantTextEvent | ToolCallEvent>('run:step', (envelope) => {
-        handleRunStep(envelope.data);
-      }),
-    );
-    sseUnsubscribes.push(
-      onEvent<PermissionRequestEvent>('run:permission_request', (envelope) => {
-        handlePermissionRequest(envelope.data);
-      }),
-    );
+    // TODO: Re-add SSE event subscriptions when RunManager is wired (stories 8.1-8.4).
+    // The daemon does not yet emit these events:
+    //   - workflow:task_updated
+    //   - run:status_changed
+    //   - run:step
+    //   - run:permission_request
+    // When RunManager lands, subscribe here and wire to:
+    //   handleTaskUpdated, handleRunStatusChanged, handleRunStep, handlePermissionRequest
   }
 
   function stopListening() {

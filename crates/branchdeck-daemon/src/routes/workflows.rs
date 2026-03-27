@@ -1,7 +1,6 @@
 use axum::extract::{Path, State};
 use axum::response::Json;
 use branchdeck_core::models::workflow::WorkflowDef;
-use branchdeck_core::services::workflow::{self, WorkflowRegistry};
 
 use crate::error::ApiError;
 use crate::state::AppState;
@@ -54,9 +53,7 @@ impl From<&WorkflowDef> for WorkflowDetail {
     tag = "workflows"
 )]
 pub async fn list_workflows(State(state): State<AppState>) -> Json<Vec<WorkflowSummary>> {
-    let search_dirs = workflow::default_search_dirs(&state.workspace_root.display().to_string());
-    let registry = WorkflowRegistry::scan(&search_dirs);
-    let summaries = registry.list_workflows().iter().map(|w| (*w).into()).collect();
+    let summaries = state.workflow_registry.list_workflows().iter().map(|w| (*w).into()).collect();
     Json(summaries)
 }
 
@@ -76,9 +73,7 @@ pub async fn get_workflow(
     Path(name): Path<String>,
     State(state): State<AppState>,
 ) -> Result<Json<WorkflowDetail>, ApiError> {
-    let search_dirs = workflow::default_search_dirs(&state.workspace_root.display().to_string());
-    let registry = WorkflowRegistry::scan(&search_dirs);
-    let def = registry.get_workflow(&name).ok_or_else(|| {
+    let def = state.workflow_registry.get_workflow(&name).ok_or_else(|| {
         branchdeck_core::error::AppError::Workflow(format!("workflow not found: {name}"))
     })?;
     Ok(Json(def.into()))

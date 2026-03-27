@@ -21,9 +21,9 @@ export async function launchRun(
   }
 }
 
-export async function cancelRun(): Promise<void> {
+export async function cancelRun(sessionId: string): Promise<void> {
   try {
-    await apiPost('/runs/cancel');
+    await apiPost(`/runs/${sessionId}/cancel`);
   } catch (e) {
     console.error(`cancelRun failed: ${e}`);
     throw e;

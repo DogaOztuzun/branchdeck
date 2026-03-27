@@ -1,7 +1,5 @@
 use axum::extract::State;
 use axum::response::{IntoResponse, Json, Response};
-use branchdeck_core::models::run::RunStatus;
-use branchdeck_core::services::workflow::{self, WorkflowRegistry};
 use log::{debug, error, info};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -337,9 +335,8 @@ fn dispatch_tool_call(id: Value, params: Option<Value>, state: &AppState) -> Res
 // --- Tool implementations: thin wrappers over core services ---
 
 fn tool_list_workflows(state: &AppState) -> Result<Value, String> {
-    let search_dirs = workflow::default_search_dirs(&state.workspace_root.display().to_string());
-    let registry = WorkflowRegistry::scan(&search_dirs);
-    let summaries: Vec<Value> = registry
+    let summaries: Vec<Value> = state
+        .workflow_registry
         .list_workflows()
         .iter()
         .map(|w| {
@@ -354,100 +351,51 @@ fn tool_list_workflows(state: &AppState) -> Result<Value, String> {
     Ok(json!(summaries))
 }
 
-fn tool_trigger_workflow(args: &Value) -> Result<Value, String> {
-    let task_path = args
-        .get("task_path")
-        .and_then(Value::as_str)
-        .ok_or_else(|| "task_path is required".to_string())?;
-
-    let worktree_path = args.get("worktree_path").and_then(Value::as_str);
-
-    // Stub: RunManager requires process orchestration not yet wired in
-    let summary = json!({
-        "sessionId": null,
-        "taskPath": task_path,
-        "worktreePath": worktree_path,
-        "status": RunStatus::Created,
-        "startedAt": chrono::Utc::now().to_rfc3339(),
-        "costUsd": 0.0
-    });
-    info!("MCP: triggered workflow for task {task_path:?}");
-    Ok(summary)
+fn tool_trigger_workflow(_args: &Value) -> Result<Value, String> {
+    // RunManager not yet wired (stories 8.1-8.4)
+    Err("Not implemented: RunManager not yet wired. Requires stories 8.1-8.4.".to_string())
 }
 
 fn tool_list_runs() -> Result<Value, String> {
-    // Stub: RunManager is not yet wired into AppState
+    // RunManager not yet wired — return empty list (not an error, just no runs)
     Ok(json!([]))
 }
 
 fn tool_get_run(args: &Value) -> Result<Value, String> {
-    let id = args
+    let _id = args
         .get("id")
         .and_then(Value::as_str)
         .ok_or_else(|| "id is required".to_string())?;
 
-    // Stub: RunManager is not yet wired into AppState
-    Err(format!("run not found: {id}"))
+    // RunManager not yet wired (stories 8.1-8.4)
+    Err("Not implemented: RunManager not yet wired. Requires stories 8.1-8.4.".to_string())
 }
 
 fn tool_cancel_run(args: &Value) -> Result<Value, String> {
-    let id = args
+    let _id = args
         .get("id")
         .and_then(Value::as_str)
         .ok_or_else(|| "id is required".to_string())?;
 
-    // Stub: RunManager is not yet wired into AppState
-    Err(format!("run not found: {id}"))
+    // RunManager not yet wired (stories 8.1-8.4)
+    Err("Not implemented: RunManager not yet wired. Requires stories 8.1-8.4.".to_string())
 }
 
 fn tool_get_sat_scores(state: &AppState) -> Result<Value, String> {
-    let sat_runs_dir = state.workspace_root.join("sat").join("runs");
-    debug!("MCP: looking for SAT runs in {}", sat_runs_dir.display());
-
-    let latest_run = find_latest_run_dir(&sat_runs_dir);
-
-    match latest_run {
-        Some(run_dir) => {
-            let scores_path = run_dir.join("scores.json");
-            match std::fs::read_to_string(&scores_path) {
-                Ok(content) => {
-                    match serde_json::from_str::<branchdeck_core::models::sat::SatScoreResult>(
-                        &content,
-                    ) {
-                        Ok(result) => Ok(json!({
-                            "aggregateScore": result.aggregate_score,
-                            "scenarioCount": result.scenario_scores.len(),
-                            "findingCount": result.all_findings.len(),
-                            "runId": result.run_id
-                        })),
-                        Err(_) => Ok(no_scores_json()),
-                    }
-                }
-                Err(_) => Ok(no_scores_json()),
-            }
-        }
-        None => Ok(no_scores_json()),
+    match branchdeck_core::services::sat_score::load_latest_scores(&state.workspace_root) {
+        Some(scores) => Ok(json!({
+            "aggregateScore": scores.aggregate_score,
+            "scenarioCount": scores.scenario_count,
+            "findingCount": scores.finding_count,
+            "runId": scores.run_id
+        })),
+        None => Ok(json!({
+            "aggregateScore": null,
+            "scenarioCount": 0,
+            "findingCount": 0,
+            "runId": null
+        })),
     }
-}
-
-fn no_scores_json() -> Value {
-    json!({
-        "aggregateScore": null,
-        "scenarioCount": 0,
-        "findingCount": 0,
-        "runId": null
-    })
-}
-
-fn find_latest_run_dir(runs_dir: &std::path::Path) -> Option<std::path::PathBuf> {
-    let entries = std::fs::read_dir(runs_dir).ok()?;
-    let mut dirs: Vec<std::path::PathBuf> = entries
-        .filter_map(Result::ok)
-        .map(|e| e.path())
-        .filter(|p| p.is_dir())
-        .collect();
-    dirs.sort();
-    dirs.pop()
 }
 
 fn tool_create_worktree(state: &AppState, args: &Value) -> Result<Value, String> {
@@ -455,6 +403,23 @@ fn tool_create_worktree(state: &AppState, args: &Value) -> Result<Value, String>
         .get("name")
         .and_then(Value::as_str)
         .ok_or_else(|| "name is required".to_string())?;
+
+    // Validate worktree name: allowlist of safe characters only
+    if name.is_empty() || name.len() > 255 {
+        return Err("Invalid worktree name: must be 1-255 characters".to_string());
+    }
+    if name == "." || name == ".." {
+        return Err("Invalid worktree name: '.' and '..' are reserved".to_string());
+    }
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
+    {
+        return Err(
+            "Invalid worktree name: must contain only ASCII alphanumeric, dash, underscore, or dot"
+                .to_string(),
+        );
+    }
 
     let branch = args.get("branch").and_then(Value::as_str);
     let base_branch = args.get("base_branch").and_then(Value::as_str);

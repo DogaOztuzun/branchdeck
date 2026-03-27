@@ -180,7 +180,10 @@ export function TaskDetail(props: TaskDetailProps) {
                     <button
                       type="button"
                       class="px-2 py-1 text-base text-red-400 hover:text-red-300 border border-border-subtle hover:border-red-400 cursor-pointer"
-                      onClick={() => cancelRun().catch(() => {})}
+                      onClick={() => {
+                        const sid = taskStore.state.activeRun?.sessionId;
+                        if (sid) cancelRun(sid).catch(() => {});
+                      }}
                     >
                       Cancel
                     </button>

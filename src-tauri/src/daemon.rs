@@ -113,8 +113,8 @@ fn spawn_daemon(port: u16, workspace: Option<&str>) -> Result<Child, String> {
         cmd.arg("--workspace").arg(ws);
     }
 
-    // Inherit stdout/stderr so daemon logs are visible during development.
-    // In production, the daemon logs to its own file.
+    // Discard stdout (daemon uses stderr via env_logger).
+    // Inherit stderr so daemon logs are visible during development.
     cmd.stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::inherit());
 
@@ -206,6 +206,10 @@ pub async fn connect_or_spawn(port: u16, workspace: Option<&str>) -> DaemonConne
     // Wait for the daemon to become healthy
     match wait_for_health(port).await {
         Ok(health) => {
+            // Validate health after spawn to ensure we connected to our daemon
+            if let Err(msg) = validate_health(&health, workspace) {
+                return DaemonConnection::Failed(msg);
+            }
             info!(
                 "Spawned daemon (pid={}, version={}, workspace={})",
                 health.pid, health.version, health.workspace_root
@@ -239,7 +243,39 @@ impl DaemonState {
         }
 
         if let Some(ref mut child) = self.child {
-            info!("Desktop closing — stopping daemon (pid={})", child.id());
+            let pid = child.id();
+            info!("Desktop closing — sending SIGTERM to daemon (pid={pid})");
+
+            // Send SIGTERM for graceful shutdown via Command
+            #[cfg(unix)]
+            {
+                let _ = std::process::Command::new("kill")
+                    .args(["-TERM", &pid.to_string()])
+                    .status();
+            }
+            #[cfg(not(unix))]
+            {
+                let _ = child.kill();
+                return;
+            }
+
+            // Wait up to 3 seconds for graceful exit
+            for _ in 0..30 {
+                match child.try_wait() {
+                    Ok(Some(_)) => {
+                        info!("Daemon exited gracefully (pid={pid})");
+                        return;
+                    }
+                    Ok(None) => std::thread::sleep(Duration::from_millis(100)),
+                    Err(e) => {
+                        warn!("Error waiting for daemon: {e}");
+                        break;
+                    }
+                }
+            }
+
+            // Force kill if still running
+            warn!("Daemon did not exit after SIGTERM — sending SIGKILL (pid={pid})");
             if let Err(e) = child.kill() {
                 warn!("Failed to kill daemon process: {e}");
             }

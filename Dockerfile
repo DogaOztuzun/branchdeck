@@ -64,10 +64,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js (for agent-bridge / sidecar)
+# Install Node.js (for agent-bridge / sidecar) and Bun (package manager)
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-    apt-get install -y --no-install-recommends nodejs && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends nodejs unzip && \
+    rm -rf /var/lib/apt/lists/* && \
+    curl -fsSL https://bun.sh/install | bash && \
+    ln -s /root/.bun/bin/bun /usr/local/bin/bun
 
 # Install GitHub CLI
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
@@ -85,7 +87,7 @@ COPY --from=frontend-builder /build/dist /opt/branchdeck/dist
 
 # Copy sidecar (agent-bridge)
 COPY sidecar/ /opt/branchdeck/sidecar/
-RUN cd /opt/branchdeck/sidecar && npm install --production
+RUN cd /opt/branchdeck/sidecar && bun install --production
 
 # Create volume mount points
 RUN mkdir -p /repos /config

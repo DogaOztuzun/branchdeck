@@ -17,6 +17,8 @@ async function handleResponse<T>(res: Response, method: string, path: string): P
       `API ${method} ${path} failed: ${res.status} ${res.statusText}${body ? ` — ${body}` : ''}`,
     );
   }
+  // 204 No Content — return undefined (callers expecting void)
+  if (res.status === 204) return undefined as T;
   const text = await res.text();
   if (!text) return undefined as T;
   return JSON.parse(text) as T;

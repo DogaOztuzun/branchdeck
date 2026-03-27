@@ -17,10 +17,13 @@ type EventCallback<T> = (envelope: SseEnvelope<T>) => void;
 type Unsubscribe = () => void;
 
 const listeners = new Map<string, Set<EventCallback<unknown>>>();
+const registeredTypes = new Set<string>();
 let eventSource: EventSource | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let reconnectAttempt = 0;
 
-const RECONNECT_DELAY_MS = 3000;
+const RECONNECT_BASE_MS = 1000;
+const RECONNECT_MAX_MS = 30000;
 
 function ensureConnection() {
   if (eventSource?.readyState !== EventSource.CLOSED && eventSource !== null) {
@@ -28,9 +31,11 @@ function ensureConnection() {
   }
 
   const url = `${getBaseUrl()}/events`;
+  registeredTypes.clear();
   eventSource = new EventSource(url);
 
   eventSource.onopen = () => {
+    reconnectAttempt = 0;
     if (reconnectTimer) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
@@ -41,12 +46,14 @@ function ensureConnection() {
     eventSource?.close();
     eventSource = null;
     if (!reconnectTimer) {
+      const delay = Math.min(RECONNECT_BASE_MS * 2 ** reconnectAttempt, RECONNECT_MAX_MS);
+      reconnectAttempt++;
       reconnectTimer = setTimeout(() => {
         reconnectTimer = null;
         if (listeners.size > 0) {
           ensureConnection();
         }
-      }, RECONNECT_DELAY_MS);
+      }, delay);
     }
   };
 
@@ -58,6 +65,8 @@ function ensureConnection() {
 
 function registerSseHandler(eventType: string) {
   if (!eventSource) return;
+  if (registeredTypes.has(eventType)) return;
+  registeredTypes.add(eventType);
   eventSource.addEventListener(eventType, (e: Event) => {
     const messageEvent = e as MessageEvent;
     const callbacks = listeners.get(eventType);
@@ -117,6 +126,7 @@ export function disconnectEvents() {
   eventSource?.close();
   eventSource = null;
   listeners.clear();
+  registeredTypes.clear();
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
