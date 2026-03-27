@@ -1,6 +1,7 @@
 use axum::extract::{Path, State};
 use axum::response::Json;
 use branchdeck_core::models::run::{RunInfo, RunStatus};
+use branchdeck_core::services::run_manager;
 use serde::Deserialize;
 use utoipa::ToSchema;
 
@@ -107,20 +108,17 @@ pub async fn get_run(
         ("id" = String, Path, description = "Run session ID")
     ),
     responses(
-        (status = 200, description = "Run cancelled"),
+        (status = 200, description = "Run cancelled", body = RunInfo),
         (status = 404, description = "Run not found", body = crate::error::ProblemDetails)
     ),
     tag = "runs"
 )]
 pub async fn cancel_run(
-    Path(_id): Path<String>,
-    State(_state): State<AppState>,
-) -> Result<Json<serde_json::Value>, ApiError> {
-    // RunManager not yet wired (stories 8.1-8.4)
-    Err(branchdeck_core::error::AppError::RunError(
-        "Not implemented: RunManager not yet wired (requires stories 8.1-8.4)".to_string(),
-    )
-    .into())
+    Path(run_id): Path<String>,
+    State(state): State<AppState>,
+) -> Result<Json<RunInfo>, ApiError> {
+    let cancelled = run_manager::force_cancel_run(state.run_manager, &run_id).await?;
+    Ok(Json(cancelled))
 }
 
 #[utoipa::path(

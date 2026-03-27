@@ -45,6 +45,8 @@ impl IntoResponse for ApiError {
             AppError::Config(_) | AppError::TaskParseError(_) | AppError::Workflow(_) => {
                 (StatusCode::BAD_REQUEST, "Bad Request")
             }
+            AppError::SidecarError(_) => (StatusCode::BAD_GATEWAY, "Sidecar Error"),
+            AppError::Sat(_) => (StatusCode::UNPROCESSABLE_ENTITY, "SAT Error"),
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error"),
         };
 
@@ -74,6 +76,8 @@ fn slug_from_status(status: StatusCode) -> &'static str {
         StatusCode::NOT_IMPLEMENTED => "not-implemented",
         StatusCode::CONFLICT => "conflict",
         StatusCode::BAD_REQUEST => "bad-request",
+        StatusCode::BAD_GATEWAY => "sidecar-error",
+        StatusCode::UNPROCESSABLE_ENTITY => "sat-error",
         _ => "internal-error",
     }
 }

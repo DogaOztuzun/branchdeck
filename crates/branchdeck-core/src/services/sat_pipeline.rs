@@ -19,13 +19,14 @@ use log::{error, info};
 
 use crate::error::AppError;
 use crate::models::sat::{
-    SatGenerationConfig, SatIssueConfig, SatPipelineConfig, SatPipelineResult, SatPipelineStage,
-    SatPipelineStatus, SatRunConfig, SatScoreConfig, SatStageResult,
+    SatGenerationConfig, SatIssueConfig, SatManifestEntry, SatPipelineConfig, SatPipelineResult,
+    SatPipelineStage, SatPipelineStatus, SatRunConfig, SatScoreConfig, SatStageResult,
 };
 use crate::services::sat_execute;
 use crate::services::sat_generate;
 use crate::services::sat_issues::{self, IssueCreator};
 use crate::services::sat_score::{self, LlmJudge};
+use crate::services::sat_threshold_config;
 
 // ---------------------------------------------------------------------------
 // Pure result builder
@@ -115,6 +116,8 @@ pub fn run_sat_pipeline(
     let mut aggregate_score: Option<u32> = None;
     #[allow(unused_assignments)]
     let mut issues_created: Option<usize> = None;
+    #[allow(unused_assignments)]
+    let mut manifest_scenarios: Vec<SatManifestEntry> = Vec::new();
 
     info!(
         "Starting SAT pipeline for {}",
@@ -131,6 +134,7 @@ pub fn run_sat_pipeline(
                 "Pipeline: generate complete — {} personas, {} scenarios ({duration}ms)",
                 manifest.persona_count, manifest.scenario_count
             );
+            manifest_scenarios.clone_from(&manifest.scenarios);
             stages.push(stage_ok(SatPipelineStage::Generate, duration));
 
             // Fail early if there are no scenarios to execute
@@ -242,7 +246,24 @@ pub fn run_sat_pipeline(
 
     // --- Stage 4: Create Issues ---
     let issue_start = Instant::now();
-    let issue_config = SatIssueConfig::new(config.project_root.clone());
+    let mut issue_config = SatIssueConfig::new(config.project_root.clone());
+
+    // Load threshold config and apply per-scenario severity overrides (Story 6.1).
+    // Config is read fresh from disk so changes take effect without restart.
+    match sat_threshold_config::load_threshold_config(&config.project_root) {
+        Ok(threshold_config) => {
+            sat_threshold_config::apply_threshold_config(
+                &mut issue_config,
+                &threshold_config,
+                &manifest_scenarios,
+            );
+        }
+        Err(e) => {
+            // Non-fatal: use defaults if threshold config is invalid
+            log::warn!("Failed to load SAT threshold config — using defaults: {e}");
+        }
+    }
+
     match sat_issues::create_issues_from_run(&issue_config, &current_run_id, owner, repo, creator) {
         Ok(issue_result) => {
             let duration = millis_u64(issue_start.elapsed());

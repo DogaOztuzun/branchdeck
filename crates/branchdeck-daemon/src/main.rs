@@ -5,6 +5,8 @@ use axum::routing::{get, post};
 use axum::Router;
 use branchdeck_core::services::activity_store::ActivityStore;
 use branchdeck_core::services::event_bus::EventBus;
+use branchdeck_core::services::run_manager;
+use branchdeck_core::traits::EventEmitter;
 use branchdeck_core::util::write_atomic;
 use clap::Parser;
 use log::{error, info, warn};
@@ -20,6 +22,7 @@ use utoipa_swagger_ui::SwaggerUi;
 mod auth;
 mod cli;
 mod cli_client;
+mod emitter;
 mod error;
 mod routes;
 mod state;
@@ -216,6 +219,20 @@ async fn run_serve(port: u16, bind: &str, workspace_arg: Option<PathBuf>, static
     );
     info!("Loaded {} workflow(s)", workflow_registry.list_workflows().len());
 
+    // RunManager + DaemonEmitter from main
+    let sidecar_path = data_dir.join("sidecar").join("index.js");
+    let daemon_emitter: Arc<dyn EventEmitter> = Arc::new(emitter::DaemonEmitter);
+    let run_manager_state = run_manager::create_run_manager_state(
+        sidecar_path,
+        Arc::clone(&event_bus),
+        daemon_emitter,
+        0, // hook_port — configured at runtime via CLI args
+    );
+
+    let update_state = Arc::new(tokio::sync::Mutex::new(
+        branchdeck_core::services::update_manager::UpdateState::default(),
+    ));
+
     let app_state = AppState {
         event_bus,
         activity_store,
@@ -223,6 +240,8 @@ async fn run_serve(port: u16, bind: &str, workspace_arg: Option<PathBuf>, static
         workspace_root: workspace_root.clone(),
         require_auth,
         auth_token,
+        run_manager: run_manager_state,
+        update_state,
     };
 
     let schema_header_value =
@@ -257,6 +276,18 @@ async fn run_serve(port: u16, bind: &str, workspace_arg: Option<PathBuf>, static
         )
         .route("/api/repos", get(routes::repos::get_repo))
         .route("/api/sat/scores", get(routes::sat::get_sat_scores))
+        .route(
+            "/api/sat/false-positive",
+            post(routes::sat::label_false_positive),
+        )
+        .route(
+            "/api/sat/false-positive/metrics",
+            get(routes::sat::get_false_positive_metrics),
+        )
+        .route(
+            "/api/updates/status",
+            get(routes::updates::get_update_status),
+        )
         .route("/mcp", post(routes::mcp::mcp_handler))
         .layer(RequestBodyLimitLayer::new(10 * 1024 * 1024))
         .layer(TimeoutLayer::with_status_code(

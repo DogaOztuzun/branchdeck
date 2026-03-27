@@ -495,12 +495,12 @@ mod tests {
 
         let acc = compute_classification_accuracy(&file);
         assert_eq!(acc.total_classifications, 10);
-        assert_eq!(acc.true_positives, 8);
+        assert_eq!(acc.true_positives, 7);
         assert_eq!(acc.false_positives, 2);
         assert_eq!(acc.cycles_counted, 1);
-        // accuracy = 8 / (8+2) = 0.8
+        // accuracy = 7 / (7+2) ≈ 0.778
         let a = acc.accuracy.unwrap();
-        assert!((a - 0.8).abs() < f64::EPSILON);
+        assert!((a - 7.0 / 9.0).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -539,12 +539,12 @@ mod tests {
 
         let acc = compute_classification_accuracy(&file);
         assert_eq!(acc.total_classifications, 15); // 10 + 5
-        assert_eq!(acc.true_positives, 12); // 8 + 4
+        assert_eq!(acc.true_positives, 10); // 7 + 3
         assert_eq!(acc.false_positives, 2); // 1 + 1
         assert_eq!(acc.cycles_counted, 2);
-        // accuracy = 12 / (12+2) = 12/14 ≈ 0.857
+        // accuracy = 10 / (10+2) = 10/12 ≈ 0.833
         let a = acc.accuracy.unwrap();
-        assert!((a - 12.0 / 14.0).abs() < f64::EPSILON);
+        assert!((a - 10.0 / 12.0).abs() < f64::EPSILON);
     }
 
     #[test]

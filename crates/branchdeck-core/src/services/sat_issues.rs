@@ -94,8 +94,12 @@ pub fn generate_fingerprint(scenario_id: &str, persona: &str, run_id: &str) -> S
 ///
 /// Returns findings that are:
 /// - In one of the allowed categories (default: `App` only)
-/// - At or below the maximum severity (1=critical, 2=high by default)
+/// - At or below the maximum severity (1=critical, 2=high by default),
+///   or at or below a per-scenario override if one exists
 /// - At one of the allowed confidence levels (default: `High` only)
+///
+/// Per-scenario severity overrides (from `config.severity_overrides`) take
+/// precedence over the default `config.max_severity` when present.
 #[must_use]
 pub fn filter_findings_for_issues<'a>(
     findings: &'a [SatFinding],
@@ -104,8 +108,13 @@ pub fn filter_findings_for_issues<'a>(
     findings
         .iter()
         .filter(|f| {
+            let effective_max_severity = config
+                .severity_overrides
+                .get(&f.scenario_id)
+                .copied()
+                .unwrap_or(config.max_severity);
             config.allowed_categories.contains(&f.category)
-                && f.severity <= config.max_severity
+                && f.severity <= effective_max_severity
                 && config.allowed_confidences.contains(&f.confidence)
         })
         .collect()
@@ -217,6 +226,74 @@ fn looks_like_secret(s: &str) -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// Pre-POST secret safety check (NFR9)
+// ---------------------------------------------------------------------------
+
+/// Safety regex prefixes checked before any GitHub issue POST.
+///
+/// If ANY of these prefixes are found in the issue body (followed by
+/// enough characters to be a real token), issue creation is blocked
+/// and an error is returned. This is the last line of defense after
+/// `scrub_secrets()` — if scrubbing missed something, this catches it.
+const SAFETY_CHECK_PREFIXES: &[(&str, &str)] = &[
+    ("OpenAI/Anthropic key", "sk-"),
+    ("GitHub token", "ghp_"),
+    ("GitHub token (old)", "gho_"),
+    ("GitHub token (user)", "ghu_"),
+    ("GitHub token (server)", "ghs_"),
+    ("GitHub token (refresh)", "ghr_"),
+    ("AWS access key", "AKIA"),
+    ("Slack bot token", "xoxb-"),
+    ("Slack user token", "xoxp-"),
+    ("npm token", "npm_"),
+    ("Private key header", "-----BEGIN"),
+];
+
+/// Check whether a string contains obvious secret patterns.
+///
+/// Returns `Ok(())` if no secrets are found, or `Err(AppError::Sat)` with
+/// a description of the detected pattern if a secret is found.
+///
+/// This is a safety gate applied AFTER `scrub_secrets()` — it catches
+/// anything the scrubber might have missed (e.g., secrets embedded in
+/// unusual formatting).
+///
+/// # Errors
+/// Returns `AppError::Sat` if a secret pattern is detected.
+pub fn check_for_secrets(text: &str) -> Result<(), AppError> {
+    for &(name, prefix) in SAFETY_CHECK_PREFIXES {
+        let uses_line_boundary = prefix.starts_with("-----");
+        let mut search_from = 0;
+        while let Some(rel_pos) = text[search_from..].find(prefix) {
+            let pos = search_from + rel_pos;
+            // Check that what follows the prefix is long enough to be a real token.
+            // For multi-word patterns (e.g. PEM headers), use newline as boundary.
+            let rest = &text[pos..];
+            let token_end = if uses_line_boundary {
+                rest.find('\n').unwrap_or(rest.len())
+            } else {
+                rest.find(|c: char| c.is_whitespace() || c == '"' || c == '\'' || c == '`')
+                    .unwrap_or(rest.len())
+            };
+            let token_len = token_end;
+
+            // A real token is at least prefix + 8 chars
+            if token_len > prefix.len() + 8 {
+                error!(
+                    "Secret safety check BLOCKED issue creation: detected {name} pattern at position {pos}"
+                );
+                return Err(AppError::Sat(format!(
+                    "issue body contains secret pattern ({name}) — issue creation blocked for safety"
+                )));
+            }
+            // Move past this match and keep scanning
+            search_from = pos + token_end.max(1);
+        }
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Issue body building (pure)
 // ---------------------------------------------------------------------------
 
@@ -233,10 +310,24 @@ pub fn build_issue_title(finding: &SatFinding) -> String {
     format!("[SAT/{severity_label}] {}", finding.summary)
 }
 
-/// Build the full GitHub issue body from a finding and its scenario context.
+/// Build the full GitHub issue body from a finding using a safe template.
 ///
-/// Includes: persona name, scenario steps, screenshots, satisfaction score,
-/// severity, category. Scrubs secrets before returning.
+/// The safe template includes ONLY:
+/// - Persona name
+/// - Scenario ID
+/// - Satisfaction score
+/// - Severity level
+/// - Natural language summary (from `finding.summary`)
+///
+/// Explicitly excluded (FR41 / NFR9):
+/// - Source code or file paths
+/// - Logs or raw output
+/// - API keys, credentials, or tokens
+/// - Detailed evidence paths
+/// - Score dimensions breakdown
+/// - Reasoning text (may contain raw LLM output)
+///
+/// The body is still scrubbed via `scrub_secrets()` as defense-in-depth.
 #[must_use]
 pub fn build_issue_body(
     finding: &SatFinding,
@@ -250,10 +341,10 @@ pub fn build_issue_body(
     let _ = writeln!(body, "## SAT Finding");
     let _ = writeln!(body);
 
-    // Metadata table
+    // Safe metadata table — only persona, scenario, score, severity, summary
     let _ = writeln!(body, "| Field | Value |");
     let _ = writeln!(body, "|:------|:------|");
-    let _ = writeln!(body, "| **Scenario** | `{}` |", finding.scenario_id);
+    let _ = writeln!(body, "| **Scenario** | {} |", finding.scenario_id);
     if let Some(score) = scenario_score {
         let _ = writeln!(body, "| **Persona** | {} |", score.persona);
         let _ = writeln!(body, "| **Satisfaction Score** | {}/100 |", score.score);
@@ -268,70 +359,22 @@ pub fn build_issue_body(
     let _ = writeln!(body, "| **Severity** | {severity_label} |");
     let _ = writeln!(body, "| **Category** | {} |", finding.category);
     let _ = writeln!(body, "| **Confidence** | {} |", finding.confidence);
-    let _ = writeln!(
-        body,
-        "| **Step** | {} |",
-        if finding.step_number == 0 {
-            "Overall".to_string()
-        } else {
-            format!("Step {}", finding.step_number)
-        }
-    );
-    let _ = writeln!(body, "| **Run** | `{run_id}` |");
+    let _ = writeln!(body, "| **Run** | {run_id} |");
     let _ = writeln!(body);
 
-    // Detail
-    let _ = writeln!(body, "## Description");
+    // Natural language summary only — no raw detail, no logs, no source code
+    let _ = writeln!(body, "## Summary");
     let _ = writeln!(body);
-    let _ = writeln!(body, "{}", finding.detail);
+    let _ = writeln!(body, "{}", finding.summary);
     let _ = writeln!(body);
 
-    // Scenario steps (from score context if available)
-    if let Some(score) = scenario_score {
-        let _ = writeln!(body, "## Scenario Context");
-        let _ = writeln!(body);
-        let _ = writeln!(body, "**Reasoning:** {}", score.reasoning);
-        let _ = writeln!(body);
+    // NOTE: The following are intentionally excluded from the safe template:
+    // - finding.detail (may contain raw LLM output or log fragments)
+    // - finding.evidence (file paths could leak project structure)
+    // - score.reasoning (may contain raw analysis output)
+    // - score.dimensions (unnecessary detail for the issue)
 
-        // Score dimensions
-        let _ = writeln!(body, "### Score Dimensions");
-        let _ = writeln!(body, "| Dimension | Score |");
-        let _ = writeln!(body, "|:----------|------:|");
-        let _ = writeln!(
-            body,
-            "| Functionality | {} |",
-            score.dimensions.functionality
-        );
-        let _ = writeln!(body, "| Usability | {} |", score.dimensions.usability);
-        let _ = writeln!(
-            body,
-            "| Error Handling | {} |",
-            score.dimensions.error_handling
-        );
-        let _ = writeln!(body, "| Performance | {} |", score.dimensions.performance);
-        let _ = writeln!(body);
-    }
-
-    // Evidence (screenshots as image references)
-    if !finding.evidence.is_empty() {
-        let _ = writeln!(body, "## Evidence");
-        let _ = writeln!(body);
-        for evidence in &finding.evidence {
-            let ext = std::path::Path::new(evidence.as_str())
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("");
-            if ext.eq_ignore_ascii_case("png") || ext.eq_ignore_ascii_case("jpg") {
-                let _ = writeln!(body, "- Screenshot: `{evidence}`");
-            } else {
-                let _ = writeln!(body, "- {evidence}");
-            }
-        }
-        let _ = writeln!(body);
-    }
-
-    // Scrub secrets before appending fingerprint (fingerprint is hex and
-    // would be falsely matched by the long-string heuristic in scrub_secrets).
+    // Scrub secrets as defense-in-depth (summary should be clean, but be safe)
     let mut scrubbed = scrub_secrets(&body);
 
     // Fingerprint for dedup — appended after scrubbing so it survives intact
@@ -475,6 +518,25 @@ pub fn create_issues_from_run(
         let title = build_issue_title(finding);
         let body = build_issue_body(finding, scenario_score, run_id, &fingerprint);
         let labels = build_issue_labels(finding);
+
+        // Safety gate: block issue creation if secrets are detected (NFR9)
+        if let Err(e) = check_for_secrets(&body) {
+            error!(
+                "Secret detected in issue body for {} — blocking creation: {e}",
+                finding.scenario_id
+            );
+            failed_count += 1;
+            entries.push(SatIssueEntry {
+                scenario_id: finding.scenario_id.clone(),
+                persona: persona.clone(),
+                fingerprint,
+                summary: finding.summary.clone(),
+                outcome: IssueCreationOutcome::Failed {
+                    reason: format!("blocked by secret safety check: {e}"),
+                },
+            });
+            continue;
+        }
 
         match creator.create_issue(owner, repo, &title, &body, &labels) {
             Ok((issue_number, issue_url)) => {
@@ -674,6 +736,46 @@ mod tests {
         assert_eq!(result[1].scenario_id, "s5");
     }
 
+    // -- Severity overrides ---------------------------------------------------
+
+    #[test]
+    fn filter_uses_per_scenario_severity_override() {
+        let mut config = make_config();
+        // Default max_severity is 2 (critical + high)
+        // Override s1 to critical-only (1)
+        config
+            .severity_overrides
+            .insert("s1".to_string(), 1);
+
+        let findings = vec![
+            make_finding("s1", FindingCategory::App, 2, ConfidenceLevel::High), // reject: override says 1
+            make_finding("s1", FindingCategory::App, 1, ConfidenceLevel::High), // pass: critical meets override
+            make_finding("s2", FindingCategory::App, 2, ConfidenceLevel::High), // pass: no override, uses default
+        ];
+        let result = filter_findings_for_issues(&findings, &config);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].scenario_id, "s1");
+        assert_eq!(result[0].severity, 1);
+        assert_eq!(result[1].scenario_id, "s2");
+    }
+
+    #[test]
+    fn filter_override_more_lenient_than_default() {
+        let mut config = make_config();
+        // Default max_severity is 2, but s1 is more lenient at 4
+        config
+            .severity_overrides
+            .insert("s1".to_string(), 4);
+
+        let findings = vec![
+            make_finding("s1", FindingCategory::App, 3, ConfidenceLevel::High), // pass: override allows up to 4
+            make_finding("s2", FindingCategory::App, 3, ConfidenceLevel::High), // reject: default is 2
+        ];
+        let result = filter_findings_for_issues(&findings, &config);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].scenario_id, "s1");
+    }
+
     // -- Secret scrubbing -----------------------------------------------------
 
     #[test]
@@ -716,7 +818,7 @@ mod tests {
     // -- Issue body building --------------------------------------------------
 
     #[test]
-    fn issue_body_contains_required_fields() {
+    fn issue_body_contains_safe_template_fields() {
         let finding = make_finding(
             "scenario-01",
             FindingCategory::App,
@@ -726,15 +828,21 @@ mod tests {
         let score = make_scenario_score("scenario-01", "power-user", 45);
         let body = build_issue_body(&finding, Some(&score), "run-20260326", "abc123");
 
+        // Safe template fields present
         assert!(body.contains("scenario-01"));
         assert!(body.contains("power-user"));
         assert!(body.contains("45/100"));
         assert!(body.contains("Critical (1)"));
-        assert!(body.contains("app"));
-        assert!(body.contains("high"));
-        assert!(body.contains("screenshots/1-after.png"));
         assert!(body.contains("sat-fingerprint:abc123"));
         assert!(body.contains("run-20260326"));
+        // Summary included
+        assert!(body.contains("Finding in scenario-01"));
+
+        // Unsafe fields excluded from safe template
+        assert!(!body.contains("screenshots/1-after.png"), "evidence paths should not leak");
+        assert!(!body.contains("Test reasoning."), "reasoning should not leak");
+        assert!(!body.contains("Score Dimensions"), "score dimensions should not leak");
+        assert!(!body.contains("Detailed description"), "detail should not leak");
     }
 
     #[test]
@@ -752,6 +860,96 @@ mod tests {
         assert!(body.contains("sat-fingerprint:fp123"));
         // Should not contain persona/score sections
         assert!(!body.contains("Satisfaction Score"));
+    }
+
+    // -- Pre-POST secret safety check -----------------------------------------
+
+    #[test]
+    fn check_for_secrets_passes_clean_text() {
+        let clean = "This is a normal issue body with persona: power-user, score: 45";
+        assert!(check_for_secrets(clean).is_ok());
+    }
+
+    #[test]
+    fn check_for_secrets_blocks_github_token() {
+        let dirty = "Some text ghp_abcdefghijklmnopqrstuvwxyz1234567890 more text";
+        let result = check_for_secrets(dirty);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("secret pattern"));
+        assert!(err.contains("GitHub token"));
+    }
+
+    #[test]
+    fn check_for_secrets_blocks_aws_key() {
+        let dirty = "AWS key: AKIAIOSFODNN7EXAMPLE9 is here";
+        let result = check_for_secrets(dirty);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("AWS access key"));
+    }
+
+    #[test]
+    fn check_for_secrets_blocks_openai_key() {
+        let dirty = "key=sk-proj-abcdefghijklmnop12345678 was leaked";
+        let result = check_for_secrets(dirty);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn check_for_secrets_ignores_short_prefixes() {
+        // "sk-" alone or with few chars should not trigger
+        let short = "Use the sk-prefix format";
+        assert!(check_for_secrets(short).is_ok());
+    }
+
+    // -- Secret safety check tests -------------------------------------------
+
+    #[test]
+    fn check_for_secrets_detects_openai_key() {
+        let text = "Here is a key: sk-proj-abcdefghijklmnop and more text";
+        assert!(check_for_secrets(text).is_err());
+    }
+
+    #[test]
+    fn check_for_secrets_detects_github_token() {
+        let text = "Token: ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcd";
+        assert!(check_for_secrets(text).is_err());
+    }
+
+    #[test]
+    fn check_for_secrets_detects_aws_key() {
+        let text = "AKIAIOSFODNN7EXAMPLE is the key";
+        assert!(check_for_secrets(text).is_err());
+    }
+
+    #[test]
+    fn check_for_secrets_detects_private_key() {
+        let text = "-----BEGIN RSA PRIVATE KEY-----\nMIIEpA...";
+        assert!(check_for_secrets(text).is_err());
+    }
+
+    #[test]
+    fn check_for_secrets_ignores_short_prefix() {
+        // Too short to be a real token (prefix + <8 chars)
+        let text = "Here is sk-abc and that's it";
+        assert!(check_for_secrets(text).is_ok());
+    }
+
+    #[test]
+    fn check_for_secrets_passes_clean_finding_text() {
+        let text = "This is a normal SAT finding with no secrets at all.";
+        assert!(check_for_secrets(text).is_ok());
+    }
+
+    #[test]
+    fn check_for_secrets_detects_second_occurrence() {
+        // First "sk-" match is too short to trigger, but the second is a real token
+        let text = "Use sk-abc prefix. Also sk-ant-api01234567890123456789 was leaked.";
+        let result = check_for_secrets(text);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("secret pattern"));
     }
 
     #[test]
