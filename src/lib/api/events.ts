@@ -3,6 +3,7 @@
  * Stores use onEvent<T>() to subscribe to typed daemon events.
  */
 
+import { getConnectionStore } from '../stores/connection';
 import { getBaseUrl } from './client';
 
 export type SseEnvelope<T = unknown> = {
@@ -19,7 +20,9 @@ const listeners = new Map<string, Set<EventCallback<unknown>>>();
 let eventSource: EventSource | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-const RECONNECT_DELAY_MS = 3000;
+/** Exponential backoff state for SSE reconnect. */
+let reconnectDelay = 1000;
+const MAX_RECONNECT_DELAY = 30_000;
 
 function ensureConnection() {
   if (eventSource?.readyState !== EventSource.CLOSED && eventSource !== null) {
@@ -28,24 +31,33 @@ function ensureConnection() {
 
   const url = `${getBaseUrl()}/events`;
   eventSource = new EventSource(url);
+  const connection = getConnectionStore();
 
   eventSource.onopen = () => {
     if (reconnectTimer) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
     }
+    // Reset backoff on successful connection
+    reconnectDelay = 1000;
+    connection.markConnected();
   };
 
   eventSource.onerror = () => {
     eventSource?.close();
     eventSource = null;
+    connection.startReconnecting();
+
     if (!reconnectTimer) {
       reconnectTimer = setTimeout(() => {
         reconnectTimer = null;
         if (listeners.size > 0) {
           ensureConnection();
         }
-      }, RECONNECT_DELAY_MS);
+      }, reconnectDelay);
+
+      // Exponential backoff: double delay, cap at MAX_RECONNECT_DELAY
+      reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_DELAY);
     }
   };
 
@@ -120,4 +132,5 @@ export function disconnectEvents() {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
   }
+  reconnectDelay = 1000;
 }

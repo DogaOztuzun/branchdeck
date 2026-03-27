@@ -69,6 +69,22 @@ async fn main() {
             "/api/agents/active",
             get(routes::activity::get_active_agents),
         )
+        .route(
+            "/api/setup/status",
+            get(routes::setup::get_setup_status),
+        )
+        .route(
+            "/api/setup/validate",
+            get(routes::setup::validate_tokens),
+        )
+        .route(
+            "/api/setup/workflows",
+            get(routes::setup::list_workflows),
+        )
+        .route(
+            "/api/setup/save",
+            post(routes::setup::save_config),
+        )
         .route("/api/runs/{run_id}/cancel", post(routes::runs::cancel_run))
         .route(
             "/api/sat/false-positive",

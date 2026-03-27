@@ -44,6 +44,12 @@ jobs:
             echo "::error::Working tree is dirty"
             exit 1
           fi
+      - name: Verify updater signing key is configured
+        run: |
+          if grep -q "REPLACE_BEFORE_RELEASE" src-tauri/tauri.conf.json; then
+            echo "::error::Updater public key is still a placeholder — generate a signing keypair and set the real pubkey in src-tauri/tauri.conf.json before releasing"
+            exit 1
+          fi
 
   version:
     name: Bump version
@@ -138,7 +144,12 @@ jobs:
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build Tauri app
+      # IMPORTANT: Before the first release with auto-update enabled, you MUST:
+      # 1. Generate a signing keypair: `tauri signer generate -w ~/.tauri/branchdeck.key`
+      # 2. Set repository secrets: TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+      # 3. Replace "REPLACE_BEFORE_RELEASE" in src-tauri/tauri.conf.json with the public key
+      # 4. Set includeUpdaterJson: true below
+      - name: Build Tauri app (deb + AppImage)
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -148,11 +159,22 @@ jobs:
           releaseBody: |
             ## Branchdeck ${{ needs.version.outputs.tag }}
 
-            ### Install
+            ### Quick Install
+
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/unquale/Branchdeck/main/scripts/install.sh | sh
+            ```
+
+            ### Manual Install
 
             **Debian/Ubuntu (.deb)**
             ```bash
             sudo dpkg -i branchdeck_${{ needs.version.outputs.version }}_amd64.deb
+            ```
+
+            **Fedora/RHEL (.rpm)**
+            ```bash
+            sudo rpm -i branchdeck-${{ needs.version.outputs.version }}-1.x86_64.rpm
             ```
 
             **AppImage**
@@ -160,7 +182,42 @@ jobs:
             chmod +x branchdeck_${{ needs.version.outputs.version }}_amd64.AppImage
             ./branchdeck_${{ needs.version.outputs.version }}_amd64.AppImage
             ```
+
+            **Daemon only**
+            ```bash
+            BRANCHDECK_NO_DESKTOP=1 curl -fsSL https://raw.githubusercontent.com/unquale/Branchdeck/main/scripts/install.sh | sh
+            ```
           releaseDraft: false
           prerelease: true
           includeUpdaterJson: false
           args: --verbose
+
+      - name: Build standalone daemon binary
+        run: |
+          cargo build --release --package branchdeck-daemon
+          cp target/release/branchdeck-daemon branchdeck-daemon-linux-amd64
+
+      - name: Build RPM package
+        run: |
+          cargo install cargo-generate-rpm 2>/dev/null || true
+          if command -v cargo-generate-rpm > /dev/null 2>&1; then
+            cargo generate-rpm --package branchdeck-daemon -o branchdeck-daemon-${{ needs.version.outputs.version }}-1.x86_64.rpm 2>/dev/null || echo "::warning::RPM generation for daemon skipped — configure [package.metadata.generate-rpm] in Cargo.toml"
+          else
+            echo "::warning::cargo-generate-rpm not available, skipping RPM"
+          fi
+
+      - name: Upload additional release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ needs.version.outputs.tag }}"
+
+          # Upload standalone daemon binary
+          if [ -f branchdeck-daemon-linux-amd64 ]; then
+            gh release upload "$TAG" branchdeck-daemon-linux-amd64 --clobber
+          fi
+
+          # Upload RPM if generated
+          for rpm in *.rpm; do
+            [ -f "$rpm" ] && gh release upload "$TAG" "$rpm" --clobber
+          done

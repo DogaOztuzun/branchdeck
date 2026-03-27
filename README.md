@@ -102,7 +102,42 @@ Branchdeck is built around [Claude Code](https://github.com/anthropics/claude-co
 | **Knowledge** | ONNX Runtime — local vector embeddings, hierarchical vector store |
 | **Components** | [Kobalte](https://kobalte.dev/) + solid-resizable-panels |
 
-## Requirements
+## Installation
+
+### Quick install (recommended)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/unquale/Branchdeck/main/scripts/install.sh | sh
+```
+
+The installer detects your architecture (x86_64/aarch64) and package manager, then downloads the latest release. On Debian/Ubuntu it installs the `.deb` package; on Fedora/RHEL it uses `.rpm`; otherwise it falls back to AppImage.
+
+### Install daemon only (headless / server use)
+
+```bash
+BRANCHDECK_NO_DESKTOP=1 curl -fsSL https://raw.githubusercontent.com/unquale/Branchdeck/main/scripts/install.sh | sh
+```
+
+### Install a specific version
+
+```bash
+BRANCHDECK_VERSION=0.2.0 curl -fsSL https://raw.githubusercontent.com/unquale/Branchdeck/main/scripts/install.sh | sh
+```
+
+### Manual download
+
+Pre-built packages are available on every [GitHub release](https://github.com/unquale/Branchdeck/releases):
+
+| Format | Platform | Notes |
+|:--|:--|:--|
+| `.deb` | Debian, Ubuntu 22.04+ | `sudo dpkg -i branchdeck_*.deb` |
+| `.rpm` | Fedora, RHEL | `sudo rpm -i branchdeck-*.rpm` |
+| `.AppImage` | Any Linux | `chmod +x *.AppImage && ./*.AppImage` |
+| `branchdeck-daemon-linux-amd64` | Any Linux | Standalone daemon binary |
+
+Each release includes both the desktop app and the standalone daemon binary.
+
+## Requirements (for building from source)
 
 | | |
 |:--|:--|
@@ -121,11 +156,11 @@ sudo apt-get install -y \
   librsvg2-dev
 ```
 
-## Getting started
+## Building from source
 
 ```bash
-git clone https://github.com/DogaOztuzun/branchdeck.git
-cd branchdeck
+git clone https://github.com/unquale/Branchdeck.git
+cd Branchdeck
 bun install              # Install frontend deps
 bunx tauri dev           # Dev mode (hot reload + Rust rebuild)
 bunx tauri build         # Production build

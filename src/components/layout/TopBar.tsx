@@ -9,6 +9,7 @@ import { getLifecycleStore } from '../../lib/stores/lifecycle';
 import { getRepoStore } from '../../lib/stores/repo';
 import { getTaskStore } from '../../lib/stores/task';
 import type { QueueStatus } from '../../types/github';
+import { UpdateIndicator } from './UpdateIndicator';
 
 const navTabs: { label: string; view: AppView }[] = [
   { label: 'Workspace', view: 'workspace' },
@@ -104,6 +105,9 @@ export function TopBar() {
           </div>
         )}
       </Show>
+
+      {/* Update status */}
+      <UpdateIndicator />
 
       {/* Navigation tabs */}
       <div class="ml-auto flex h-full items-center">

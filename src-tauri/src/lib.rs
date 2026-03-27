@@ -2,8 +2,9 @@ mod commands;
 mod tauri_emitter;
 
 use std::sync::{Arc, Mutex};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tauri_plugin_log::{Target, TargetKind};
+use tauri_plugin_updater::UpdaterExt;
 
 // Re-export core modules so commands can use `crate::models`, `crate::services`, `crate::error`
 pub use branchdeck_core::error;
@@ -174,6 +175,119 @@ fn setup_agent_monitoring(
     log::info!("Agent monitoring: event bridge started");
 }
 
+const UPDATE_CHECK_INTERVAL_HOURS: u64 = 4;
+
+fn start_update_checker(app_handle: tauri::AppHandle) {
+    // Initial non-blocking check on launch
+    let handle = app_handle.clone();
+    tauri::async_runtime::spawn(async move {
+        check_for_update(&handle).await;
+    });
+
+    // Periodic background check every 4 hours
+    tauri::async_runtime::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(
+            UPDATE_CHECK_INTERVAL_HOURS * 3600,
+        ));
+        // Skip the first tick (already checked on launch)
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            check_for_update(&app_handle).await;
+        }
+    });
+
+    log::info!("Update checker started (interval: {UPDATE_CHECK_INTERVAL_HOURS}h)");
+}
+
+async fn check_for_update(app_handle: &tauri::AppHandle) {
+    let updater: tauri_plugin_updater::Updater = match app_handle.updater() {
+        Ok(u) => u,
+        Err(e) => {
+            log::debug!("Updater not available: {e}");
+            return;
+        }
+    };
+
+    let _ = app_handle.emit("update:status", "checking");
+
+    match updater.check().await {
+        Ok(Some(update)) => {
+            let version = update.version.clone();
+            log::info!("Update available: v{version}");
+            let _ = app_handle.emit(
+                "update:status",
+                serde_json::json!({
+                    "status": "available",
+                    "version": version,
+                }),
+            );
+        }
+        Ok(None) => {
+            log::debug!("No update available");
+            let _ = app_handle.emit("update:status", "idle");
+        }
+        Err(e) => {
+            log::debug!("Update check failed: {e}");
+            let _ = app_handle.emit(
+                "update:status",
+                serde_json::json!({
+                    "status": "error",
+                    "error": format!("{e}"),
+                }),
+            );
+        }
+    }
+}
+
+#[tauri::command]
+async fn install_update(app_handle: tauri::AppHandle) -> Result<(), String> {
+    let updater = app_handle.updater().map_err(|e| format!("{e}"))?;
+
+    let update = updater
+        .check()
+        .await
+        .map_err(|e| format!("{e}"))?
+        .ok_or_else(|| "No update available".to_string())?;
+
+    let version = update.version.clone();
+
+    let _ = app_handle.emit(
+        "update:status",
+        serde_json::json!({
+            "status": "downloading",
+            "version": version,
+        }),
+    );
+
+    match update.download_and_install(|_, _| {}, || {}).await {
+        Ok(()) => {
+            log::info!("Update v{version} downloaded and ready to install on restart");
+            let _ = app_handle.emit(
+                "update:status",
+                serde_json::json!({
+                    "status": "ready",
+                    "version": version,
+                }),
+            );
+            Ok(())
+        }
+        Err(e) => {
+            let msg = format!("{e}");
+            log::error!("Failed to download update v{version}: {msg}");
+            let _ = app_handle.emit(
+                "update:status",
+                serde_json::json!({
+                    "status": "error",
+                    "version": version,
+                    "error": msg,
+                }),
+            );
+            Err(msg)
+        }
+    }
+}
+
 /// # Panics
 ///
 /// Panics if the Tauri application fails to initialize.
@@ -187,6 +301,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
             tauri_plugin_log::Builder::new()
                 .targets([
@@ -317,6 +432,9 @@ pub fn run() {
                     );
                 });
             }
+
+            // Auto-update checker (non-blocking)
+            start_update_checker(app.handle().clone());
 
             // Knowledge service initialization
             #[cfg(feature = "knowledge")]
@@ -455,6 +573,8 @@ pub fn run() {
             commands::orchestrator::write_approval_cmd,
             commands::orchestrator::list_discovered_prs_cmd,
             commands::orchestrator::get_running_entries_cmd,
+            // Update
+            install_update,
             // SAT
             commands::sat::trigger_sat_cycle,
             // Task

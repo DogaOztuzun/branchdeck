@@ -16,6 +16,7 @@ export type RunInfo = {
   lastHeartbeat: string | null;
   elapsedSecs: number;
   tabId: string | null;
+  failureReason: string | null;
 };
 
 export type RunStepEvent = {
