@@ -2,17 +2,21 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct RepoInfo {
     pub name: String,
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub path: PathBuf,
     pub current_branch: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct WorktreeInfo {
     pub name: String,
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub path: PathBuf,
     pub branch: String,
     pub is_main: bool,

@@ -4,6 +4,7 @@ use std::collections::HashMap;
 /// A parsed workflow definition: YAML frontmatter + markdown prompt body.
 /// Loaded from `WORKFLOW.md` files in `.branchdeck/workflows/` or global config.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct WorkflowDef {
     pub config: WorkflowConfig,
     pub prompt: String,
@@ -12,6 +13,7 @@ pub struct WorkflowDef {
 /// YAML frontmatter of a workflow definition.
 /// Symphony-compatible base fields + Branchdeck extensions.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowConfig {
     // === Branchdeck identity ===
@@ -42,6 +44,7 @@ pub struct WorkflowConfig {
 // === Tracker (Symphony: tracker) ===
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub struct TrackerDef {
     pub kind: TrackerKind,
@@ -57,6 +60,7 @@ pub struct TrackerDef {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "kebab-case")]
 pub enum TrackerKind {
     GithubIssue,
@@ -102,6 +106,7 @@ impl std::fmt::Display for TrackerKind {
 // === Polling (Symphony: polling) ===
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub struct PollingDef {
     #[serde(default = "default_polling_interval")]
@@ -115,6 +120,7 @@ fn default_polling_interval() -> u64 {
 // === Workspace (Symphony: workspace) ===
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub struct WorkspaceDef {
     #[serde(default)]
@@ -124,6 +130,7 @@ pub struct WorkspaceDef {
 // === Hooks (Symphony: hooks) ===
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub struct HooksDef {
     #[serde(default)]
@@ -141,6 +148,7 @@ pub struct HooksDef {
 // === Agent (Symphony: agent + our extensions) ===
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub struct AgentDef {
     #[serde(default)]
@@ -158,6 +166,7 @@ pub struct AgentDef {
 // === Outcomes (Branchdeck extension) ===
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub struct OutcomeDef {
     pub name: String,
@@ -168,6 +177,7 @@ pub struct OutcomeDef {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "kebab-case")]
 pub enum OutcomeDetector {
     FileExists,
@@ -205,6 +215,7 @@ impl std::fmt::Display for OutcomeDetector {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "kebab-case")]
 pub enum OutcomeAction {
     Complete,
@@ -237,6 +248,7 @@ impl std::fmt::Display for OutcomeAction {
 // === Lifecycle (Branchdeck extension) ===
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub struct LifecycleDef {
     #[serde(default)]
@@ -297,6 +309,7 @@ impl LifecycleDef {
 // === Retry (Branchdeck extension) ===
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub struct RetryDef {
     pub max_attempts: u32,
@@ -305,6 +318,7 @@ pub struct RetryDef {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "kebab-case")]
 pub enum BackoffStrategy {
     Exponential,

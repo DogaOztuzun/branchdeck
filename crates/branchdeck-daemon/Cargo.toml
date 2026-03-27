@@ -5,7 +5,7 @@ edition = "2021"
 description = "Standalone daemon for Branchdeck — HTTP + SSE + WebSocket API"
 
 [dependencies]
-branchdeck-core = { path = "../branchdeck-core" }
+branchdeck-core = { path = "../branchdeck-core", features = ["openapi"] }
 axum = { version = "0.8", features = ["macros"] }
 tokio = { version = "1", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
@@ -16,6 +16,11 @@ clap = { version = "4", features = ["derive", "env"] }
 log = "0.4"
 env_logger = "0.11"
 dirs = "6"
+chrono = { version = "0.4", features = ["clock"] }
+utoipa = { version = "5", features = ["axum_extras"] }
+utoipa-swagger-ui = { version = "9", features = ["axum"] }
+tower-http = { version = "0.6", features = ["set-header"] }
+http = "1"
 
 [lints.rust]
 unsafe_code = "deny"
