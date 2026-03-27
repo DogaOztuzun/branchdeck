@@ -48,10 +48,15 @@ async fn main() {
         0, // hook_port — configured at runtime via CLI args
     );
 
+    let update_state = Arc::new(tokio::sync::Mutex::new(
+        branchdeck_core::services::update_manager::UpdateState::default(),
+    ));
+
     let app_state = AppState {
         event_bus,
         activity_store,
         run_manager: run_manager_state,
+        update_state,
     };
 
     let app = Router::new()
@@ -72,6 +77,10 @@ async fn main() {
         .route(
             "/api/sat/false-positive/metrics",
             get(routes::sat::get_false_positive_metrics),
+        )
+        .route(
+            "/api/updates/status",
+            get(routes::updates::get_update_status),
         )
         .with_state(app_state);
 
