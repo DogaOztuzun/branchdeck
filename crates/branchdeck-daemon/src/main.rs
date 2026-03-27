@@ -15,6 +15,7 @@ use tower_http::set_header::SetResponseHeaderLayer;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
+mod auth;
 mod cli;
 mod cli_client;
 mod error;
@@ -101,7 +102,8 @@ async fn main() {
             bind,
             workspace,
             static_dir,
-        } => run_serve(port, &bind, workspace, static_dir).await,
+            require_auth,
+        } => run_serve(port, &bind, workspace, static_dir, require_auth).await,
         Commands::Status { port, json } => {
             let client = cli_client::DaemonClient::new(port, json);
             std::process::exit(client.status().await);
@@ -128,6 +130,20 @@ async fn main() {
             };
             std::process::exit(code);
         }
+        Commands::Token { action } => match action {
+            cli::TokenAction::Generate => {
+                let token = auth::generate_token();
+                match auth::save_token(&token) {
+                    Ok(()) => {
+                        println!("{token}");
+                    }
+                    Err(e) => {
+                        error!("Failed to save token: {e}");
+                        std::process::exit(1);
+                    }
+                }
+            }
+        },
         Commands::Update { port, json } => {
             let client = cli_client::DaemonClient::new(port, json);
             std::process::exit(client.update());
@@ -135,7 +151,7 @@ async fn main() {
     }
 }
 
-async fn run_serve(port: u16, bind: &str, workspace_arg: Option<PathBuf>, static_dir: Option<PathBuf>) {
+async fn run_serve(port: u16, bind: &str, workspace_arg: Option<PathBuf>, static_dir: Option<PathBuf>, require_auth_flag: bool) {
     let workspace_root = workspace_arg.unwrap_or_else(|| {
         std::env::current_dir().unwrap_or_else(|e| {
             error!("Failed to determine current directory: {e}");
@@ -165,10 +181,35 @@ async fn run_serve(port: u16, bind: &str, workspace_arg: Option<PathBuf>, static
     activity_store.start_subscriber(&event_bus);
     activity_store.start_gc(300_000); // 5 minute TTL
 
+    // Auto-enable auth when binding to non-localhost address
+    let require_auth = require_auth_flag || bind != "127.0.0.1";
+
+    let auth_token = if require_auth {
+        match auth::load_token() {
+            Ok(Some(token)) => {
+                info!("Authentication enabled — token loaded");
+                Some(token)
+            }
+            Ok(None) => {
+                error!("Authentication required but no token found. Run `branchdeck-daemon token generate` first.");
+                std::process::exit(1);
+            }
+            Err(e) => {
+                error!("Failed to load auth token: {e}");
+                std::process::exit(1);
+            }
+        }
+    } else {
+        info!("Authentication disabled (localhost-only)");
+        None
+    };
+
     let app_state = AppState {
         event_bus,
         activity_store,
         workspace_root: workspace_root.clone(),
+        require_auth,
+        auth_token,
     };
 
     let schema_header_value =
@@ -212,6 +253,10 @@ async fn run_serve(port: u16, bind: &str, workspace_arg: Option<PathBuf>, static
         .layer(SetResponseHeaderLayer::overriding(
             http::HeaderName::from_static("x-branchdeck-schema"),
             schema_header_value,
+        ))
+        .layer(axum::middleware::from_fn_with_state(
+            app_state.clone(),
+            auth::auth_middleware,
         ))
         .with_state(app_state);
 

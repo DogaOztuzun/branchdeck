@@ -15,6 +15,7 @@ serde_json = "1"
 clap = { version = "4", features = ["derive", "env"] }
 log = "0.4"
 env_logger = "0.11"
+hex = "0.4"
 dirs = "6"
 chrono = { version = "0.4", features = ["clock"] }
 utoipa = { version = "5", features = ["axum_extras"] }
@@ -22,7 +23,9 @@ utoipa-swagger-ui = { version = "9", features = ["axum"] }
 tower-http = { version = "0.6", features = ["set-header", "fs"] }
 http = "1"
 ulid = "1"
+rand = "0.9"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+subtle = "2"
 
 [lints.rust]
 unsafe_code = "deny"

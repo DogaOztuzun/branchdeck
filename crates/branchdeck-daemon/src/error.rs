@@ -63,6 +63,7 @@ impl IntoResponse for ApiError {
 
 fn slug_from_status(status: StatusCode) -> &'static str {
     match status {
+        StatusCode::UNAUTHORIZED => "unauthorized",
         StatusCode::NOT_FOUND => "not-found",
         StatusCode::CONFLICT => "conflict",
         StatusCode::BAD_REQUEST => "bad-request",

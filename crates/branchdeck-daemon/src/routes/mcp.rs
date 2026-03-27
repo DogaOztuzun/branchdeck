@@ -467,7 +467,7 @@ fn tool_create_worktree(state: &AppState, args: &Value) -> Result<Value, String>
     )
     .map_err(|e| format!("Failed to create worktree: {e}"))?;
 
-    info!("MCP: created worktree {name:?} at {}", wt.path);
+    info!("MCP: created worktree {name:?} at {}", wt.path.display());
     Ok(json!({
         "name": wt.name,
         "path": wt.path,

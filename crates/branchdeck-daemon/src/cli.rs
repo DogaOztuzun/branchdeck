@@ -26,6 +26,10 @@ pub enum Commands {
         /// Directory containing static frontend files to serve
         #[arg(long, env = "BRANCHDECK_STATIC_DIR")]
         static_dir: Option<std::path::PathBuf>,
+
+        /// Require bearer token authentication (auto-enabled when bind is not 127.0.0.1)
+        #[arg(long, env = "BRANCHDECK_REQUIRE_AUTH")]
+        require_auth: bool,
     },
 
     /// Show daemon health, active runs, and workflow count
@@ -75,6 +79,12 @@ pub enum Commands {
         json: bool,
     },
 
+    /// Manage authentication tokens
+    Token {
+        #[command(subcommand)]
+        action: TokenAction,
+    },
+
     /// Check for and apply updates
     Update {
         /// Daemon port
@@ -85,6 +95,12 @@ pub enum Commands {
         #[arg(long)]
         json: bool,
     },
+}
+
+#[derive(Subcommand)]
+pub enum TokenAction {
+    /// Generate a new authentication token
+    Generate,
 }
 
 #[derive(Subcommand)]
