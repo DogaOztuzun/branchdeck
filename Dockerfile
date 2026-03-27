@@ -1,5 +1,5 @@
 # Stage 1: Build the Rust daemon binary
-FROM rust:1.87-bookworm AS rust-builder
+FROM rust:1.88-bookworm AS rust-builder
 
 WORKDIR /build
 

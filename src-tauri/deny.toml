@@ -8,4 +8,6 @@ ignore = [
     "RUSTSEC-2025-0141",
     # fxhash — transitive dep, unmaintained but no security issue
     "RUSTSEC-2025-0057",
+    # yaml-rust — transitive via yaml-front-matter, unmaintained but no security issue
+    "RUSTSEC-2024-0320",
 ]
