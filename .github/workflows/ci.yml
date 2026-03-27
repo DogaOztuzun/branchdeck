@@ -120,12 +120,11 @@ jobs:
         run: docker build -t branchdeck-test .
       - name: Run container and health check
         run: |
-          TOKEN=$(openssl rand -hex 32)
-          CONTAINER_ID=$(docker run --rm -d -p 13371:13371 \
-            -e BRANCHDECK_BIND=0.0.0.0 \
-            -v "$(pwd)/ci-config:/home/branchdeck/.config/branchdeck" \
+          CONTAINER_ID=$(docker run --rm -d --network host \
+            -e BRANCHDECK_BIND=127.0.0.1 \
+            -e BRANCHDECK_WORKSPACE=/repos \
             branchdeck-test \
-            sh -c "mkdir -p /home/branchdeck/.config/branchdeck && echo '$TOKEN' > /home/branchdeck/.config/branchdeck/auth.token && exec branchdeck-daemon serve")
+            branchdeck-daemon serve --bind 127.0.0.1 --workspace /repos)
           for i in $(seq 1 15); do
             curl -sf http://localhost:13371/api/health && break || sleep 2
           done
