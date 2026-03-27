@@ -246,6 +246,7 @@ const SAFETY_CHECK_PREFIXES: &[(&str, &str)] = &[
     ("Slack bot token", "xoxb-"),
     ("Slack user token", "xoxp-"),
     ("npm token", "npm_"),
+    ("Private key header", "-----BEGIN"),
 ];
 
 /// Check whether a string contains obvious secret patterns.
@@ -262,11 +263,17 @@ const SAFETY_CHECK_PREFIXES: &[(&str, &str)] = &[
 pub fn check_for_secrets(text: &str) -> Result<(), AppError> {
     for &(name, prefix) in SAFETY_CHECK_PREFIXES {
         if let Some(pos) = text.find(prefix) {
-            // Check that what follows the prefix is long enough to be a real token
+            // Check that what follows the prefix is long enough to be a real token.
+            // For multi-word patterns (e.g. PEM headers like "-----BEGIN RSA PRIVATE KEY-----"),
+            // use newline as the boundary instead of whitespace.
             let rest = &text[pos..];
-            let token_end = rest
-                .find(|c: char| c.is_whitespace() || c == '"' || c == '\'' || c == '`')
-                .unwrap_or(rest.len());
+            let uses_line_boundary = prefix.starts_with("-----");
+            let token_end = if uses_line_boundary {
+                rest.find('\n').unwrap_or(rest.len())
+            } else {
+                rest.find(|c: char| c.is_whitespace() || c == '"' || c == '\'' || c == '`')
+                    .unwrap_or(rest.len())
+            };
             let token_len = token_end;
 
             // A real token is at least prefix + 8 chars
@@ -891,6 +898,45 @@ mod tests {
         // "sk-" alone or with few chars should not trigger
         let short = "Use the sk-prefix format";
         assert!(check_for_secrets(short).is_ok());
+    }
+
+    // -- Secret safety check tests -------------------------------------------
+
+    #[test]
+    fn check_for_secrets_detects_openai_key() {
+        let text = "Here is a key: sk-proj-abcdefghijklmnop and more text";
+        assert!(check_for_secrets(text).is_err());
+    }
+
+    #[test]
+    fn check_for_secrets_detects_github_token() {
+        let text = "Token: ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcd";
+        assert!(check_for_secrets(text).is_err());
+    }
+
+    #[test]
+    fn check_for_secrets_detects_aws_key() {
+        let text = "AKIAIOSFODNN7EXAMPLE is the key";
+        assert!(check_for_secrets(text).is_err());
+    }
+
+    #[test]
+    fn check_for_secrets_detects_private_key() {
+        let text = "-----BEGIN RSA PRIVATE KEY-----\nMIIEpA...";
+        assert!(check_for_secrets(text).is_err());
+    }
+
+    #[test]
+    fn check_for_secrets_ignores_short_prefix() {
+        // Too short to be a real token (prefix + <8 chars)
+        let text = "Here is sk-abc and that's it";
+        assert!(check_for_secrets(text).is_ok());
+    }
+
+    #[test]
+    fn check_for_secrets_passes_clean_finding_text() {
+        let text = "This is a normal SAT finding with no secrets at all.";
+        assert!(check_for_secrets(text).is_ok());
     }
 
     #[test]

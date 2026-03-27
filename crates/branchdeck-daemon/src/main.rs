@@ -69,7 +69,7 @@ async fn main() {
             "/api/agents/active",
             get(routes::activity::get_active_agents),
         )
-        .route("/api/runs/cancel", post(routes::runs::cancel_run))
+        .route("/api/runs/{run_id}/cancel", post(routes::runs::cancel_run))
         .route(
             "/api/sat/false-positive",
             post(routes::sat::label_false_positive),

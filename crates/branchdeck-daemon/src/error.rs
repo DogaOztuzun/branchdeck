@@ -28,6 +28,7 @@ impl IntoResponse for ApiError {
             AppError::RunError(_) => (StatusCode::CONFLICT, "Run Error"),
             AppError::TaskNotFound(_) => (StatusCode::NOT_FOUND, "Task Not Found"),
             AppError::SidecarError(_) => (StatusCode::BAD_GATEWAY, "Sidecar Error"),
+            AppError::Sat(_) => (StatusCode::UNPROCESSABLE_ENTITY, "SAT Error"),
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "Internal Error"),
         };
 

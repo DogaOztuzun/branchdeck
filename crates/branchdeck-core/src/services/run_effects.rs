@@ -3,7 +3,7 @@ use crate::models::run::{PendingPermission, RunInfo, RunStatus};
 use crate::models::task::TaskStatus;
 use crate::services::{event_bus::EventBus, run_state, task};
 use crate::traits::{self, EventEmitter};
-use log::error;
+use log::{error, info};
 
 /// Side effects produced by pure state transition functions.
 ///
@@ -24,6 +24,9 @@ pub enum RunEffect {
     PublishRunComplete {
         run: RunInfo,
         status: String,
+    },
+    MarkWorktreeForCleanup {
+        path: String,
     },
 }
 
@@ -69,6 +72,14 @@ pub fn execute_effects(effects: Vec<RunEffect>, emitter: &dyn EventEmitter, even
                     elapsed_secs: run.elapsed_secs,
                     ts: agent::now_ms(),
                 });
+            }
+            RunEffect::MarkWorktreeForCleanup { ref path } => {
+                let marker = std::path::Path::new(path).join(".branchdeck-cleanup");
+                if let Err(e) = crate::util::write_atomic(&marker, b"pending-cleanup") {
+                    error!("Failed to write cleanup marker at {}: {e}", marker.display());
+                } else {
+                    info!("Marked worktree for cleanup: {path}");
+                }
             }
         }
     }

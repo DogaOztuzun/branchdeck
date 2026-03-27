@@ -79,6 +79,8 @@ pub struct RunManager {
     queue_failed: u32,
     /// Set when queue is cancelled to prevent race with `advance_queue`.
     queue_cancelled: bool,
+    /// Worktree path for the currently active run (for cleanup on cancel).
+    active_worktree_path: Option<String>,
 }
 
 impl RunManager {
@@ -104,6 +106,7 @@ impl RunManager {
             queue_completed: 0,
             queue_failed: 0,
             queue_cancelled: false,
+            active_worktree_path: None,
         }
     }
 
@@ -261,6 +264,7 @@ impl RunManager {
                     emitter,
                     &self.event_bus,
                 );
+                self.active_worktree_path = None;
             }
             SidecarResponse::PermissionRequest {
                 tool,
@@ -303,6 +307,7 @@ impl RunManager {
                     emitter,
                     &self.event_bus,
                 );
+                self.active_worktree_path = None;
             }
         }
     }
@@ -326,6 +331,7 @@ impl RunManager {
         self.last_activity_ms = 0;
         self.started_at_epoch_ms = 0;
         self.pending_permissions.clear();
+        self.active_worktree_path = None;
     }
 
     /// Shut down the run manager during app exit.
@@ -373,13 +379,18 @@ impl RunManager {
         self.queue_cancelled = true;
 
         // Also cancel the active run if one exists
-        if self.active_run.is_some() {
+        let had_active = self.active_run.is_some();
+        if had_active {
             if let Err(e) = self.cancel_run() {
                 error!("Failed to cancel active run during queue cancel: {e}");
             }
         }
 
-        info!("Cancelled queue: cleared {cleared} queued items, cancelled active run");
+        if had_active {
+            info!("Cancelled queue: cleared {cleared} queued items, cancelled active run");
+        } else {
+            info!("Cancelled queue: cleared {cleared} queued items");
+        }
     }
 
     /// Remove a queued run by worktree path. Returns true if found and removed.
@@ -445,6 +456,18 @@ impl RunManager {
             return Err(AppError::RunError("No active run to cancel".to_owned()));
         };
 
+        // Mark worktree for cleanup if we know the path
+        if let Some(ref wt_path) = self.active_worktree_path {
+            let cleanup_effects = vec![run_effects::RunEffect::MarkWorktreeForCleanup {
+                path: wt_path.clone(),
+            }];
+            run_effects::execute_effects(
+                cleanup_effects,
+                self.emitter.as_ref(),
+                &self.event_bus,
+            );
+        }
+
         // Clean up manager state
         self.active_run = None;
         self.process = None;
@@ -452,6 +475,7 @@ impl RunManager {
         self.last_activity_ms = 0;
         self.started_at_epoch_ms = 0;
         self.pending_permissions.clear();
+        self.active_worktree_path = None;
 
         Ok(cancelled_run)
     }
@@ -623,6 +647,7 @@ pub async fn launch_run(
     manager.started_at_epoch_ms = now_ms;
     manager.last_activity_ms = now_ms;
     manager.active_run = Some(run_info.clone());
+    manager.active_worktree_path = Some(worktree_path.to_owned());
     run_state::save_run_state(task_path, &run_info);
 
     info!("Launched run for task {task_path}");
@@ -761,6 +786,7 @@ pub async fn resume_run(
     manager.started_at_epoch_ms = now_ms;
     manager.last_activity_ms = now_ms;
     manager.active_run = Some(run_info.clone());
+    manager.active_worktree_path = Some(worktree_path.to_owned());
     run_state::save_run_state(task_path, &run_info);
 
     info!("Resumed run for task {task_path}");
@@ -1008,15 +1034,25 @@ pub async fn enqueue_run(
     Ok(manager.get_queue_status())
 }
 
-/// Cancel the active run immediately. Kills the sidecar process, marks the
-/// run as cancelled, and returns the cancelled `RunInfo`.
+/// Cancel a run by session ID. Matches against the active run.
 ///
 /// # Errors
 ///
-/// Returns `RunError` if no run is active.
-pub async fn force_cancel_run(state: RunManagerState) -> Result<RunInfo, AppError> {
+/// Returns `RunError` if no active run matches the given ID.
+pub async fn force_cancel_run(state: RunManagerState, run_id: &str) -> Result<RunInfo, AppError> {
     let mut manager = state.lock().await;
-    manager.cancel_run()
+
+    // Check if active run matches by session_id
+    if let Some(ref active) = manager.active_run {
+        if active.session_id.as_deref() == Some(run_id) {
+            return manager.cancel_run();
+        }
+    }
+
+    error!("No active run with session id {run_id}");
+    Err(AppError::RunError(format!(
+        "No active run with id {run_id}"
+    )))
 }
 
 /// Type alias for the managed state.

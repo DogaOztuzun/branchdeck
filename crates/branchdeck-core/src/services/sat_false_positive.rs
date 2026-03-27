@@ -10,14 +10,39 @@
 //! - I/O functions: `load_false_positive_data`, `save_false_positive_data`,
 //!   `record_false_positive`
 
-use log::{error, info};
+use log::{debug, error, info};
 use std::path::Path;
 
 use crate::error::AppError;
 use crate::models::sat::{
     ClassificationAccuracy, FalsePositiveData, FalsePositiveLabel, FalsePositiveMetrics,
-    FalsePositiveRecord, SatLearningsFile,
+    FalsePositiveRecord, FalsePositiveResponse, SatLearningsFile,
 };
+
+// ---------------------------------------------------------------------------
+// Path validation
+// ---------------------------------------------------------------------------
+
+/// Validate and canonicalize a user-provided repo path.
+///
+/// Ensures the path exists, is a directory, and is a valid git repository.
+/// Returns the canonicalized path.
+///
+/// # Errors
+/// Returns `AppError::Sat` if the path is invalid or not a git repository.
+pub fn validate_repo_path(raw_path: &str) -> Result<std::path::PathBuf, AppError> {
+    let path = std::path::Path::new(raw_path);
+    let canonical = std::fs::canonicalize(path).map_err(|e| {
+        error!("Invalid repo path {raw_path:?}: {e}");
+        AppError::Sat(format!("invalid project path: {e}"))
+    })?;
+    // Verify it's a git repository
+    git2::Repository::open(&canonical).map_err(|e| {
+        error!("Not a git repository at {}: {e}", canonical.display());
+        AppError::Sat(format!("not a git repository: {e}"))
+    })?;
+    Ok(canonical)
+}
 
 // ---------------------------------------------------------------------------
 // Record building (pure)
@@ -80,13 +105,19 @@ pub fn compute_false_positive_metrics(
 
     let total_false_positives = fp_data.records.len() + cycle_fps;
 
-    // Total issues created from cycle learnings
-    let total_issues_created: usize = learnings
+    // Total issues created from cycle learnings. When cycles exist, FP records
+    // refer to issues already counted in cycle.issues_found — don't double-count.
+    // Only use FP records as the denominator when no cycles exist yet.
+    let cycle_issues: usize = learnings
         .cycle_learnings
         .iter()
         .map(|c| c.issues_found)
-        .sum::<usize>()
-        + fp_data.records.len(); // FP records represent issues that existed
+        .sum();
+    let total_issues_created = if cycle_issues > 0 {
+        cycle_issues
+    } else {
+        fp_data.records.len()
+    };
 
     let false_positive_rate = if total_issues_created > 0 {
         Some(total_false_positives as f64 / total_issues_created as f64)
@@ -124,9 +155,13 @@ pub fn compute_accuracy_with_fp_data(
         false_positives += cycle.false_positives;
     }
 
-    // Add explicit FP records (these are user-labeled FPs not yet in cycle learnings)
+    // Add explicit FP records (user-labeled FPs). When cycles exist, these
+    // issues are already counted in cycle.issues_found — only add to
+    // total_classifications when no cycles exist yet.
     false_positives += fp_data.records.len();
-    total_classifications += fp_data.records.len();
+    if learnings.cycle_learnings.is_empty() {
+        total_classifications += fp_data.records.len();
+    }
 
     let denominator = true_positives + false_positives;
     #[allow(clippy::cast_precision_loss)]
@@ -215,19 +250,106 @@ pub fn record_false_positive(
     record: &FalsePositiveRecord,
 ) -> Result<(FalsePositiveData, FalsePositiveMetrics, ClassificationAccuracy), AppError> {
     let mut fp_data = load_false_positive_data(fp_data_path)?;
-    fp_data.records.push(record.clone());
-    save_false_positive_data(fp_data_path, &fp_data)?;
+
+    // Dedup: don't re-append if this issue+repo is already recorded
+    let already_recorded = fp_data
+        .records
+        .iter()
+        .any(|r| r.issue_number == record.issue_number && r.repo == record.repo);
+
+    if already_recorded {
+        debug!(
+            "Skipping duplicate false positive for issue #{} in {}",
+            record.issue_number, record.repo
+        );
+    } else {
+        fp_data.records.push(record.clone());
+        save_false_positive_data(fp_data_path, &fp_data)?;
+        info!(
+            "Recorded false positive for issue #{} in {} (total: {})",
+            record.issue_number, record.repo, fp_data.records.len()
+        );
+    }
 
     let learnings = crate::services::sat_score::load_learnings(learnings_path)?;
     let metrics = compute_false_positive_metrics(&fp_data, &learnings);
     let accuracy = compute_accuracy_with_fp_data(&learnings, &fp_data);
 
-    info!(
-        "Recorded false positive for issue #{} in {} (FP rate: {:?})",
-        record.issue_number, record.repo, metrics.false_positive_rate
+    Ok((fp_data, metrics, accuracy))
+}
+
+// ---------------------------------------------------------------------------
+// High-level orchestration (I/O)
+// ---------------------------------------------------------------------------
+
+/// Label a false positive for a project: validate path, record locally,
+/// return updated metrics.
+///
+/// GitHub label application is handled separately by the caller (async).
+///
+/// # Errors
+/// Returns `AppError::Sat` on validation or persistence failures.
+pub fn label_false_positive_for_project(
+    raw_repo_path: &str,
+    issue_number: u64,
+    label: FalsePositiveLabel,
+    scenario_id: Option<&str>,
+    reason: Option<&str>,
+) -> Result<FalsePositiveResponse, AppError> {
+    let project_root = validate_repo_path(raw_repo_path)?;
+
+    let (owner, repo_name) = crate::services::github::resolve_owner_repo(&project_root)?;
+    let repo_full = format!("{owner}/{repo_name}");
+
+    let fp_data_path = project_root
+        .join(".branchdeck")
+        .join("sat-false-positives.json");
+    let learnings_path = project_root.join("sat").join("learnings.yaml");
+
+    let record = build_false_positive_record(
+        issue_number,
+        &repo_full,
+        label,
+        scenario_id,
+        reason,
+        &chrono::Utc::now().to_rfc3339(),
     );
 
-    Ok((fp_data, metrics, accuracy))
+    let (_fp_data, false_positive_metrics, classification_accuracy) =
+        record_false_positive(&fp_data_path, &learnings_path, &record)?;
+
+    Ok(FalsePositiveResponse {
+        record,
+        classification_accuracy,
+        false_positive_metrics,
+    })
+}
+
+/// Retrieve false positive metrics for a project.
+///
+/// Validates the repo path, loads data, and computes metrics.
+///
+/// # Errors
+/// Returns `AppError::Sat` on validation or load failures.
+pub fn get_metrics_for_project(
+    raw_repo_path: &str,
+) -> Result<crate::models::sat::FalsePositiveMetricsResponse, AppError> {
+    let project_root = validate_repo_path(raw_repo_path)?;
+
+    let fp_data_path = project_root
+        .join(".branchdeck")
+        .join("sat-false-positives.json");
+    let learnings_path = project_root.join("sat").join("learnings.yaml");
+
+    let fp_data = load_false_positive_data(&fp_data_path)?;
+    let learnings = crate::services::sat_score::load_learnings(&learnings_path)?;
+    let metrics = compute_false_positive_metrics(&fp_data, &learnings);
+    let accuracy = compute_accuracy_with_fp_data(&learnings, &fp_data);
+
+    Ok(crate::models::sat::FalsePositiveMetricsResponse {
+        classification_accuracy: accuracy,
+        false_positive_metrics: metrics,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -376,11 +498,12 @@ mod tests {
 
         // total FPs = 1 (record) + 1 (from cycle) = 2
         assert_eq!(metrics.total_false_positives, 2);
-        // total issues = 10 (from cycle) + 1 (FP record) = 11
-        assert_eq!(metrics.total_issues_created, 11);
-        // Rate = 2/11
+        // total issues = 10 (from cycle only — FP records don't add to denominator
+        // when cycles exist, since those issues are already counted)
+        assert_eq!(metrics.total_issues_created, 10);
+        // Rate = 2/10
         let rate = metrics.false_positive_rate.unwrap();
-        assert!((rate - 2.0 / 11.0).abs() < f64::EPSILON);
+        assert!((rate - 0.2).abs() < f64::EPSILON);
     }
 
     // -- Classification accuracy with FP data ---------------------------------
@@ -397,14 +520,14 @@ mod tests {
 
         let acc = compute_accuracy_with_fp_data(&learnings, &fp_data);
 
-        // From cycle: TP=8 (issues_found - false_positives = 10-1=9... wait no)
         // TP = issues_fixed = 7
-        // FP from cycle = 1
-        // FP from records = 2
-        // total FP = 3
+        // FP from cycle = 1, FP from records = 2, total FP = 3
+        // total_classifications = 10 (from cycle only — FP records don't add
+        // to classifications when cycles exist)
         // accuracy = 7 / (7 + 3) = 0.7
         assert_eq!(acc.true_positives, 7);
         assert_eq!(acc.false_positives, 3);
+        assert_eq!(acc.total_classifications, 10);
         let a = acc.accuracy.unwrap();
         assert!((a - 0.7).abs() < f64::EPSILON);
     }
@@ -474,5 +597,24 @@ mod tests {
         assert_eq!(metrics.runner_count, 1);
         // With no cycle learnings, FP records are the only data
         assert!(accuracy.accuracy.is_some());
+    }
+
+    #[test]
+    fn record_false_positive_dedup_same_issue() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let fp_path = tmp.path().join("sat-false-positives.json");
+        let learnings_path = tmp.path().join("sat").join("learnings.yaml");
+
+        let record = make_record(42, FalsePositiveLabel::Runner);
+
+        // First record
+        let (data1, _, _) =
+            record_false_positive(&fp_path, &learnings_path, &record).unwrap();
+        assert_eq!(data1.records.len(), 1);
+
+        // Second record with same issue+repo — should NOT duplicate
+        let (data2, _, _) =
+            record_false_positive(&fp_path, &learnings_path, &record).unwrap();
+        assert_eq!(data2.records.len(), 1);
     }
 }
