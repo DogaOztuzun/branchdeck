@@ -1,13 +1,6 @@
 [advisories]
-# Ignore unmaintained transitive dependencies we cannot control
-ignore = [
-    # GTK3 bindings — pulled in by Tauri on Linux, no alternative
-    "RUSTSEC-2024-0413",
-    "RUSTSEC-2024-0416",
-    # bincode — transitive dep, unmaintained but no security issue
-    "RUSTSEC-2025-0141",
-    # fxhash — transitive dep, unmaintained but no security issue
-    "RUSTSEC-2025-0057",
-    # yaml-rust — transitive via yaml-front-matter, unmaintained but no security issue
-    "RUSTSEC-2024-0320",
-]
+# Treat unmaintained crate advisories as warnings, not errors.
+# Tauri pulls in dozens of GTK3/GLib bindings on Linux, all flagged as
+# unmaintained (RUSTSEC-2024-0411 through 0420, etc.). These are transitive
+# dependencies we cannot control. Vulnerability advisories still error.
+unmaintained = "warn"

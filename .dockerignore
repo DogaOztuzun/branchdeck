@@ -10,4 +10,5 @@ docs/
 *.md
 !sidecar/package.json
 .claude/
+!.claude/skills/pr-shepherd/SKILL.md
 .github/
