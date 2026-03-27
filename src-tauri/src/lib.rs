@@ -197,9 +197,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![
-            install_update,
-        ])
+        .invoke_handler(tauri::generate_handler![install_update,])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
                 if let Some(state) = window.try_state::<Mutex<daemon::DaemonState>>() {
