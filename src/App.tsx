@@ -5,6 +5,7 @@ import { TopBar } from './components/layout/TopBar';
 import { LifecycleView } from './components/lifecycle/LifecycleView';
 import { PrTriageView } from './components/pr/PrTriageView';
 import { SATDashboard } from './components/sat/SATDashboard';
+import { ProjectSetupFlow } from './components/setup/ProjectSetupFlow';
 import { TaskBoard } from './components/task/TaskBoard';
 import { CommandPalette } from './components/ui/CommandPalette';
 import { ShortcutOverlay } from './components/ui/ShortcutOverlay';
@@ -71,6 +72,9 @@ export function App() {
         </Match>
         <Match when={layout.activeView() === 'lifecycle'}>
           <LifecycleView />
+        </Match>
+        <Match when={layout.activeView() === 'setup'}>
+          <ProjectSetupFlow onComplete={() => layout.setActiveView('workspace')} />
         </Match>
       </Switch>
       <Show when={keyboard.isPaletteOpen()}>

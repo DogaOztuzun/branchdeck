@@ -1,4 +1,4 @@
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::Router;
 use branchdeck_core::services::activity_store::ActivityStore;
 use branchdeck_core::services::event_bus::EventBus;
@@ -48,6 +48,22 @@ async fn main() {
         .route(
             "/api/agents/active",
             get(routes::activity::get_active_agents),
+        )
+        .route(
+            "/api/setup/status",
+            get(routes::setup::get_setup_status),
+        )
+        .route(
+            "/api/setup/validate",
+            get(routes::setup::validate_tokens),
+        )
+        .route(
+            "/api/setup/workflows",
+            get(routes::setup::list_workflows),
+        )
+        .route(
+            "/api/setup/save",
+            post(routes::setup::save_config),
         )
         .with_state(app_state);
 

@@ -17,6 +17,7 @@ pub mod knowledge_query;
 pub mod merge_poller;
 pub mod orchestrator;
 pub mod pr_poller;
+pub mod project_config;
 pub mod run_effects;
 pub mod run_manager;
 pub mod run_responses;
