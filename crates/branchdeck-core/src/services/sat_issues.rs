@@ -94,8 +94,12 @@ pub fn generate_fingerprint(scenario_id: &str, persona: &str, run_id: &str) -> S
 ///
 /// Returns findings that are:
 /// - In one of the allowed categories (default: `App` only)
-/// - At or below the maximum severity (1=critical, 2=high by default)
+/// - At or below the maximum severity (1=critical, 2=high by default),
+///   or at or below a per-scenario override if one exists
 /// - At one of the allowed confidence levels (default: `High` only)
+///
+/// Per-scenario severity overrides (from `config.severity_overrides`) take
+/// precedence over the default `config.max_severity` when present.
 #[must_use]
 pub fn filter_findings_for_issues<'a>(
     findings: &'a [SatFinding],
@@ -104,8 +108,13 @@ pub fn filter_findings_for_issues<'a>(
     findings
         .iter()
         .filter(|f| {
+            let effective_max_severity = config
+                .severity_overrides
+                .get(&f.scenario_id)
+                .copied()
+                .unwrap_or(config.max_severity);
             config.allowed_categories.contains(&f.category)
-                && f.severity <= config.max_severity
+                && f.severity <= effective_max_severity
                 && config.allowed_confidences.contains(&f.confidence)
         })
         .collect()
@@ -672,6 +681,46 @@ mod tests {
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].scenario_id, "s1");
         assert_eq!(result[1].scenario_id, "s5");
+    }
+
+    // -- Severity overrides ---------------------------------------------------
+
+    #[test]
+    fn filter_uses_per_scenario_severity_override() {
+        let mut config = make_config();
+        // Default max_severity is 2 (critical + high)
+        // Override s1 to critical-only (1)
+        config
+            .severity_overrides
+            .insert("s1".to_string(), 1);
+
+        let findings = vec![
+            make_finding("s1", FindingCategory::App, 2, ConfidenceLevel::High), // reject: override says 1
+            make_finding("s1", FindingCategory::App, 1, ConfidenceLevel::High), // pass: critical meets override
+            make_finding("s2", FindingCategory::App, 2, ConfidenceLevel::High), // pass: no override, uses default
+        ];
+        let result = filter_findings_for_issues(&findings, &config);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].scenario_id, "s1");
+        assert_eq!(result[0].severity, 1);
+        assert_eq!(result[1].scenario_id, "s2");
+    }
+
+    #[test]
+    fn filter_override_more_lenient_than_default() {
+        let mut config = make_config();
+        // Default max_severity is 2, but s1 is more lenient at 4
+        config
+            .severity_overrides
+            .insert("s1".to_string(), 4);
+
+        let findings = vec![
+            make_finding("s1", FindingCategory::App, 3, ConfidenceLevel::High), // pass: override allows up to 4
+            make_finding("s2", FindingCategory::App, 3, ConfidenceLevel::High), // reject: default is 2
+        ];
+        let result = filter_findings_for_issues(&findings, &config);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].scenario_id, "s1");
     }
 
     // -- Secret scrubbing -----------------------------------------------------

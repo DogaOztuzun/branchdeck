@@ -29,6 +29,7 @@ pub mod sat_issues;
 pub mod sat_pipeline;
 pub mod sat_regression;
 pub mod sat_score;
+pub mod sat_threshold_config;
 pub mod shepherd;
 pub mod task;
 pub mod task_watcher;

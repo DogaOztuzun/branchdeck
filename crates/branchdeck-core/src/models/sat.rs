@@ -745,13 +745,17 @@ pub struct SatIssueConfig {
     pub runs_dir: PathBuf,
     /// Path to the git repository (for resolving owner/repo).
     pub repo_path: PathBuf,
-    /// Minimum severity threshold (1 = critical, 2 = high). Findings with
+    /// Default severity threshold (1 = critical, 2 = high). Findings with
     /// severity <= this value are eligible for issue creation.
     pub max_severity: u8,
     /// Only create issues for findings in these categories.
     pub allowed_categories: Vec<FindingCategory>,
     /// Only create issues for findings with these confidence levels.
     pub allowed_confidences: Vec<ConfidenceLevel>,
+    /// Per-scenario severity overrides. Maps `scenario_id` to the max severity
+    /// for that scenario, computed from threshold config + scenario tags.
+    /// When a scenario has an override, it takes precedence over `max_severity`.
+    pub severity_overrides: std::collections::HashMap<String, u8>,
 }
 
 impl SatIssueConfig {
@@ -767,6 +771,54 @@ impl SatIssueConfig {
             max_severity: 2, // critical (1) and high (2)
             allowed_categories: vec![FindingCategory::App],
             allowed_confidences: vec![ConfidenceLevel::High],
+            severity_overrides: std::collections::HashMap::new(),
+        }
+    }
+}
+
+// ===========================================================================
+// Severity threshold configuration (Story 6.1)
+// ===========================================================================
+
+/// Persistent severity threshold configuration stored in
+/// `.branchdeck/sat-thresholds.json` in the project directory.
+///
+/// Controls which SAT findings are promoted to GitHub issues.
+/// Changes take effect on the next SAT cycle without restart.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SatThresholdConfig {
+    /// Default max severity for issue creation (1 = critical only,
+    /// 2 = critical + high, etc.). Default: 2.
+    #[serde(default = "default_max_severity")]
+    pub default_max_severity: u8,
+    /// Only create issues for findings with these confidence levels.
+    /// Default: `["high"]`.
+    #[serde(default = "default_allowed_confidences")]
+    pub allowed_confidences: Vec<ConfidenceLevel>,
+    /// Per-scenario-tag severity overrides. Maps a scenario tag
+    /// (e.g., `"terminal"`, `"onboarding"`) to a max severity.
+    /// Scenarios matching a tag use that tag's threshold instead of
+    /// the default. If a scenario matches multiple tags, the strictest
+    /// (lowest numeric) threshold wins.
+    #[serde(default)]
+    pub tag_overrides: std::collections::HashMap<String, u8>,
+}
+
+fn default_max_severity() -> u8 {
+    2
+}
+
+fn default_allowed_confidences() -> Vec<ConfidenceLevel> {
+    vec![ConfidenceLevel::High]
+}
+
+impl Default for SatThresholdConfig {
+    fn default() -> Self {
+        Self {
+            default_max_severity: 2,
+            allowed_confidences: vec![ConfidenceLevel::High],
+            tag_overrides: std::collections::HashMap::new(),
         }
     }
 }
