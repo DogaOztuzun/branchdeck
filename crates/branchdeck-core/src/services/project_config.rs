@@ -72,6 +72,8 @@ pub fn load_project_config(repo_path: &str) -> Result<ProjectConfig, AppError> {
 /// Save the project config to `.branchdeck/config.yaml`.
 ///
 /// Creates the `.branchdeck/` directory if it does not exist.
+/// The `enabled_workflows` field is persisted here and read by the orchestrator
+/// at workflow dispatch time to filter which workflows are active for this project.
 ///
 /// # Errors
 /// Returns `AppError` if serialization or file write fails.
@@ -181,7 +183,7 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
 
     use super::*;
-    use crate::models::project_config::Severity;
+    use crate::models::project_config::{Severity, TokenSource};
     use tempfile::TempDir;
 
     #[test]

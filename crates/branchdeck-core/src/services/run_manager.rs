@@ -197,7 +197,7 @@ impl RunManager {
         }
 
         if run_stale::check_run_stale(self.last_activity_ms, now_epoch_ms()) {
-            self.mark_run_failed_with_reason("network-timeout");
+            self.mark_run_failed_with_reason("heartbeat-stalled");
             return;
         }
 

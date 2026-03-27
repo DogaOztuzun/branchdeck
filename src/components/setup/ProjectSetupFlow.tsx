@@ -132,6 +132,11 @@ function WorkflowsStep() {
           </For>
         </div>
       </Show>
+      <Show when={setup.availableWorkflows().length > 0 && setup.enabledWorkflows().length === 0}>
+        <p class="text-xs text-accent-warning mt-3">
+          No workflows selected. Branchdeck won't run any automation until you enable at least one.
+        </p>
+      </Show>
     </div>
   );
 }

@@ -21,18 +21,19 @@ pub fn is_transient(err: &AppError) -> bool {
     let msg = err.to_string();
     let lower = msg.to_lowercase();
 
-    // Rate limit or server errors
-    if lower.contains("429")
-        || lower.contains("rate limit")
-        || lower.contains("500")
-        || lower.contains("502")
-        || lower.contains("503")
-        || lower.contains("504")
+    // Rate limit — match specific HTTP status patterns to avoid false positives
+    // from unrelated numbers (e.g., port 50300, PR #5030)
+    if lower.contains("rate limit")
+        || contains_http_status(&lower, "429")
+        || contains_http_status(&lower, "500")
+        || contains_http_status(&lower, "502")
+        || contains_http_status(&lower, "503")
+        || contains_http_status(&lower, "504")
     {
         return true;
     }
 
-    // Connection errors
+    // Connection errors — these are full phrases, low false-positive risk
     if lower.contains("connection refused")
         || lower.contains("timed out")
         || lower.contains("timeout")
@@ -46,11 +47,26 @@ pub fn is_transient(err: &AppError) -> bool {
     false
 }
 
+/// Check if a lowercased error message contains an HTTP status code
+/// at a word boundary (not as part of a larger number like port 50300).
+fn contains_http_status(msg: &str, code: &str) -> bool {
+    for (i, _) in msg.match_indices(code) {
+        let before_ok = i == 0 || !msg.as_bytes()[i - 1].is_ascii_digit();
+        let after_pos = i + code.len();
+        let after_ok = after_pos >= msg.len() || !msg.as_bytes()[after_pos].is_ascii_digit();
+        if before_ok && after_ok {
+            return true;
+        }
+    }
+    false
+}
+
 /// Compute the backoff delay for a given attempt (0-indexed).
 /// Uses exponential backoff: `base * 2^attempt`, capped at `MAX_DELAY_SECS`.
 #[must_use]
 pub fn retry_delay(attempt: u32) -> Duration {
-    let delay_secs = BASE_DELAY_SECS.saturating_mul(1u64.wrapping_shl(attempt));
+    let shift = attempt.min(63);
+    let delay_secs = BASE_DELAY_SECS.saturating_mul(1u64 << shift);
     Duration::from_secs(delay_secs.min(MAX_DELAY_SECS))
 }
 
@@ -135,6 +151,18 @@ mod tests {
     fn test_is_transient_502() {
         let err = AppError::GitHub("502 Bad Gateway".to_string());
         assert!(is_transient(&err));
+    }
+
+    #[test]
+    fn test_not_transient_port_number() {
+        let err = AppError::GitHub("connect to port 50300 failed".to_string());
+        assert!(!is_transient(&err), "port 50300 should not match status 503");
+    }
+
+    #[test]
+    fn test_not_transient_pr_number() {
+        let err = AppError::GitHub("PR #5030 not found".to_string());
+        assert!(!is_transient(&err), "PR #5030 should not match status 503");
     }
 
     #[test]

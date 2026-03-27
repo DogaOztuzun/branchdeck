@@ -5,6 +5,7 @@ use branchdeck_core::services::event_bus::EventBus;
 use log::{error, info, warn};
 use std::sync::Arc;
 
+mod error;
 mod routes;
 mod state;
 

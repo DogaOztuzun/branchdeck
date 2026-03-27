@@ -7,6 +7,8 @@ use branchdeck_core::services::project_config;
 use log::debug;
 use serde::Deserialize;
 
+use crate::error::ApiError;
+
 #[derive(Deserialize)]
 pub struct RepoQuery {
     pub repo_path: String,
@@ -14,9 +16,11 @@ pub struct RepoQuery {
 
 pub async fn get_setup_status(
     Query(query): Query<RepoQuery>,
-) -> Result<Json<SetupStatus>, String> {
+) -> Result<Json<SetupStatus>, ApiError> {
     debug!("Checking setup status for {:?}", query.repo_path);
-    project_config::get_setup_status(&query.repo_path).map(Json).map_err(|e| e.to_string())
+    project_config::get_setup_status(&query.repo_path)
+        .map(Json)
+        .map_err(ApiError::from)
 }
 
 pub async fn validate_tokens() -> Json<TokenValidation> {
@@ -31,9 +35,9 @@ pub async fn list_workflows(
     Json(project_config::list_available_workflows(&query.repo_path))
 }
 
-pub async fn save_config(Json(config): Json<ProjectConfig>) -> Result<Json<()>, String> {
+pub async fn save_config(Json(config): Json<ProjectConfig>) -> Result<Json<()>, ApiError> {
     debug!("Saving project config for {:?}", config.repo_path);
     project_config::save_project_config(&config)
         .map(Json)
-        .map_err(|e| e.to_string())
+        .map_err(ApiError::from)
 }

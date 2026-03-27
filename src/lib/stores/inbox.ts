@@ -1,4 +1,4 @@
-import { createSignal } from 'solid-js';
+import { createEffect, createSignal } from 'solid-js';
 import type { InboxGroup, InboxItem, InboxItemStatus } from '../../types/inbox';
 import { getConnectionStore } from './connection';
 import { getKeyboardStore } from './keyboard';
@@ -175,6 +175,19 @@ function loadLocalFallback() {
   }
 }
 
+/** React to connection state changes for automatic offline fallback. */
+function initOfflineReactivity() {
+  const connection = getConnectionStore();
+  createEffect(() => {
+    const connStatus = connection.status();
+    if (connStatus === 'disconnected' || connStatus === 'reconnecting') {
+      loadLocalFallback();
+    } else if (connStatus === 'connected') {
+      setIsOffline(false);
+    }
+  });
+}
+
 function loadMockData() {
   setItems([
     {
@@ -229,7 +242,14 @@ function loadMockData() {
   ]);
 }
 
+let inboxInitialized = false;
+
 export function getInboxStore() {
+  if (!inboxInitialized) {
+    inboxInitialized = true;
+    initOfflineReactivity();
+  }
+
   return {
     items,
     selectedIndex,

@@ -1300,12 +1300,20 @@ pub fn create_orchestrator_state(
 
 /// Load the workflow registry from all configured repo paths and cache it.
 /// Call this after `repo_paths` have been populated.
+///
+/// The registry holds ALL discovered workflows unfiltered. Per-project
+/// `enabled_workflows` filtering happens at dispatch time in
+/// `workflow_dispatch::plan_dispatch()`, so multi-repo setups get
+/// independent workflow control per project.
 pub fn load_registry(state: &mut Orchestrator) {
     let mut all_dirs = Vec::new();
+
     for repo_path in state.repo_paths.values() {
         all_dirs.extend(crate::services::workflow::default_search_dirs(repo_path));
     }
+
     let registry = crate::services::workflow::WorkflowRegistry::scan(&all_dirs);
+
     info!(
         "Orchestrator: loaded workflow registry with {} workflow(s)",
         registry.len()

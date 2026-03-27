@@ -1,8 +1,12 @@
 import { Match, Switch } from 'solid-js';
+import { getTaskStore } from '../../lib/stores/task';
 import { getUpdateStore } from '../../lib/stores/update';
 
 export function UpdateIndicator() {
   const update = getUpdateStore();
+  const taskStore = getTaskStore();
+
+  const hasActiveRun = () => taskStore.state.activeRun !== null;
 
   return (
     <Switch>
@@ -14,6 +18,11 @@ export function UpdateIndicator() {
       <Match when={update.status() === 'downloading'}>
         <span class="text-[11px] text-accent-warning ml-2 animate-pulse-opacity">
           Downloading update...
+        </span>
+      </Match>
+      <Match when={update.status() === 'ready' && hasActiveRun()}>
+        <span class="text-[11px] text-accent-warning ml-2">
+          Update ready — finish active runs first
         </span>
       </Match>
       <Match when={update.status() === 'ready'}>

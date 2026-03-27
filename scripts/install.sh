@@ -126,9 +126,15 @@ install_deb() {
   info "Installing .deb package..."
 
   if [ "$(id -u)" -eq 0 ]; then
-    dpkg -i "$deb_file" 2>/dev/null || apt-get install -f -y 2>/dev/null
+    if ! dpkg -i "$deb_file"; then
+      warn "dpkg install failed, attempting apt-get to resolve dependencies..."
+      apt-get install -f -y 2>/dev/null || error "Deb installation failed. Check dependencies."
+    fi
   else
-    sudo dpkg -i "$deb_file" 2>/dev/null || sudo apt-get install -f -y 2>/dev/null
+    if ! sudo dpkg -i "$deb_file"; then
+      warn "dpkg install failed, attempting apt-get to resolve dependencies..."
+      sudo apt-get install -f -y 2>/dev/null || error "Deb installation failed. Check dependencies."
+    fi
   fi
 }
 
@@ -137,9 +143,15 @@ install_rpm() {
   info "Installing .rpm package..."
 
   if [ "$(id -u)" -eq 0 ]; then
-    rpm -U "$rpm_file" 2>/dev/null || true
+    if ! rpm -U "$rpm_file"; then
+      warn "rpm install failed, attempting dnf..."
+      dnf install -y "$rpm_file" 2>/dev/null || error "RPM installation failed. Check dependencies."
+    fi
   else
-    sudo rpm -U "$rpm_file" 2>/dev/null || true
+    if ! sudo rpm -U "$rpm_file"; then
+      warn "rpm install failed, attempting dnf..."
+      sudo dnf install -y "$rpm_file" 2>/dev/null || error "RPM installation failed. Check dependencies."
+    fi
   fi
 }
 
@@ -238,8 +250,8 @@ install_desktop_app() {
   appimage_file="${tmpdir}/branchdeck.AppImage"
   download_file "$appimage_url" "$appimage_file"
   install_appimage "$appimage_file"
-  # Override trap since we moved the file
-  trap '' EXIT
+  # Restore cleanup for tmpdir (AppImage was moved out, but dir still exists)
+  trap 'rm -rf "$tmpdir"' EXIT
 }
 
 # --- Main ---

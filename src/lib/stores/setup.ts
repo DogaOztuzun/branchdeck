@@ -3,12 +3,21 @@ import type {
   ProjectSetupConfig,
   SetupStatus,
   SetupStep,
+  TokenSource,
   TokenValidation,
   WorkflowOption,
 } from '../../types/setup';
 import { apiGet, apiPost } from '../api/client';
 
 const STEPS: SetupStep[] = ['repo', 'workflows', 'tokens', 'review', 'complete'];
+
+/** Map a validated token source string to the correct TokenSource shape. */
+function mapTokenSource(available?: boolean, source?: string): TokenSource {
+  if (!available || !source) return { type: 'none' };
+  if (source === 'gh-cli') return { type: 'gh-cli' };
+  if (source.startsWith('env:')) return { type: 'env-var', name: source.slice(4) };
+  return { type: 'none' };
+}
 
 function createSetupStore() {
   const [currentStep, setCurrentStep] = createSignal<SetupStep>('repo');
@@ -121,14 +130,11 @@ function createSetupStore() {
       const tv = tokenValidation();
       const config: ProjectSetupConfig = {
         'repo-path': repoPath(),
-        'github-token-source': tv?.['github-available']
-          ? tv['github-source'] === 'gh-cli'
-            ? { type: 'gh-cli' }
-            : { type: 'env-var', name: tv['github-source'].replace('env:', '') }
-          : { type: 'none' },
-        'anthropic-key-source': tv?.['anthropic-available']
-          ? { type: 'env-var', name: tv['anthropic-source'].replace('env:', '') }
-          : { type: 'none' },
+        'github-token-source': mapTokenSource(tv?.['github-available'], tv?.['github-source']),
+        'anthropic-key-source': mapTokenSource(
+          tv?.['anthropic-available'],
+          tv?.['anthropic-source'],
+        ),
         'enabled-workflows': enabledWorkflows(),
         'min-severity': 'high',
         'confidence-threshold': 70,

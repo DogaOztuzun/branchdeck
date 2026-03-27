@@ -60,22 +60,36 @@ async function fetchWithRetry(url: string, opts?: RequestInit): Promise<Response
   throw lastError ?? new Error('Request failed after retries');
 }
 
+/** Extract the RFC 7807 `detail` field from an error response, falling back to status text. */
+async function extractErrorDetail(res: Response): Promise<string> {
+  try {
+    const body = await res.json();
+    if (typeof body?.detail === 'string') return body.detail;
+  } catch {
+    // Response body not JSON — fall through
+  }
+  return `${res.status} ${res.statusText}`;
+}
+
 export async function apiGet<T>(path: string): Promise<T> {
   const res = await fetchWithRetry(`${BASE_URL}${path}`);
   if (!res.ok) {
-    throw new Error(`API GET ${path} failed: ${res.status} ${res.statusText}`);
+    const detail = await extractErrorDetail(res);
+    throw new Error(`API GET ${path}: ${detail}`);
   }
   return res.json() as Promise<T>;
 }
 
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetchWithRetry(`${BASE_URL}${path}`, {
+  // POST is not idempotent — do not retry to avoid duplicate side effects.
+  const res = await fetch(`${BASE_URL}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    throw new Error(`API POST ${path} failed: ${res.status} ${res.statusText}`);
+    const detail = await extractErrorDetail(res);
+    throw new Error(`API POST ${path}: ${detail}`);
   }
   return res.json() as Promise<T>;
 }

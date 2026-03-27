@@ -19,7 +19,26 @@ pub fn plan_dispatch(
     event: &TriggerEvent,
     repo_path: &str,
 ) -> DispatchPlan {
-    let mut matches = registry.match_workflows(event);
+    let all_matches = registry.match_workflows(event);
+
+    // Filter by per-project enabled_workflows if configured
+    let mut matches: Vec<&WorkflowDef> =
+        if let Ok(config) = crate::services::project_config::load_project_config(repo_path) {
+            if config.enabled_workflows.is_empty() {
+                all_matches
+            } else {
+                debug!(
+                    "Filtering workflows by project config: {:?}",
+                    config.enabled_workflows
+                );
+                all_matches
+                    .into_iter()
+                    .filter(|wf| config.enabled_workflows.contains(&wf.config.name))
+                    .collect()
+            }
+        } else {
+            all_matches
+        };
     matches.sort_by_key(|d| d.config.name.clone());
 
     if matches.is_empty() {
