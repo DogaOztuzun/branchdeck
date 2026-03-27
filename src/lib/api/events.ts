@@ -3,6 +3,7 @@
  * Stores use onEvent<T>() to subscribe to typed daemon events.
  */
 
+import { getConnectionStore } from '../stores/connection';
 import { getBaseUrl } from './client';
 
 export type SseEnvelope<T = unknown> = {
@@ -20,10 +21,9 @@ const listeners = new Map<string, Set<EventCallback<unknown>>>();
 const registeredTypes = new Set<string>();
 let eventSource: EventSource | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-let reconnectAttempt = 0;
-
-const RECONNECT_BASE_MS = 1000;
-const RECONNECT_MAX_MS = 30000;
+/** Exponential backoff state for SSE reconnect. */
+let reconnectDelay = 1000;
+const MAX_RECONNECT_DELAY = 30_000;
 
 function ensureConnection() {
   if (eventSource?.readyState !== EventSource.CLOSED && eventSource !== null) {
@@ -39,27 +39,33 @@ function ensureConnection() {
   const url = `${getBaseUrl()}/events`;
   registeredTypes.clear();
   eventSource = new EventSource(url);
+  const connection = getConnectionStore();
 
   eventSource.onopen = () => {
-    reconnectAttempt = 0;
     if (reconnectTimer) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
     }
+    // Reset backoff on successful connection
+    reconnectDelay = 1000;
+    connection.markConnected();
   };
 
   eventSource.onerror = () => {
     eventSource?.close();
     eventSource = null;
+    connection.startReconnecting();
+
     if (!reconnectTimer) {
-      const delay = Math.min(RECONNECT_BASE_MS * 2 ** reconnectAttempt, RECONNECT_MAX_MS);
-      reconnectAttempt++;
       reconnectTimer = setTimeout(() => {
         reconnectTimer = null;
         if (listeners.size > 0) {
           ensureConnection();
         }
-      }, delay);
+      }, reconnectDelay);
+
+      // Exponential backoff: double delay, cap at MAX_RECONNECT_DELAY
+      reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_DELAY);
     }
   };
 
@@ -137,4 +143,5 @@ export function disconnectEvents() {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
   }
+  reconnectDelay = 1000;
 }

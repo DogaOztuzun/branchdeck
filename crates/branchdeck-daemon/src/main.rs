@@ -277,6 +277,22 @@ async fn run_serve(port: u16, bind: &str, workspace_arg: Option<PathBuf>, static
         .route("/api/repos", get(routes::repos::get_repo))
         .route("/api/sat/scores", get(routes::sat::get_sat_scores))
         .route(
+            "/api/setup/status",
+            get(routes::setup::get_setup_status),
+        )
+        .route(
+            "/api/setup/validate",
+            get(routes::setup::validate_tokens),
+        )
+        .route(
+            "/api/setup/workflows",
+            get(routes::setup::list_workflows),
+        )
+        .route(
+            "/api/setup/save",
+            post(routes::setup::save_config),
+        )
+        .route(
             "/api/sat/false-positive",
             post(routes::sat::label_false_positive),
         )

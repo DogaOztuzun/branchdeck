@@ -22,9 +22,13 @@ export type RunLogEntry = {
   ts: number;
 };
 
+/** Failure reasons that are eligible for retry on reconnect. */
+const RETRYABLE_REASONS = new Set(['heartbeat-stalled']);
+
 type TaskStoreState = {
   tasksByWorktree: Record<string, TaskInfo>;
   activeRun: RunInfo | null;
+  lastFailedRun: RunInfo | null;
   runLog: RunLogEntry[];
   pendingPermissions: PermissionRequestEvent[];
 };
@@ -47,6 +51,7 @@ function createTaskStore() {
   const [state, setState] = createStore<TaskStoreState>({
     tasksByWorktree: {},
     activeRun: null,
+    lastFailedRun: null,
     runLog: [],
     pendingPermissions: [],
   });
@@ -151,6 +156,15 @@ function createTaskStore() {
         }
       }
 
+      // Track retryable failed runs for reconnect retry (FR45)
+      if (
+        run.status === 'failed' &&
+        run.failureReason &&
+        RETRYABLE_REASONS.has(run.failureReason)
+      ) {
+        setState('lastFailedRun', { ...run });
+      }
+
       // Clear all pending permissions when run completes
       if (run.status !== 'blocked' && run.status !== 'running' && run.status !== 'starting') {
         setState('pendingPermissions', []);
@@ -244,11 +258,20 @@ function createTaskStore() {
       produce((s) => {
         s.tasksByWorktree = {};
         s.activeRun = null;
+        s.lastFailedRun = null;
         s.runLog = [];
         s.pendingPermissions = [];
       }),
     );
     logCounter = 0;
+  }
+
+  function retryableFailedRun(): RunInfo | null {
+    return state.lastFailedRun;
+  }
+
+  function clearRetryableRun() {
+    setState('lastFailedRun', null);
   }
 
   function getRunDuration(): number {
@@ -273,6 +296,8 @@ function createTaskStore() {
     getRunDuration,
     hasTaskForWorktree,
     removePermission,
+    retryableFailedRun,
+    clearRetryableRun,
   };
 }
 

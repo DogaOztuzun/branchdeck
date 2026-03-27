@@ -47,6 +47,7 @@ fn t4_unit_001_run_state_save_load_round_trip() {
         last_heartbeat: Some("2026-03-20T10:01:00+00:00".to_string()),
         elapsed_secs: 60,
         tab_id: Some("tab-1".to_string()),
+        failure_reason: None,
     };
 
     run_state::save_run_state(&task_path, &run);
@@ -242,6 +243,7 @@ fn run_info_json_round_trip() {
         last_heartbeat: Some("2026-03-20T10:05:00+00:00".to_string()),
         elapsed_secs: 300,
         tab_id: Some("tab-42".to_string()),
+        failure_reason: None,
     };
 
     let json = serde_json::to_string(&run).unwrap();
@@ -408,7 +410,7 @@ fn t4_sm_004_apply_functions_do_not_modify_run_count() {
     );
 
     let mut run = common::make_run_info(RunStatus::Running, Some("s1"));
-    let effects = run_effects::apply_mark_failed(&mut run, 1000, 2000);
+    let effects = run_effects::apply_mark_failed(&mut run, "sidecar crash", 1000, 2000);
     assert_eq!(
         effects.len(),
         5,
@@ -458,10 +460,15 @@ fn t4_sm_006_apply_mark_failed() {
     let started_at = 1_000_000;
     let now = 1_120_000; // 120 seconds (stale threshold)
 
-    let effects = run_effects::apply_mark_failed(&mut run, started_at, now);
+    let effects = run_effects::apply_mark_failed(&mut run, "network-timeout", started_at, now);
 
     assert_eq!(run.status, RunStatus::Failed);
     assert_eq!(run.elapsed_secs, 120);
+    assert_eq!(
+        run.failure_reason.as_deref(),
+        Some("network-timeout"),
+        "failure_reason must be stored in RunInfo"
+    );
 
     assert_eq!(effects.len(), 5);
     assert!(effects
@@ -551,7 +558,7 @@ fn t4_sm_edge_unknown_error_status() {
 #[test]
 fn t4_sm_edge_mark_failed_zero_timestamps() {
     let mut run = common::make_run_info(RunStatus::Running, Some("s1"));
-    let effects = run_effects::apply_mark_failed(&mut run, 0, 0);
+    let effects = run_effects::apply_mark_failed(&mut run, "sidecar crash", 0, 0);
     assert_eq!(run.status, RunStatus::Failed);
     assert_eq!(run.elapsed_secs, 0);
     assert_eq!(effects.len(), 5);

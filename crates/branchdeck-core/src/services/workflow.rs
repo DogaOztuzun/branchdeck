@@ -293,6 +293,11 @@ impl WorkflowRegistry {
         self.workflows.is_empty()
     }
 
+    /// Keep only workflows that satisfy the predicate.
+    pub fn retain<F: Fn(&WorkflowDef) -> bool>(&mut self, f: F) {
+        self.workflows.retain(|_, def| f(def));
+    }
+
     /// Find all workflows whose trigger type matches the event, applying filter criteria.
     ///
     /// Returns workflows in no guaranteed order. If multiple workflows match,

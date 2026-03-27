@@ -1,10 +1,15 @@
-import { createSignal } from 'solid-js';
+import { createEffect, createSignal } from 'solid-js';
 import type { InboxGroup, InboxItem, InboxItemStatus } from '../../types/inbox';
+import { getConnectionStore } from './connection';
 import { getKeyboardStore } from './keyboard';
 
 const [items, setItems] = createSignal<InboxItem[]>([]);
 const [selectedIndex, setSelectedIndex] = createSignal<number | null>(null);
 const [expandedId, setExpandedId] = createSignal<string | null>(null);
+const [isOffline, setIsOffline] = createSignal(false);
+
+/** Cache of last-known items for offline fallback. */
+let cachedItems: InboxItem[] = [];
 
 function flatItems(): InboxItem[] {
   // Return items in group order: needs-attention, ready-to-merge, completed
@@ -146,6 +151,43 @@ function registerInboxShortcuts() {
   });
 }
 
+/**
+ * Cache the current items for offline fallback.
+ * Called whenever items are successfully loaded from the API.
+ */
+function cacheItems(newItems: InboxItem[]) {
+  cachedItems = [...newItems];
+  setIsOffline(false);
+}
+
+/**
+ * Fall back to cached/last-known items when the API is unreachable.
+ * Sets offline indicator so the UI can show a subtle "Working offline" label.
+ */
+function loadLocalFallback() {
+  const connection = getConnectionStore();
+  const connStatus = connection.status();
+  if (connStatus === 'disconnected' || connStatus === 'reconnecting') {
+    if (cachedItems.length > 0) {
+      setItems(cachedItems);
+    }
+    setIsOffline(true);
+  }
+}
+
+/** React to connection state changes for automatic offline fallback. */
+function initOfflineReactivity() {
+  const connection = getConnectionStore();
+  createEffect(() => {
+    const connStatus = connection.status();
+    if (connStatus === 'disconnected' || connStatus === 'reconnecting') {
+      loadLocalFallback();
+    } else if (connStatus === 'connected') {
+      setIsOffline(false);
+    }
+  });
+}
+
 function loadMockData() {
   setItems([
     {
@@ -200,11 +242,19 @@ function loadMockData() {
   ]);
 }
 
+let inboxInitialized = false;
+
 export function getInboxStore() {
+  if (!inboxInitialized) {
+    inboxInitialized = true;
+    initOfflineReactivity();
+  }
+
   return {
     items,
     selectedIndex,
     expandedId,
+    isOffline,
     isMultiRepo,
     groups,
     flatItems,
@@ -217,6 +267,8 @@ export function getInboxStore() {
     setExpandedId,
     registerInboxShortcuts,
     loadMockData,
+    loadLocalFallback,
+    cacheItems,
     setItems,
   };
 }

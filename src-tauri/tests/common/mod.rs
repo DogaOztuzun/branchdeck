@@ -106,5 +106,6 @@ pub fn make_run_info(status: RunStatus, session_id: Option<&str>) -> RunInfo {
         last_heartbeat: None,
         elapsed_secs: 0,
         tab_id: Some("tab-1".to_string()),
+        failure_reason: None,
     }
 }

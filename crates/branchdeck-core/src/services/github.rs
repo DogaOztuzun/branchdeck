@@ -1,6 +1,7 @@
 use crate::error::AppError;
 use crate::models::github::{IssueSummary, PrFilter, PrSummary};
 use crate::models::{CheckRunInfo, PrInfo, ReviewInfo};
+use crate::services::github_retry;
 use git2::Repository;
 use log::{debug, error, info};
 use std::collections::HashMap;
@@ -14,6 +15,12 @@ static PR_CACHE: std::sync::OnceLock<PrCache> = std::sync::OnceLock::new();
 
 fn cache() -> &'static Mutex<HashMap<String, (Instant, Option<PrInfo>)>> {
     PR_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Expose the PR cache for invalidation by the retry module.
+#[allow(clippy::type_complexity)]
+pub(crate) fn pr_cache() -> Option<&'static Mutex<HashMap<String, (Instant, Option<PrInfo>)>>> {
+    PR_CACHE.get()
 }
 
 static CLIENT_CACHE: std::sync::OnceLock<Mutex<Option<(Instant, octocrab::Octocrab)>>> =
@@ -176,8 +183,33 @@ pub async fn resolve_github_token() -> Result<String, AppError> {
 
 /// # Errors
 /// Returns `AppError` if authentication or the GitHub API request fails.
+/// Retries transient errors with exponential backoff (NFR12).
 #[allow(clippy::too_many_lines)]
 pub async fn get_pr_for_branch(
+    owner: &str,
+    repo: &str,
+    branch: &str,
+) -> Result<Option<PrInfo>, AppError> {
+    let o = owner.to_owned();
+    let r = repo.to_owned();
+    let b = branch.to_owned();
+    let result = github_retry::with_retry("get_pr_for_branch", || {
+        let o = o.clone();
+        let r = r.clone();
+        let b = b.clone();
+        async move { get_pr_for_branch_inner(&o, &r, &b).await }
+    })
+    .await;
+
+    if result.is_err() {
+        github_retry::invalidate_pr_cache();
+    }
+
+    result
+}
+
+#[allow(clippy::too_many_lines)]
+async fn get_pr_for_branch_inner(
     owner: &str,
     repo: &str,
     branch: &str,
@@ -345,11 +377,32 @@ pub fn resolve_owner_repo(repo_path: &Path) -> Result<(String, String), AppError
 }
 
 /// List all open PRs for a GitHub repository.
+/// Retries transient errors with exponential backoff (NFR12).
 ///
 /// # Errors
 /// Returns `AppError` on authentication, API, or rate-limit failures.
 #[allow(clippy::too_many_lines)]
 pub async fn list_open_prs(
+    repo_path: &str,
+    filter: Option<PrFilter>,
+) -> Result<Vec<PrSummary>, AppError> {
+    let rp = repo_path.to_owned();
+    let f = filter.clone();
+    let result = github_retry::with_retry("list_open_prs", || {
+        let rp = rp.clone();
+        let f = f.clone();
+        async move { list_open_prs_inner(&rp, f).await }
+    })
+    .await;
+
+    if result.is_err() {
+        github_retry::invalidate_pr_cache();
+    }
+
+    result
+}
+
+async fn list_open_prs_inner(
     repo_path: &str,
     filter: Option<PrFilter>,
 ) -> Result<Vec<PrSummary>, AppError> {
@@ -477,10 +530,22 @@ pub async fn list_all_open_prs(
 /// List recently merged PRs for a single repo.
 /// Queries closed PRs and filters to those with `merged_at` set.
 /// Returns the 20 most recent closed PRs that were actually merged.
+/// Retries transient errors with exponential backoff (NFR12).
 ///
 /// # Errors
 /// Returns `AppError` on authentication, API, or rate-limit failures.
 pub async fn list_recently_merged_prs(
+    repo_path: &str,
+) -> Result<Vec<crate::models::github::MergedPrInfo>, AppError> {
+    let rp = repo_path.to_owned();
+    github_retry::with_retry("list_recently_merged_prs", || {
+        let rp = rp.clone();
+        async move { list_recently_merged_prs_inner(&rp).await }
+    })
+    .await
+}
+
+async fn list_recently_merged_prs_inner(
     repo_path: &str,
 ) -> Result<Vec<crate::models::github::MergedPrInfo>, AppError> {
     let (owner, repo_name) = resolve_owner_repo(Path::new(repo_path))?;
@@ -564,13 +629,14 @@ pub async fn list_all_recently_merged_prs(
 }
 
 /// Enrich a `PrSummary` with CI status and review decision by fetching checks and reviews.
+/// Uses `get_pr_for_branch` internally (which already retries on transient errors).
 ///
 /// # Errors
 /// Returns `AppError` on API failures.
 pub async fn enrich_pr_summary(repo_path: &str, pr: &mut PrSummary) -> Result<(), AppError> {
     let (owner, repo_name) = resolve_owner_repo(Path::new(repo_path))?;
 
-    // Fetch the full PR info using existing function
+    // Fetch the full PR info — get_pr_for_branch already has retry logic
     let pr_info = get_pr_for_branch(&owner, &repo_name, &pr.branch).await?;
 
     if let Some(info) = pr_info {
@@ -597,10 +663,25 @@ pub async fn enrich_pr_summary(repo_path: &str, pr: &mut PrSummary) -> Result<()
 }
 
 /// List open issues with a specific label for a single repo.
+/// Retries transient errors with exponential backoff (NFR12).
 ///
 /// # Errors
 /// Returns `AppError` on API or git failures.
 pub async fn list_issues_with_label(
+    repo_path: &str,
+    label: &str,
+) -> Result<Vec<IssueSummary>, AppError> {
+    let rp = repo_path.to_owned();
+    let lbl = label.to_owned();
+    github_retry::with_retry("list_issues_with_label", || {
+        let rp = rp.clone();
+        let lbl = lbl.clone();
+        async move { list_issues_with_label_inner(&rp, &lbl).await }
+    })
+    .await
+}
+
+async fn list_issues_with_label_inner(
     repo_path: &str,
     label: &str,
 ) -> Result<Vec<IssueSummary>, AppError> {

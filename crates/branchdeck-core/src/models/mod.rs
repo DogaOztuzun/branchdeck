@@ -11,6 +11,7 @@ pub mod agent;
 pub mod github;
 pub mod knowledge;
 pub mod orchestrator;
+pub mod project_config;
 pub mod run;
 pub mod sat;
 pub mod task;

@@ -28,6 +28,8 @@ pub struct RunInfo {
     pub elapsed_secs: u64,
     #[serde(default)]
     pub tab_id: Option<String>,
+    #[serde(default)]
+    pub failure_reason: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Branchdeck
+Comment=Autonomous development workspace — detects quality issues, implements fixes, verifies improvements
+Exec=branchdeck %u
+Icon=branchdeck
+Type=Application
+Categories=Development;IDE;
+Keywords=git;worktree;terminal;agent;development;
+StartupNotify=true
+StartupWMClass=branchdeck
+MimeType=x-scheme-handler/branchdeck;

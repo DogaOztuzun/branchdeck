@@ -27,6 +27,9 @@ rand = "0.9"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 subtle = "2"
 
+[package.metadata.generate-rpm]
+assets = [{ source = "../../target/release/branchdeck-daemon", dest = "/usr/local/bin/branchdeck-daemon", mode = "0755" }]
+
 [lints.rust]
 unsafe_code = "deny"
 

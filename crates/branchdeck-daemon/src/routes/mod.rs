@@ -5,5 +5,6 @@ pub mod mcp;
 pub mod repos;
 pub mod runs;
 pub mod sat;
+pub mod setup;
 pub mod updates;
 pub mod workflows;
