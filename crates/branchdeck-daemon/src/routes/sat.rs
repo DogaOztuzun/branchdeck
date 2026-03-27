@@ -10,6 +10,13 @@ use branchdeck_core::services::{github, sat_false_positive};
 pub async fn label_false_positive(
     Json(req): Json<FalsePositiveRequest>,
 ) -> Result<Json<FalsePositiveResponse>, crate::error::ApiError> {
+    if req.repo_path.trim().is_empty() {
+        return Err(branchdeck_core::error::AppError::Sat(
+            "repo_path is required".to_owned(),
+        )
+        .into());
+    }
+
     let response = sat_false_positive::label_false_positive_for_project(
         &req.repo_path,
         req.issue_number,
@@ -49,6 +56,13 @@ pub async fn label_false_positive(
 pub async fn get_false_positive_metrics(
     axum::extract::Query(params): axum::extract::Query<MetricsQuery>,
 ) -> Result<Json<FalsePositiveMetricsResponse>, crate::error::ApiError> {
+    if params.repo_path.trim().is_empty() {
+        return Err(branchdeck_core::error::AppError::Sat(
+            "repo_path is required".to_owned(),
+        )
+        .into());
+    }
+
     let response = sat_false_positive::get_metrics_for_project(&params.repo_path)?;
     Ok(Json(response))
 }

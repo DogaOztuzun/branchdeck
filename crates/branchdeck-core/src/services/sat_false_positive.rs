@@ -222,6 +222,16 @@ pub fn save_false_positive_data(
         AppError::Sat(format!("false positive data serialization error: {e}"))
     })?;
 
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| {
+            error!(
+                "Failed to create directory {}: {e}",
+                parent.display()
+            );
+            AppError::Sat(format!("failed to create directory: {e}"))
+        })?;
+    }
+
     crate::util::write_atomic(path, json.as_bytes()).map_err(|e| {
         error!(
             "Failed to write false positive data to {}: {e}",

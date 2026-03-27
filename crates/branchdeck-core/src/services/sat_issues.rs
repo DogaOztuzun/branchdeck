@@ -262,12 +262,13 @@ const SAFETY_CHECK_PREFIXES: &[(&str, &str)] = &[
 /// Returns `AppError::Sat` if a secret pattern is detected.
 pub fn check_for_secrets(text: &str) -> Result<(), AppError> {
     for &(name, prefix) in SAFETY_CHECK_PREFIXES {
-        if let Some(pos) = text.find(prefix) {
+        let uses_line_boundary = prefix.starts_with("-----");
+        let mut search_from = 0;
+        while let Some(rel_pos) = text[search_from..].find(prefix) {
+            let pos = search_from + rel_pos;
             // Check that what follows the prefix is long enough to be a real token.
-            // For multi-word patterns (e.g. PEM headers like "-----BEGIN RSA PRIVATE KEY-----"),
-            // use newline as the boundary instead of whitespace.
+            // For multi-word patterns (e.g. PEM headers), use newline as boundary.
             let rest = &text[pos..];
-            let uses_line_boundary = prefix.starts_with("-----");
             let token_end = if uses_line_boundary {
                 rest.find('\n').unwrap_or(rest.len())
             } else {
@@ -285,6 +286,8 @@ pub fn check_for_secrets(text: &str) -> Result<(), AppError> {
                     "issue body contains secret pattern ({name}) — issue creation blocked for safety"
                 )));
             }
+            // Move past this match and keep scanning
+            search_from = pos + token_end.max(1);
         }
     }
     Ok(())
@@ -937,6 +940,16 @@ mod tests {
     fn check_for_secrets_passes_clean_finding_text() {
         let text = "This is a normal SAT finding with no secrets at all.";
         assert!(check_for_secrets(text).is_ok());
+    }
+
+    #[test]
+    fn check_for_secrets_detects_second_occurrence() {
+        // First "sk-" match is too short to trigger, but the second is a real token
+        let text = "Use sk-abc prefix. Also sk-ant-api01234567890123456789 was leaked.";
+        let result = check_for_secrets(text);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("secret pattern"));
     }
 
     #[test]

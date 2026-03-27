@@ -93,6 +93,7 @@ pub fn execute_effects(effects: Vec<RunEffect>, emitter: &dyn EventEmitter, even
 #[must_use]
 pub fn map_sidecar_status(status: &str) -> (RunStatus, TaskStatus) {
     match status {
+        "succeeded" => (RunStatus::Succeeded, TaskStatus::Succeeded),
         "cancelled" => (RunStatus::Cancelled, TaskStatus::Cancelled),
         _ => (RunStatus::Failed, TaskStatus::Failed),
     }
@@ -307,6 +308,13 @@ mod tests {
         assert_eq!(run.status, RunStatus::Cancelled);
         assert_eq!(run.elapsed_secs, 0);
         assert!(!effects.is_empty());
+    }
+
+    #[test]
+    fn map_sidecar_status_succeeded() {
+        let (run_status, task_status) = map_sidecar_status("succeeded");
+        assert_eq!(run_status, RunStatus::Succeeded);
+        assert_eq!(task_status, TaskStatus::Succeeded);
     }
 
     #[test]
