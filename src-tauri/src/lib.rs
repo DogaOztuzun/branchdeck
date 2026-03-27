@@ -229,7 +229,13 @@ async fn check_for_update(app_handle: &tauri::AppHandle) {
         }
         Err(e) => {
             log::debug!("Update check failed: {e}");
-            let _ = app_handle.emit("update:status", "error");
+            let _ = app_handle.emit(
+                "update:status",
+                serde_json::json!({
+                    "status": "error",
+                    "error": format!("{e}"),
+                }),
+            );
         }
     }
 }

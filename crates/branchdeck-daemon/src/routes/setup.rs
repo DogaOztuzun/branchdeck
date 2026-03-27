@@ -23,9 +23,16 @@ pub async fn get_setup_status(
         .map_err(ApiError::from)
 }
 
-pub async fn validate_tokens() -> Json<TokenValidation> {
+pub async fn validate_tokens() -> Result<Json<TokenValidation>, ApiError> {
     debug!("Validating token availability");
-    Json(project_config::validate_tokens())
+    let result = tokio::task::spawn_blocking(project_config::validate_tokens)
+        .await
+        .map_err(|e| {
+            ApiError::from(branchdeck_core::error::AppError::Config(format!(
+                "token validation task failed: {e}"
+            )))
+        })?;
+    Ok(Json(result))
 }
 
 pub async fn list_workflows(
