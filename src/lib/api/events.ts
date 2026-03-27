@@ -30,6 +30,12 @@ function ensureConnection() {
     return;
   }
 
+  // Clear pending reconnect timer to prevent duplicate EventSource
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+
   const url = `${getBaseUrl()}/events`;
   registeredTypes.clear();
   eventSource = new EventSource(url);

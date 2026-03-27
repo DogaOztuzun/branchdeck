@@ -89,8 +89,12 @@ COPY --from=frontend-builder /build/dist /opt/branchdeck/dist
 COPY sidecar/ /opt/branchdeck/sidecar/
 RUN cd /opt/branchdeck/sidecar && bun install --production
 
+# Create non-root user
+RUN groupadd -r branchdeck && useradd -r -g branchdeck -d /home/branchdeck -s /bin/bash branchdeck
+
 # Create volume mount points
-RUN mkdir -p /repos /config
+RUN mkdir -p /repos /config /home/branchdeck/.config/branchdeck && \
+    chown -R branchdeck:branchdeck /repos /config /home/branchdeck
 
 # Environment variables
 ENV BRANCHDECK_PORT=13371
@@ -103,6 +107,8 @@ ENV BRANCHDECK_STATIC_DIR=/opt/branchdeck/dist
 EXPOSE 13371
 
 VOLUME ["/repos", "/config"]
+
+USER branchdeck
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:13371/api/health || exit 1

@@ -185,7 +185,8 @@ async fn run_serve(port: u16, bind: &str, workspace_arg: Option<PathBuf>, static
     activity_store.start_gc(300_000); // 5 minute TTL
 
     // Auto-enable auth when binding to non-localhost address
-    let require_auth = require_auth_flag || bind != "127.0.0.1";
+    let is_loopback = bind == "127.0.0.1" || bind == "::1" || bind == "localhost";
+    let require_auth = require_auth_flag || !is_loopback;
 
     let auth_token = if require_auth {
         match auth::load_token() {
@@ -272,14 +273,16 @@ async fn run_serve(port: u16, bind: &str, workspace_arg: Option<PathBuf>, static
             auth::auth_middleware,
         ));
 
+    // Swagger UI is auth-protected (leaks full API surface)
+    let protected_with_docs = protected.merge(
+        SwaggerUi::new("/api/docs/{_:.*}")
+            .url("/api/openapi.json", ApiDoc::openapi()),
+    );
+
     // Health endpoint is exempt from auth so monitoring tools and desktop startup can probe
     let mut app = Router::new()
         .route("/api/health", get(routes::health::health))
-        .merge(protected)
-        .merge(
-            SwaggerUi::new("/api/docs/{_:.*}")
-                .url("/api/openapi.json", ApiDoc::openapi()),
-        )
+        .merge(protected_with_docs)
         .layer(SetResponseHeaderLayer::overriding(
             http::HeaderName::from_static("x-branchdeck-schema"),
             schema_header_value,
