@@ -15,6 +15,7 @@ use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
 mod cli;
+mod cli_client;
 mod error;
 mod routes;
 mod state;
@@ -93,6 +94,36 @@ async fn main() {
 
     match cli.command {
         Commands::Serve { port, workspace } => run_serve(port, workspace).await,
+        Commands::Status { port, json } => {
+            let client = cli_client::DaemonClient::new(port, json);
+            std::process::exit(client.status().await);
+        }
+        Commands::Trigger {
+            workflow,
+            port,
+            task_path,
+            worktree_path,
+            json,
+        } => {
+            let client = cli_client::DaemonClient::new(port, json);
+            std::process::exit(
+                client
+                    .trigger(&workflow, task_path.as_deref(), worktree_path.as_deref())
+                    .await,
+            );
+        }
+        Commands::Runs { action, port, json } => {
+            let client = cli_client::DaemonClient::new(port, json);
+            let code = match action {
+                Some(cli::RunsAction::Cancel { id }) => client.cancel_run(&id).await,
+                None => client.list_runs().await,
+            };
+            std::process::exit(code);
+        }
+        Commands::Update { port, json } => {
+            let client = cli_client::DaemonClient::new(port, json);
+            std::process::exit(client.update());
+        }
     }
 }
 

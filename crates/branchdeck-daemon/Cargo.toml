@@ -22,6 +22,7 @@ utoipa-swagger-ui = { version = "9", features = ["axum"] }
 tower-http = { version = "0.6", features = ["set-header"] }
 http = "1"
 ulid = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 [lints.rust]
 unsafe_code = "deny"
