@@ -1,4 +1,3 @@
-import { listen } from '@tauri-apps/api/event';
 import { batch } from 'solid-js';
 import { createStore, produce } from 'solid-js/store';
 import type {
@@ -9,6 +8,7 @@ import type {
   ToolCallEvent,
 } from '../../types/run';
 import type { TaskInfo } from '../../types/task';
+import { onEvent } from '../api/events';
 import { getRunStatus } from '../commands/run';
 import { listTasks } from '../commands/task';
 import { getAgentStore } from './agent';
@@ -53,7 +53,7 @@ function createTaskStore() {
   });
 
   let logCounter = 0;
-  const listenPromises: Promise<() => void>[] = [];
+  const sseUnsubscribes: (() => void)[] = [];
   let listening = false;
 
   async function loadTasks(worktreePaths: string[]) {
@@ -213,48 +213,38 @@ function createTaskStore() {
     );
   }
 
-  async function startListening() {
+  function startListening() {
     if (listening) return;
     listening = true;
 
-    try {
-      listenPromises.push(
-        listen<TaskInfo>('task:updated', (e) => {
-          handleTaskUpdated(e.payload);
-        }),
-      );
-      listenPromises.push(
-        listen<RunInfo>('run:status_changed', (e) => {
-          handleRunStatusChanged(e.payload);
-        }),
-      );
-      listenPromises.push(
-        listen<RunStepEvent | AssistantTextEvent | ToolCallEvent>('run:step', (e) => {
-          handleRunStep(e.payload);
-        }),
-      );
-      listenPromises.push(
-        listen<PermissionRequestEvent>('run:permission_request', (e) => {
-          handlePermissionRequest(e.payload);
-        }),
-      );
-      await Promise.all(listenPromises);
-    } catch {
-      listening = false;
-    }
+    sseUnsubscribes.push(
+      onEvent<TaskInfo>('workflow:task_updated', (envelope) => {
+        handleTaskUpdated(envelope.data);
+      }),
+    );
+    sseUnsubscribes.push(
+      onEvent<RunInfo>('run:status_changed', (envelope) => {
+        handleRunStatusChanged(envelope.data);
+      }),
+    );
+    sseUnsubscribes.push(
+      onEvent<RunStepEvent | AssistantTextEvent | ToolCallEvent>('run:step', (envelope) => {
+        handleRunStep(envelope.data);
+      }),
+    );
+    sseUnsubscribes.push(
+      onEvent<PermissionRequestEvent>('run:permission_request', (envelope) => {
+        handlePermissionRequest(envelope.data);
+      }),
+    );
   }
 
-  async function stopListening() {
+  function stopListening() {
     if (!listening) return;
-    for (const promise of listenPromises) {
-      try {
-        const unlisten = await promise;
-        unlisten();
-      } catch {
-        // listener never registered
-      }
+    for (const unsub of sseUnsubscribes) {
+      unsub();
     }
-    listenPromises.length = 0;
+    sseUnsubscribes.length = 0;
     listening = false;
   }
 

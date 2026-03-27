@@ -1,58 +1,59 @@
-import { invoke } from '@tauri-apps/api/core';
-import { error as logError } from '@tauri-apps/plugin-log';
 import type { PrSummary } from '../../types/github';
 import type { ApprovedPlan, LifecycleEvent, RunningEntry } from '../../types/lifecycle';
+import { apiGet, apiPost } from '../api/client';
 
 export async function relaunchPr(prKey: string, worktreePath: string): Promise<void> {
   try {
-    await invoke('relaunch_pr_cmd', { prKey, worktreePath });
+    await apiPost('/lifecycle/relaunch', { prKey, worktreePath });
   } catch (e) {
-    logError(`relaunchPr failed: ${e}`);
+    console.error(`relaunchPr failed: ${e}`);
     throw e;
   }
 }
 
 export async function skipPr(prKey: string): Promise<void> {
   try {
-    await invoke('skip_pr_cmd', { prKey });
+    await apiPost('/lifecycle/skip', { prKey });
   } catch (e) {
-    logError(`skipPr failed: ${e}`);
+    console.error(`skipPr failed: ${e}`);
     throw e;
   }
 }
 
 export async function getLifecycles(): Promise<LifecycleEvent[]> {
   try {
-    return await invoke<LifecycleEvent[]>('get_lifecycles_cmd');
+    return await apiGet<LifecycleEvent[]>('/lifecycle/events');
   } catch (e) {
-    logError(`getLifecycles failed: ${e}`);
+    console.error(`getLifecycles failed: ${e}`);
     throw e;
   }
 }
 
 export async function toggleOrchestrator(enabled: boolean): Promise<void> {
   try {
-    await invoke('toggle_orchestrator_cmd', { enabled });
+    await apiPost('/lifecycle/orchestrator/toggle', { enabled });
   } catch (e) {
-    logError(`toggleOrchestrator failed: ${e}`);
+    console.error(`toggleOrchestrator failed: ${e}`);
     throw e;
   }
 }
 
 export async function shepherdPr(repoPath: string, prNumber: number): Promise<void> {
   try {
-    await invoke('orchestrator_shepherd_pr_cmd', { repoPath, prNumber });
+    await apiPost('/lifecycle/shepherd', { repoPath, prNumber });
   } catch (e) {
-    logError(`shepherdPr failed: ${e}`);
+    console.error(`shepherdPr failed: ${e}`);
     throw e;
   }
 }
 
 export async function readAnalysis(worktreePath: string): Promise<string | null> {
   try {
-    return await invoke<string | null>('read_analysis_cmd', { worktreePath });
+    return await apiGet<string | null>(
+      `/lifecycle/analysis?worktreePath=${encodeURIComponent(worktreePath)}`,
+    );
   } catch (e) {
-    logError(`readAnalysis failed: ${e}`);
+    console.error(`readAnalysis failed: ${e}`);
     throw e;
   }
 }
@@ -62,27 +63,27 @@ export async function writeApproval(
   approvedPlan: ApprovedPlan,
 ): Promise<void> {
   try {
-    await invoke('write_approval_cmd', { worktreePath, approvedPlan });
+    await apiPost('/lifecycle/approval', { worktreePath, approvedPlan });
   } catch (e) {
-    logError(`writeApproval failed: ${e}`);
+    console.error(`writeApproval failed: ${e}`);
     throw e;
   }
 }
 
 export async function listDiscoveredPrs(): Promise<PrSummary[]> {
   try {
-    return await invoke<PrSummary[]>('list_discovered_prs_cmd');
+    return await apiGet<PrSummary[]>('/lifecycle/discovered-prs');
   } catch (e) {
-    logError(`listDiscoveredPrs failed: ${e}`);
+    console.error(`listDiscoveredPrs failed: ${e}`);
     throw e;
   }
 }
 
 export async function getRunningEntries(): Promise<RunningEntry[]> {
   try {
-    return await invoke<RunningEntry[]>('get_running_entries_cmd');
+    return await apiGet<RunningEntry[]>('/lifecycle/running');
   } catch (e) {
-    logError(`getRunningEntries failed: ${e}`);
+    console.error(`getRunningEntries failed: ${e}`);
     throw e;
   }
 }

@@ -1,4 +1,3 @@
-import { listen } from '@tauri-apps/api/event';
 import { batch, createMemo } from 'solid-js';
 import { createStore, produce } from 'solid-js/store';
 import type { PrSummary } from '../../types/github';
@@ -8,6 +7,7 @@ import type {
   LifecycleTimelineEntry,
   TriagePr,
 } from '../../types/lifecycle';
+import { onEvent } from '../api/events';
 import { listOpenPrs } from '../commands/github';
 import {
   getLifecycles,
@@ -39,8 +39,7 @@ function createLifecycleStore() {
     timelines: {},
   });
 
-  let lifecycleUnlisten: (() => void) | null = null;
-  let discoveredUnlisten: (() => void) | null = null;
+  const sseUnsubscribes: (() => void)[] = [];
 
   function handleLifecycleEvent(event: LifecycleEvent) {
     batch(() => {
@@ -115,22 +114,24 @@ function createLifecycleStore() {
     }
   }
 
-  async function startListening() {
-    if (!lifecycleUnlisten) {
-      const unlisten = await listen<LifecycleEvent>('lifecycle:updated', (e) => {
-        handleLifecycleEvent(e.payload);
-      });
-      lifecycleUnlisten = unlisten;
-    }
+  function startListening() {
+    // Re-entry guard
+    if (sseUnsubscribes.length > 0) return;
 
-    if (!discoveredUnlisten) {
-      const unlisten = await listen<PrSummary[]>('pr:discovered', (e) => {
+    sseUnsubscribes.push(
+      onEvent<LifecycleEvent>('workflow:lifecycle_updated', (envelope) => {
+        handleLifecycleEvent(envelope.data);
+      }),
+    );
+
+    sseUnsubscribes.push(
+      onEvent<PrSummary[]>('workflow:pr_discovered', (envelope) => {
         batch(() => {
           setState(
             produce((s) => {
               // Full snapshot replace — if a PR is gone, it disappears
               const newMap: Record<string, PrSummary> = {};
-              for (const pr of e.payload) {
+              for (const pr of envelope.data) {
                 const key = `${pr.repoName}#${pr.number}`;
                 newMap[key] = pr;
               }
@@ -138,20 +139,15 @@ function createLifecycleStore() {
             }),
           );
         });
-      });
-      discoveredUnlisten = unlisten;
-    }
+      }),
+    );
   }
 
-  async function stopListening() {
-    if (lifecycleUnlisten) {
-      lifecycleUnlisten();
-      lifecycleUnlisten = null;
+  function stopListening() {
+    for (const unsub of sseUnsubscribes) {
+      unsub();
     }
-    if (discoveredUnlisten) {
-      discoveredUnlisten();
-      discoveredUnlisten = null;
-    }
+    sseUnsubscribes.length = 0;
   }
 
   async function loadInitial() {

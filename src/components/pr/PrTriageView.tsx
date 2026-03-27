@@ -1,6 +1,6 @@
-import { listen } from '@tauri-apps/api/event';
 import { ArrowLeft, RefreshCw } from 'lucide-solid';
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { onEvent } from '../../lib/api/events';
 import { getActivityStore } from '../../lib/stores/activity';
 import { getLayoutStore } from '../../lib/stores/layout';
 import { getLifecycleStore, groupTriagePrs } from '../../lib/stores/lifecycle';
@@ -50,7 +50,7 @@ export function PrTriageView() {
   const [tickMs, setTickMs] = createSignal(Date.now());
   const [showFailingOnly, setShowFailingOnly] = createSignal(false);
 
-  let unlistenStep: (() => void) | null = null;
+  let unsubStep: (() => void) | null = null;
   let tickInterval: ReturnType<typeof setInterval> | null = null;
 
   onMount(() => {
@@ -58,18 +58,16 @@ export function PrTriageView() {
     lifecycleStore.loadInitial();
     overnight.recordSessionStart();
 
-    listen<RunStepEvent>('run:step', (e) => {
-      const step = e.payload;
+    unsubStep = onEvent<RunStepEvent>('run:step', (envelope) => {
+      const step = envelope.data;
       setLastSteps((prev) => ({ ...prev, [step.sessionId]: step }));
-    }).then((fn) => {
-      unlistenStep = fn;
     });
 
     tickInterval = setInterval(() => setTickMs(Date.now()), 1000);
   });
 
   onCleanup(() => {
-    unlistenStep?.();
+    unsubStep?.();
     if (tickInterval) clearInterval(tickInterval);
   });
 

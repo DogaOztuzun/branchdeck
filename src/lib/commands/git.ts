@@ -1,5 +1,3 @@
-import { invoke } from '@tauri-apps/api/core';
-import { error as logError } from '@tauri-apps/plugin-log';
 import type {
   BranchInfo,
   FileStatus,
@@ -8,39 +6,42 @@ import type {
   WorktreeInfo,
   WorktreePreview,
 } from '../../types/git';
+import { apiDelete, apiGet, apiPost } from '../api/client';
 
 export async function addRepository(): Promise<RepoInfo | null> {
   try {
-    return await invoke<RepoInfo | null>('add_repository');
+    return await apiPost<RepoInfo | null>('/repos');
   } catch (e) {
-    logError(`addRepository failed: ${e}`);
+    console.error(`addRepository failed: ${e}`);
     throw e;
   }
 }
 
 export async function listRepositories(): Promise<RepoInfo[]> {
   try {
-    return await invoke<RepoInfo[]>('list_repositories');
+    const detail = await apiGet<{ repo: RepoInfo; worktrees: WorktreeInfo[] }>('/repos');
+    return [detail.repo];
   } catch (e) {
-    logError(`listRepositories failed: ${e}`);
+    console.error(`listRepositories failed: ${e}`);
     throw e;
   }
 }
 
 export async function removeRepository(repoPath: string): Promise<void> {
   try {
-    await invoke('remove_repository', { repoPath });
+    await apiDelete(`/repos?repoPath=${encodeURIComponent(repoPath)}`);
   } catch (e) {
-    logError(`removeRepository failed: ${e}`);
+    console.error(`removeRepository failed: ${e}`);
     throw e;
   }
 }
 
-export async function listWorktrees(repoPath: string): Promise<WorktreeInfo[]> {
+export async function listWorktrees(_repoPath: string): Promise<WorktreeInfo[]> {
   try {
-    return await invoke<WorktreeInfo[]>('list_worktrees_cmd', { repoPath });
+    const detail = await apiGet<{ repo: RepoInfo; worktrees: WorktreeInfo[] }>('/repos');
+    return detail.worktrees;
   } catch (e) {
-    logError(`listWorktrees failed: ${e}`);
+    console.error(`listWorktrees failed: ${e}`);
     throw e;
   }
 }
@@ -52,14 +53,14 @@ export async function createWorktree(
   baseBranch?: string,
 ): Promise<WorktreeInfo> {
   try {
-    return await invoke<WorktreeInfo>('create_worktree_cmd', {
+    return await apiPost<WorktreeInfo>('/repos/worktrees', {
       repoPath,
       name,
       branch,
       baseBranch,
     });
   } catch (e) {
-    logError(`createWorktree failed: ${e}`);
+    console.error(`createWorktree failed: ${e}`);
     throw e;
   }
 }
@@ -70,27 +71,31 @@ export async function removeWorktree(
   deleteBranch: boolean,
 ): Promise<void> {
   try {
-    await invoke('remove_worktree_cmd', { repoPath, worktreeName, deleteBranch });
+    await apiDelete(
+      `/repos/worktrees/${encodeURIComponent(worktreeName)}?repoPath=${encodeURIComponent(repoPath)}&deleteBranch=${deleteBranch}`,
+    );
   } catch (e) {
-    logError(`removeWorktree failed: ${e}`);
+    console.error(`removeWorktree failed: ${e}`);
     throw e;
   }
 }
 
 export async function previewWorktree(repoPath: string, name: string): Promise<WorktreePreview> {
   try {
-    return await invoke<WorktreePreview>('preview_worktree_cmd', { repoPath, name });
+    return await apiGet<WorktreePreview>(
+      `/repos/worktrees/${encodeURIComponent(name)}/preview?repoPath=${encodeURIComponent(repoPath)}`,
+    );
   } catch (e) {
-    logError(`previewWorktree failed: ${e}`);
+    console.error(`previewWorktree failed: ${e}`);
     throw e;
   }
 }
 
 export async function listBranches(repoPath: string): Promise<BranchInfo[]> {
   try {
-    return await invoke<BranchInfo[]>('list_branches_cmd', { repoPath });
+    return await apiGet<BranchInfo[]>(`/repos/branches?repoPath=${encodeURIComponent(repoPath)}`);
   } catch (e) {
-    logError(`listBranches failed: ${e}`);
+    console.error(`listBranches failed: ${e}`);
     throw e;
   }
 }
@@ -100,18 +105,22 @@ export async function getBranchTracking(
   branchName: string,
 ): Promise<TrackingInfo | null> {
   try {
-    return await invoke<TrackingInfo | null>('get_branch_tracking_cmd', { repoPath, branchName });
+    return await apiGet<TrackingInfo | null>(
+      `/repos/branches/${encodeURIComponent(branchName)}/tracking?repoPath=${encodeURIComponent(repoPath)}`,
+    );
   } catch (e) {
-    logError(`getBranchTracking failed: ${e}`);
+    console.error(`getBranchTracking failed: ${e}`);
     throw e;
   }
 }
 
 export async function getRepoStatus(worktreePath: string): Promise<FileStatus[]> {
   try {
-    return await invoke<FileStatus[]>('get_repo_status', { worktreePath });
+    return await apiGet<FileStatus[]>(
+      `/repos/status?worktreePath=${encodeURIComponent(worktreePath)}`,
+    );
   } catch (e) {
-    logError(`getRepoStatus failed: ${e}`);
+    console.error(`getRepoStatus failed: ${e}`);
     throw e;
   }
 }
