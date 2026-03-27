@@ -1,0 +1,11 @@
+[advisories]
+# Ignore unmaintained transitive dependencies we cannot control
+ignore = [
+    # GTK3 bindings — pulled in by Tauri on Linux, no alternative
+    "RUSTSEC-2024-0413",
+    "RUSTSEC-2024-0416",
+    # bincode — transitive dep, unmaintained but no security issue
+    "RUSTSEC-2025-0141",
+    # fxhash — transitive dep, unmaintained but no security issue
+    "RUSTSEC-2025-0057",
+]
