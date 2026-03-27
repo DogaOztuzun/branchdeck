@@ -15,9 +15,17 @@ pub enum Commands {
         #[arg(long, default_value_t = 13371, env = "BRANCHDECK_PORT")]
         port: u16,
 
+        /// Address to bind to (use 0.0.0.0 for Docker/remote access)
+        #[arg(long, default_value = "127.0.0.1", env = "BRANCHDECK_BIND")]
+        bind: String,
+
         /// Workspace root directory (defaults to current directory)
         #[arg(long, env = "BRANCHDECK_WORKSPACE")]
         workspace: Option<std::path::PathBuf>,
+
+        /// Directory containing static frontend files to serve
+        #[arg(long, env = "BRANCHDECK_STATIC_DIR")]
+        static_dir: Option<std::path::PathBuf>,
     },
 
     /// Show daemon health, active runs, and workflow count

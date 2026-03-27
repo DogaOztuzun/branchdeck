@@ -1,0 +1,13 @@
+target/
+node_modules/
+.git/
+.branchdeck/
+_bmad/
+_bmad-output/
+sat/
+e2e/
+docs/
+*.md
+!sidecar/package.json
+.claude/
+.github/

@@ -19,6 +19,7 @@ jobs:
     outputs:
       frontend: ${{ steps.filter.outputs.frontend }}
       rust: ${{ steps.filter.outputs.rust }}
+      docker: ${{ steps.filter.outputs.docker }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -34,6 +35,11 @@ jobs:
               - 'vite.config.*'
             rust:
               - 'src-tauri/**'
+              - 'crates/**'
+            docker:
+              - 'Dockerfile'
+              - 'docker-compose.yml'
+              - '.dockerignore'
 
   check-frontend:
     name: Frontend (Biome + build)
@@ -79,6 +85,28 @@ jobs:
       - name: Tests
         working-directory: src-tauri
         run: cargo test
+
+  docker-smoke:
+    name: Docker (build + health check)
+    needs: changes
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && (
+        needs.changes.outputs.frontend == 'true' ||
+        needs.changes.outputs.rust == 'true' ||
+        needs.changes.outputs.docker == 'true'
+      ))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build -t branchdeck-test .
+      - name: Run container and health check
+        run: |
+          CONTAINER_ID=$(docker run --rm -d -p 13371:13371 branchdeck-test)
+          sleep 5
+          curl -f http://localhost:13371/api/health
+          docker stop "$CONTAINER_ID"
 
   check-rust-full:
     name: Rust (test + build)

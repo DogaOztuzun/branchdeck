@@ -10,6 +10,7 @@ use clap::Parser;
 use log::{error, info, warn};
 use std::path::PathBuf;
 use std::sync::Arc;
+use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::SetResponseHeaderLayer;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
@@ -93,7 +94,12 @@ async fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Serve { port, workspace } => run_serve(port, workspace).await,
+        Commands::Serve {
+            port,
+            bind,
+            workspace,
+            static_dir,
+        } => run_serve(port, &bind, workspace, static_dir).await,
         Commands::Status { port, json } => {
             let client = cli_client::DaemonClient::new(port, json);
             std::process::exit(client.status().await);
@@ -127,7 +133,7 @@ async fn main() {
     }
 }
 
-async fn run_serve(port: u16, workspace_arg: Option<PathBuf>) {
+async fn run_serve(port: u16, bind: &str, workspace_arg: Option<PathBuf>, static_dir: Option<PathBuf>) {
     let workspace_root = workspace_arg.unwrap_or_else(|| {
         std::env::current_dir().unwrap_or_else(|e| {
             error!("Failed to determine current directory: {e}");
@@ -168,7 +174,7 @@ async fn run_serve(port: u16, workspace_arg: Option<PathBuf>) {
             http::HeaderValue::from_static("unknown")
         });
 
-    let app = Router::new()
+    let mut app = Router::new()
         .route("/api/health", get(routes::health::health))
         .route("/api/events", get(routes::events::sse_handler))
         .route(
@@ -206,7 +212,29 @@ async fn run_serve(port: u16, workspace_arg: Option<PathBuf>) {
         ))
         .with_state(app_state);
 
-    let bind_addr = format!("127.0.0.1:{port}");
+    // Serve static frontend files if the directory exists (Docker/web mode)
+    let resolved_static_dir = static_dir
+        .or_else(|| {
+            let candidate = std::env::current_exe()
+                .ok()?
+                .parent()?
+                .join("dist");
+            if candidate.is_dir() { Some(candidate) } else { None }
+        });
+
+    if let Some(dir) = resolved_static_dir {
+        if dir.is_dir() {
+            let index_html = dir.join("index.html");
+            let serve_dir = ServeDir::new(&dir)
+                .not_found_service(ServeFile::new(&index_html));
+            app = app.fallback_service(serve_dir);
+            info!("Serving static frontend from {}", dir.display());
+        } else {
+            warn!("Static dir {} does not exist, skipping frontend serving", dir.display());
+        }
+    }
+
+    let bind_addr = format!("{bind}:{port}");
     info!("branchdeck-daemon starting on {bind_addr}");
 
     let listener = match tokio::net::TcpListener::bind(&bind_addr).await {
