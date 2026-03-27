@@ -11,10 +11,9 @@ pub async fn label_false_positive(
     Json(req): Json<FalsePositiveRequest>,
 ) -> Result<Json<FalsePositiveResponse>, crate::error::ApiError> {
     if req.repo_path.trim().is_empty() {
-        return Err(branchdeck_core::error::AppError::Sat(
-            "repo_path is required".to_owned(),
-        )
-        .into());
+        return Err(
+            branchdeck_core::error::AppError::Sat("repo_path is required".to_owned()).into(),
+        );
     }
 
     let response = sat_false_positive::label_false_positive_for_project(
@@ -26,15 +25,15 @@ pub async fn label_false_positive(
     )?;
 
     // Apply the GitHub label (non-fatal — local record is the primary concern)
+    // Use the canonicalized owner/repo from the record, not the raw request path
     let github_label = response.record.label.github_label().to_string();
-    let (owner, repo_name) =
-        match github::resolve_owner_repo(std::path::Path::new(&req.repo_path)) {
-            Ok(pair) => pair,
-            Err(e) => {
-                error!("Could not resolve owner/repo for GitHub label: {e}");
-                return Ok(Json(response));
-            }
-        };
+    let (owner, repo_name) = match response.record.repo.split_once('/') {
+        Some((o, r)) => (o.to_string(), r.to_string()),
+        None => {
+            error!("Malformed repo in FP record: {:?}", response.record.repo);
+            return Ok(Json(response));
+        }
+    };
     if let Err(e) =
         github::add_labels_to_issue(&owner, &repo_name, req.issue_number, &[github_label]).await
     {
@@ -57,10 +56,9 @@ pub async fn get_false_positive_metrics(
     axum::extract::Query(params): axum::extract::Query<MetricsQuery>,
 ) -> Result<Json<FalsePositiveMetricsResponse>, crate::error::ApiError> {
     if params.repo_path.trim().is_empty() {
-        return Err(branchdeck_core::error::AppError::Sat(
-            "repo_path is required".to_owned(),
-        )
-        .into());
+        return Err(
+            branchdeck_core::error::AppError::Sat("repo_path is required".to_owned()).into(),
+        );
     }
 
     let response = sat_false_positive::get_metrics_for_project(&params.repo_path)?;

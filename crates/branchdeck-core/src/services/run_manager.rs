@@ -461,11 +461,7 @@ impl RunManager {
             let cleanup_effects = vec![run_effects::RunEffect::MarkWorktreeForCleanup {
                 path: wt_path.clone(),
             }];
-            run_effects::execute_effects(
-                cleanup_effects,
-                self.emitter.as_ref(),
-                &self.event_bus,
-            );
+            run_effects::execute_effects(cleanup_effects, self.emitter.as_ref(), &self.event_bus);
         }
 
         // Clean up manager state
@@ -1034,7 +1030,9 @@ pub async fn enqueue_run(
     Ok(manager.get_queue_status())
 }
 
-/// Cancel a run by session ID. Matches against the active run.
+/// Cancel a run by ID. Matches against the active run by `session_id` first,
+/// then falls back to `task_path` (handles `Starting` state where `session_id`
+/// is still `None`).
 ///
 /// # Errors
 ///
@@ -1042,14 +1040,14 @@ pub async fn enqueue_run(
 pub async fn force_cancel_run(state: RunManagerState, run_id: &str) -> Result<RunInfo, AppError> {
     let mut manager = state.lock().await;
 
-    // Check if active run matches by session_id
+    // Check if active run matches by session_id or task_path
     if let Some(ref active) = manager.active_run {
-        if active.session_id.as_deref() == Some(run_id) {
+        if active.session_id.as_deref() == Some(run_id) || active.task_path == run_id {
             return manager.cancel_run();
         }
     }
 
-    error!("No active run with session id {run_id}");
+    error!("No active run matching id {run_id}");
     Err(AppError::RunError(format!(
         "No active run with id {run_id}"
     )))

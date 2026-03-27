@@ -103,16 +103,21 @@ pub fn compute_false_positive_metrics(
         .map(|c| c.false_positives)
         .sum();
 
-    let total_false_positives = fp_data.records.len() + cycle_fps;
-
-    // Total issues created from cycle learnings. When cycles exist, FP records
-    // refer to issues already counted in cycle.issues_found — don't double-count.
-    // Only use FP records as the denominator when no cycles exist yet.
+    // Total issues created from cycle learnings.
     let cycle_issues: usize = learnings
         .cycle_learnings
         .iter()
         .map(|c| c.issues_found)
         .sum();
+
+    // When cycles exist, both FP records and cycle FPs refer to the same
+    // issue pool — use cycle totals only to avoid double-counting.
+    // When no cycles exist yet, use FP records as both numerator and denominator.
+    let total_false_positives = if cycle_issues > 0 {
+        cycle_fps
+    } else {
+        fp_data.records.len()
+    };
     let total_issues_created = if cycle_issues > 0 {
         cycle_issues
     } else {
@@ -213,10 +218,7 @@ pub fn load_false_positive_data(path: &Path) -> Result<FalsePositiveData, AppErr
 ///
 /// # Errors
 /// Returns `AppError::Sat` if serialization or write fails.
-pub fn save_false_positive_data(
-    path: &Path,
-    data: &FalsePositiveData,
-) -> Result<(), AppError> {
+pub fn save_false_positive_data(path: &Path, data: &FalsePositiveData) -> Result<(), AppError> {
     let json = serde_json::to_string_pretty(data).map_err(|e| {
         error!("Failed to serialize false positive data: {e}");
         AppError::Sat(format!("false positive data serialization error: {e}"))
@@ -224,10 +226,7 @@ pub fn save_false_positive_data(
 
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| {
-            error!(
-                "Failed to create directory {}: {e}",
-                parent.display()
-            );
+            error!("Failed to create directory {}: {e}", parent.display());
             AppError::Sat(format!("failed to create directory: {e}"))
         })?;
     }
@@ -258,7 +257,14 @@ pub fn record_false_positive(
     fp_data_path: &Path,
     learnings_path: &Path,
     record: &FalsePositiveRecord,
-) -> Result<(FalsePositiveData, FalsePositiveMetrics, ClassificationAccuracy), AppError> {
+) -> Result<
+    (
+        FalsePositiveData,
+        FalsePositiveMetrics,
+        ClassificationAccuracy,
+    ),
+    AppError,
+> {
     let mut fp_data = load_false_positive_data(fp_data_path)?;
 
     // Dedup: don't re-append if this issue+repo is already recorded
@@ -277,7 +283,9 @@ pub fn record_false_positive(
         save_false_positive_data(fp_data_path, &fp_data)?;
         info!(
             "Recorded false positive for issue #{} in {} (total: {})",
-            record.issue_number, record.repo, fp_data.records.len()
+            record.issue_number,
+            record.repo,
+            fp_data.records.len()
         );
     }
 
@@ -373,10 +381,7 @@ mod tests {
     use super::*;
     use crate::models::sat::{SatCycleLearning, SatLearningsFile, VerificationOutcome};
 
-    fn make_record(
-        issue_number: u64,
-        label: FalsePositiveLabel,
-    ) -> FalsePositiveRecord {
+    fn make_record(issue_number: u64, label: FalsePositiveLabel) -> FalsePositiveRecord {
         build_false_positive_record(
             issue_number,
             "owner/repo",
@@ -390,21 +395,19 @@ mod tests {
     fn make_learnings_with_cycles() -> SatLearningsFile {
         SatLearningsFile {
             learnings: Vec::new(),
-            cycle_learnings: vec![
-                SatCycleLearning {
-                    recorded_at: "2026-03-26T12:00:00Z".into(),
-                    run_id: "run-1".into(),
-                    merged_pr_number: 42,
-                    repo: "owner/repo".into(),
-                    cycle_iteration: 1,
-                    issues_found: 10,
-                    issues_fixed: 7,
-                    false_positives: 1,
-                    score_before: 40,
-                    score_after: 75,
-                    outcome: VerificationOutcome::Verified,
-                },
-            ],
+            cycle_learnings: vec![SatCycleLearning {
+                recorded_at: "2026-03-26T12:00:00Z".into(),
+                run_id: "run-1".into(),
+                merged_pr_number: 42,
+                repo: "owner/repo".into(),
+                cycle_iteration: 1,
+                issues_found: 10,
+                issues_fixed: 7,
+                false_positives: 1,
+                score_before: 40,
+                score_after: 75,
+                outcome: VerificationOutcome::Verified,
+            }],
         }
     }
 
@@ -506,14 +509,14 @@ mod tests {
         let learnings = make_learnings_with_cycles();
         let metrics = compute_false_positive_metrics(&fp_data, &learnings);
 
-        // total FPs = 1 (record) + 1 (from cycle) = 2
-        assert_eq!(metrics.total_false_positives, 2);
-        // total issues = 10 (from cycle only — FP records don't add to denominator
-        // when cycles exist, since those issues are already counted)
+        // total FPs = 1 (from cycle only — manual records are subset of cycle
+        // issues, so only cycle_fps counts when cycles exist)
+        assert_eq!(metrics.total_false_positives, 1);
+        // total issues = 10 (from cycle only — same dedup logic)
         assert_eq!(metrics.total_issues_created, 10);
-        // Rate = 2/10
+        // Rate = 1/10 = 0.1
         let rate = metrics.false_positive_rate.unwrap();
-        assert!((rate - 0.2).abs() < f64::EPSILON);
+        assert!((rate - 0.1).abs() < f64::EPSILON);
     }
 
     // -- Classification accuracy with FP data ---------------------------------
@@ -564,7 +567,10 @@ mod tests {
     #[test]
     fn save_and_load_fp_data_round_trip() {
         let tmp = tempfile::TempDir::new().unwrap();
-        let path = tmp.path().join(".branchdeck").join("sat-false-positives.json");
+        let path = tmp
+            .path()
+            .join(".branchdeck")
+            .join("sat-false-positives.json");
 
         let data = FalsePositiveData {
             records: vec![
@@ -618,13 +624,11 @@ mod tests {
         let record = make_record(42, FalsePositiveLabel::Runner);
 
         // First record
-        let (data1, _, _) =
-            record_false_positive(&fp_path, &learnings_path, &record).unwrap();
+        let (data1, _, _) = record_false_positive(&fp_path, &learnings_path, &record).unwrap();
         assert_eq!(data1.records.len(), 1);
 
         // Second record with same issue+repo — should NOT duplicate
-        let (data2, _, _) =
-            record_false_positive(&fp_path, &learnings_path, &record).unwrap();
+        let (data2, _, _) = record_false_positive(&fp_path, &learnings_path, &record).unwrap();
         assert_eq!(data2.records.len(), 1);
     }
 }
