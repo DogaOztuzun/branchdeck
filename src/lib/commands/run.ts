@@ -33,7 +33,7 @@ export async function cancelRun(sessionId: string): Promise<void> {
 export async function getRunStatus(): Promise<RunInfo | null> {
   try {
     const runs = await apiGet<RunInfo[]>('/runs');
-    return runs.length > 0 ? runs[0] ?? null : null;
+    return runs.length > 0 ? (runs[0] ?? null) : null;
   } catch (e) {
     console.error(`getRunStatus failed: ${e}`);
     throw e;
