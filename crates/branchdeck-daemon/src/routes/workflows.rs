@@ -53,7 +53,12 @@ impl From<&WorkflowDef> for WorkflowDetail {
     tag = "workflows"
 )]
 pub async fn list_workflows(State(state): State<AppState>) -> Json<Vec<WorkflowSummary>> {
-    let summaries = state.workflow_registry.list_workflows().iter().map(|w| (*w).into()).collect();
+    let summaries = state
+        .workflow_registry
+        .list_workflows()
+        .iter()
+        .map(|w| (*w).into())
+        .collect();
     Json(summaries)
 }
 

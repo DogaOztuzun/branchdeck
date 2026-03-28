@@ -516,7 +516,7 @@ mod tests {
                     cycle_iteration: 1,
                     issues_found: 10,
                     issues_fixed: 7,
-                        false_positives: 1,
+                    false_positives: 1,
                     score_before: 40,
                     score_after: 75,
                     outcome: VerificationOutcome::Verified,

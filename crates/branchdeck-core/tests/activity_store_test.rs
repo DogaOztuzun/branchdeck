@@ -140,9 +140,7 @@ async fn persistence_round_trip_survives_restart() {
     // Create a store with persistence, publish events via bus
     {
         let event_bus = Arc::new(EventBus::new());
-        let store = Arc::new(
-            ActivityStore::new_with_persistence(&data_dir).unwrap(),
-        );
+        let store = Arc::new(ActivityStore::new_with_persistence(&data_dir).unwrap());
         store.start_subscriber(&event_bus);
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
 
@@ -196,9 +194,7 @@ async fn loaded_events_appear_in_time_filtered_queries() {
     // Populate events at different timestamps
     {
         let event_bus = Arc::new(EventBus::new());
-        let store = Arc::new(
-            ActivityStore::new_with_persistence(&data_dir).unwrap(),
-        );
+        let store = Arc::new(ActivityStore::new_with_persistence(&data_dir).unwrap());
         store.start_subscriber(&event_bus);
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
 

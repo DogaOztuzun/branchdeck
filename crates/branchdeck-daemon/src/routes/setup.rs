@@ -35,9 +35,7 @@ pub async fn validate_tokens() -> Result<Json<TokenValidation>, ApiError> {
     Ok(Json(result))
 }
 
-pub async fn list_workflows(
-    Query(query): Query<RepoQuery>,
-) -> Json<Vec<WorkflowOption>> {
+pub async fn list_workflows(Query(query): Query<RepoQuery>) -> Json<Vec<WorkflowOption>> {
     debug!("Listing available workflows for {:?}", query.repo_path);
     Json(project_config::list_available_workflows(&query.repo_path))
 }

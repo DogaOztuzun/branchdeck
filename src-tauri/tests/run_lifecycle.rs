@@ -39,6 +39,7 @@ fn t4_unit_001_run_state_save_load_round_trip() {
     let (_dir, task_path, worktree_path) = setup_worktree();
 
     let run = RunInfo {
+        run_id: "run-test-1".to_string(),
         session_id: Some("sess-abc".to_string()),
         task_path: task_path.clone(),
         status: RunStatus::Running,
@@ -48,6 +49,8 @@ fn t4_unit_001_run_state_save_load_round_trip() {
         elapsed_secs: 60,
         tab_id: Some("tab-1".to_string()),
         failure_reason: None,
+        max_budget_usd: None,
+        worktree_path: None,
     };
 
     run_state::save_run_state(&task_path, &run);
@@ -235,6 +238,7 @@ fn session_matches_different_session() {
 #[test]
 fn run_info_json_round_trip() {
     let run = RunInfo {
+        run_id: "run-test-1".to_string(),
         session_id: Some("sess-1".to_string()),
         task_path: "/wt/.branchdeck/task.md".to_string(),
         status: RunStatus::Blocked,
@@ -244,6 +248,8 @@ fn run_info_json_round_trip() {
         elapsed_secs: 300,
         tab_id: Some("tab-42".to_string()),
         failure_reason: None,
+        max_budget_usd: None,
+        worktree_path: None,
     };
 
     let json = serde_json::to_string(&run).unwrap();

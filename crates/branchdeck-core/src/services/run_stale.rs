@@ -42,7 +42,7 @@ pub fn check_run_stale(last_activity_ms: u64, now_ms: u64) -> bool {
 #[allow(clippy::implicit_hasher)]
 pub async fn check_permission_timeout(
     pending_permissions: &mut HashMap<String, PendingPermission>,
-    active_run: &mut Option<RunInfo>,
+    active_run: &mut Option<&mut RunInfo>,
     mut stdin: Option<&mut ChildStdin>,
     emitter: &dyn EventEmitter,
 ) {
@@ -85,7 +85,7 @@ pub async fn check_permission_timeout(
         if let Some(ref mut run) = active_run {
             run.status = RunStatus::Running;
             run_state::save_run_state(&run.task_path, run);
-            if let Err(e) = traits::emit(emitter, "run:status_changed", &*run) {
+            if let Err(e) = traits::emit(emitter, "run:status_changed", &**run) {
                 error!("Failed to emit run:status_changed after permission timeout: {e}");
             }
         }

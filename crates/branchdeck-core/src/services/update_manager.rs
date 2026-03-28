@@ -69,9 +69,7 @@ pub fn register_update(
     workflows_active: bool,
 ) -> UpdateState {
     let status = if workflows_active {
-        info!(
-            "Update {version} available but workflows are active — queuing until completion"
-        );
+        info!("Update {version} available but workflows are active — queuing until completion");
         UpdateStatus::PendingWorkflowCompletion
     } else {
         info!("Update {version} available — ready to apply on next restart");

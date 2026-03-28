@@ -561,12 +561,21 @@ mod tests {
             retrying: Some("Scheduling Retry".to_string()),
             custom_statuses: HashMap::new(),
         };
-        assert_eq!(lifecycle.resolve_display_status("dispatched"), "Dispatching Agent");
-        assert_eq!(lifecycle.resolve_display_status("running"), "Dispatching Agent");
+        assert_eq!(
+            lifecycle.resolve_display_status("dispatched"),
+            "Dispatching Agent"
+        );
+        assert_eq!(
+            lifecycle.resolve_display_status("running"),
+            "Dispatching Agent"
+        );
         assert_eq!(lifecycle.resolve_display_status("complete"), "All Done");
         assert_eq!(lifecycle.resolve_display_status("completed"), "All Done");
         assert_eq!(lifecycle.resolve_display_status("failed"), "Agent Failed");
-        assert_eq!(lifecycle.resolve_display_status("retrying"), "Scheduling Retry");
+        assert_eq!(
+            lifecycle.resolve_display_status("retrying"),
+            "Scheduling Retry"
+        );
     }
 
     #[test]
@@ -583,9 +592,18 @@ mod tests {
             retrying: None,
             custom_statuses: custom,
         };
-        assert_eq!(lifecycle.resolve_display_status("analyzing"), "Analyzing Code");
-        assert_eq!(lifecycle.resolve_display_status("patching"), "Applying Patches");
-        assert_eq!(lifecycle.resolve_display_status("validating"), "Running Validation");
+        assert_eq!(
+            lifecycle.resolve_display_status("analyzing"),
+            "Analyzing Code"
+        );
+        assert_eq!(
+            lifecycle.resolve_display_status("patching"),
+            "Applying Patches"
+        );
+        assert_eq!(
+            lifecycle.resolve_display_status("validating"),
+            "Running Validation"
+        );
         // Unknown status falls back to raw key
         assert_eq!(lifecycle.resolve_display_status("unknown"), "unknown");
     }
@@ -624,7 +642,10 @@ mod tests {
         let def = parse_workflow_md(md).unwrap();
         let lifecycle = def.config.lifecycle.unwrap();
         assert_eq!(lifecycle.dispatched.as_deref(), Some("Launched"));
-        assert_eq!(lifecycle.resolve_display_status("analyzing"), "Deep Analysis");
+        assert_eq!(
+            lifecycle.resolve_display_status("analyzing"),
+            "Deep Analysis"
+        );
         assert_eq!(lifecycle.resolve_display_status("patching"), "Hot Patching");
         assert_eq!(lifecycle.resolve_display_status("running"), "Launched");
     }

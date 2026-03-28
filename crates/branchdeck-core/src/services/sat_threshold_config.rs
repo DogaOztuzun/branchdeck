@@ -29,10 +29,7 @@ const THRESHOLD_CONFIG_PATH: &str = ".branchdeck/sat-thresholds.json";
 pub fn load_threshold_config(project_root: &Path) -> Result<SatThresholdConfig, AppError> {
     let path = project_root.join(THRESHOLD_CONFIG_PATH);
     if let Some(config) = crate::util::read_optional::<SatThresholdConfig>(&path)? {
-        debug!(
-            "Loaded SAT threshold config from {}",
-            path.display()
-        );
+        debug!("Loaded SAT threshold config from {}", path.display());
         Ok(config)
     } else {
         debug!(
@@ -112,7 +109,9 @@ pub fn apply_threshold_config(
     scenarios: &[SatManifestEntry],
 ) {
     issue_config.max_severity = threshold_config.default_max_severity;
-    issue_config.allowed_confidences.clone_from(&threshold_config.allowed_confidences);
+    issue_config
+        .allowed_confidences
+        .clone_from(&threshold_config.allowed_confidences);
     issue_config.severity_overrides = resolve_severity_overrides(threshold_config, scenarios);
 }
 
@@ -184,8 +183,7 @@ mod tests {
 
     #[test]
     fn apply_threshold_config_updates_issue_config() {
-        let mut issue_config =
-            SatIssueConfig::new(std::path::PathBuf::from("/tmp/test-project"));
+        let mut issue_config = SatIssueConfig::new(std::path::PathBuf::from("/tmp/test-project"));
         let mut threshold_config = SatThresholdConfig::default();
         threshold_config.default_max_severity = 3;
         threshold_config
@@ -200,7 +198,9 @@ mod tests {
         apply_threshold_config(&mut issue_config, &threshold_config, &scenarios);
 
         assert_eq!(issue_config.max_severity, 3);
-        assert!(issue_config.allowed_confidences.contains(&ConfidenceLevel::Medium));
+        assert!(issue_config
+            .allowed_confidences
+            .contains(&ConfidenceLevel::Medium));
         assert_eq!(issue_config.severity_overrides.get("s1"), Some(&1));
     }
 

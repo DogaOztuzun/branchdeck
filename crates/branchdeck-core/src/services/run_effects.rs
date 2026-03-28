@@ -76,7 +76,10 @@ pub fn execute_effects(effects: Vec<RunEffect>, emitter: &dyn EventEmitter, even
             RunEffect::MarkWorktreeForCleanup { ref path } => {
                 let marker = std::path::Path::new(path).join(".branchdeck-cleanup");
                 if let Err(e) = crate::util::write_atomic(&marker, b"pending-cleanup") {
-                    error!("Failed to write cleanup marker at {}: {e}", marker.display());
+                    error!(
+                        "Failed to write cleanup marker at {}: {e}",
+                        marker.display()
+                    );
                 } else {
                     info!("Marked worktree for cleanup: {path}");
                 }
@@ -204,11 +207,7 @@ pub fn apply_permission_request(
 ///
 /// Sets status to Cancelled, captures elapsed time, and emits lifecycle events.
 /// Cost data may be unavailable because the sidecar was killed, so it's best-effort.
-pub fn apply_cancel(
-    run: &mut RunInfo,
-    started_at_epoch_ms: u64,
-    now_ms: u64,
-) -> Vec<RunEffect> {
+pub fn apply_cancel(run: &mut RunInfo, started_at_epoch_ms: u64, now_ms: u64) -> Vec<RunEffect> {
     run.status = RunStatus::Cancelled;
     if started_at_epoch_ms > 0 {
         run.elapsed_secs = (now_ms.saturating_sub(started_at_epoch_ms)) / 1000;
@@ -268,6 +267,7 @@ mod tests {
 
     fn make_run(task_path: &str) -> RunInfo {
         RunInfo {
+            run_id: "run-test-1".to_owned(),
             session_id: Some("sess-1".to_owned()),
             task_path: task_path.to_owned(),
             status: RunStatus::Running,
@@ -276,6 +276,9 @@ mod tests {
             last_heartbeat: None,
             elapsed_secs: 0,
             tab_id: Some("tab-1".to_owned()),
+            failure_reason: None,
+            max_budget_usd: None,
+            worktree_path: None,
         }
     }
 

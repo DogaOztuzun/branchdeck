@@ -21,6 +21,7 @@ fn make_run_manager() -> RunManager {
         event_bus,
         common::test_emitter(),
         13370,
+        1,
     )
 }
 
@@ -31,7 +32,7 @@ fn queue_status_empty_initially() {
     let rm = make_run_manager();
     let status = rm.get_queue_status();
 
-    assert!(status.active.is_none(), "No active run initially");
+    assert!(status.active.is_empty(), "No active run initially");
     assert!(status.queued.is_empty(), "Queue should be empty initially");
     assert_eq!(status.completed, 0);
     assert_eq!(status.failed, 0);
@@ -107,8 +108,16 @@ fn cancel_queue_clears_everything() {
 #[test]
 fn queued_run_serializes_to_camel_case() {
     let qr = QueuedRun {
+        run_id: "run-test-1".to_string(),
         task_path: "/wt/.branchdeck/task.md".to_string(),
         worktree_path: "/wt".to_string(),
+        options: branchdeck_core::models::run::LaunchOptions {
+            max_turns: None,
+            max_budget_usd: None,
+            permission_mode: None,
+            allowed_directories: Vec::new(),
+        },
+        failure_count: 0,
     };
 
     let json = serde_json::to_string(&qr).unwrap();

@@ -55,7 +55,9 @@ impl IntoResponse for ApiError {
                 let upstream = classify_upstream_error(&self.0);
                 (
                     upstream,
-                    upstream.canonical_reason().unwrap_or("Internal Server Error"),
+                    upstream
+                        .canonical_reason()
+                        .unwrap_or("Internal Server Error"),
                 )
             }
         };
@@ -65,7 +67,10 @@ impl IntoResponse for ApiError {
         }
 
         let problem = ProblemDetails {
-            problem_type: format!("https://branchdeck.dev/problems/{}", slug_from_status(status)),
+            problem_type: format!(
+                "https://branchdeck.dev/problems/{}",
+                slug_from_status(status)
+            ),
             title: title.to_string(),
             status: status.as_u16(),
             detail: Some(self.0.to_string()),
@@ -73,10 +78,7 @@ impl IntoResponse for ApiError {
 
         (
             status,
-            [(
-                axum::http::header::CONTENT_TYPE,
-                "application/problem+json",
-            )],
+            [(axum::http::header::CONTENT_TYPE, "application/problem+json")],
             axum::Json(problem),
         )
             .into_response()

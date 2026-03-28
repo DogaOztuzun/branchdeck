@@ -743,9 +743,7 @@ mod tests {
         let mut config = make_config();
         // Default max_severity is 2 (critical + high)
         // Override s1 to critical-only (1)
-        config
-            .severity_overrides
-            .insert("s1".to_string(), 1);
+        config.severity_overrides.insert("s1".to_string(), 1);
 
         let findings = vec![
             make_finding("s1", FindingCategory::App, 2, ConfidenceLevel::High), // reject: override says 1
@@ -763,9 +761,7 @@ mod tests {
     fn filter_override_more_lenient_than_default() {
         let mut config = make_config();
         // Default max_severity is 2, but s1 is more lenient at 4
-        config
-            .severity_overrides
-            .insert("s1".to_string(), 4);
+        config.severity_overrides.insert("s1".to_string(), 4);
 
         let findings = vec![
             make_finding("s1", FindingCategory::App, 3, ConfidenceLevel::High), // pass: override allows up to 4
@@ -839,10 +835,22 @@ mod tests {
         assert!(body.contains("Finding in scenario-01"));
 
         // Unsafe fields excluded from safe template
-        assert!(!body.contains("screenshots/1-after.png"), "evidence paths should not leak");
-        assert!(!body.contains("Test reasoning."), "reasoning should not leak");
-        assert!(!body.contains("Score Dimensions"), "score dimensions should not leak");
-        assert!(!body.contains("Detailed description"), "detail should not leak");
+        assert!(
+            !body.contains("screenshots/1-after.png"),
+            "evidence paths should not leak"
+        );
+        assert!(
+            !body.contains("Test reasoning."),
+            "reasoning should not leak"
+        );
+        assert!(
+            !body.contains("Score Dimensions"),
+            "score dimensions should not leak"
+        );
+        assert!(
+            !body.contains("Detailed description"),
+            "detail should not leak"
+        );
     }
 
     #[test]

@@ -98,6 +98,7 @@ pub fn make_running_entry(pr_key: &str) -> branchdeck_core::models::orchestrator
 /// Build a `RunInfo` for testing. No filesystem needed.
 pub fn make_run_info(status: RunStatus, session_id: Option<&str>) -> RunInfo {
     RunInfo {
+        run_id: "run-test-1".to_string(),
         session_id: session_id.map(String::from),
         task_path: "/fake/.branchdeck/task.md".to_string(),
         status,
@@ -107,5 +108,7 @@ pub fn make_run_info(status: RunStatus, session_id: Option<&str>) -> RunInfo {
         elapsed_secs: 0,
         tab_id: Some("tab-1".to_string()),
         failure_reason: None,
+        max_budget_usd: None,
+        worktree_path: None,
     }
 }

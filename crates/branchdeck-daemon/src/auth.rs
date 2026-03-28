@@ -131,9 +131,7 @@ pub async fn auth_middleware(
             debug!("Authentication failed: invalid token");
             unauthorized_response("Invalid authentication token")
         }
-        None => {
-            unauthorized_response("Authentication required")
-        }
+        None => unauthorized_response("Authentication required"),
     }
 }
 
@@ -150,7 +148,9 @@ fn extract_token<'a>(request: &'a Request, query: &'a TokenQuery) -> Option<&'a 
 
     // Fall back to query parameter (for SSE/WebSocket)
     if query.token.is_some() {
-        debug!("Auth token provided via query parameter — prefer Authorization header where possible");
+        debug!(
+            "Auth token provided via query parameter — prefer Authorization header where possible"
+        );
     }
     query.token.as_deref().map(str::trim)
 }
@@ -179,10 +179,7 @@ fn unauthorized_response(detail: &str) -> Response {
 
     (
         StatusCode::UNAUTHORIZED,
-        [(
-            axum::http::header::CONTENT_TYPE,
-            "application/problem+json",
-        )],
+        [(axum::http::header::CONTENT_TYPE, "application/problem+json")],
         axum::Json(problem),
     )
         .into_response()

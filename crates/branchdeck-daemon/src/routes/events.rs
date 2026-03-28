@@ -120,7 +120,10 @@ pub async fn sse_handler(
                 String::new()
             });
 
-            Some(Ok(SseEvent::default().event(event_type).id(id).data(payload)))
+            Some(Ok(SseEvent::default()
+                .event(event_type)
+                .id(id)
+                .data(payload)))
         }
         Err(tokio_stream::wrappers::errors::BroadcastStreamRecvError::Lagged(n)) => {
             warn!("SSE subscriber lagged, missed {n} events");

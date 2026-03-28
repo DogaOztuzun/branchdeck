@@ -27,6 +27,10 @@ pub enum Commands {
         #[arg(long, env = "BRANCHDECK_STATIC_DIR")]
         static_dir: Option<std::path::PathBuf>,
 
+        /// Maximum number of concurrent workflow runs (default: 1)
+        #[arg(long, default_value_t = 0, env = "BRANCHDECK_MAX_CONCURRENT")]
+        max_concurrent: u32,
+
         /// Require bearer token authentication (auto-enabled when bind is not 127.0.0.1)
         #[arg(long, env = "BRANCHDECK_REQUIRE_AUTH")]
         require_auth: bool,

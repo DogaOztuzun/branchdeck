@@ -13,9 +13,9 @@ use log::{error, info, warn};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tower_http::limit::RequestBodyLimitLayer;
-use tower_http::timeout::TimeoutLayer;
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::SetResponseHeaderLayer;
+use tower_http::timeout::TimeoutLayer;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -107,8 +107,19 @@ async fn main() {
             bind,
             workspace,
             static_dir,
+            max_concurrent,
             require_auth,
-        } => run_serve(port, &bind, workspace, static_dir, require_auth).await,
+        } => {
+            run_serve(
+                port,
+                &bind,
+                workspace,
+                static_dir,
+                require_auth,
+                max_concurrent,
+            )
+            .await
+        }
         Commands::Status { port, json } => {
             let client = cli_client::DaemonClient::new(port, json);
             std::process::exit(client.status().await);
@@ -157,7 +168,14 @@ async fn main() {
 }
 
 #[allow(clippy::too_many_lines)]
-async fn run_serve(port: u16, bind: &str, workspace_arg: Option<PathBuf>, static_dir: Option<PathBuf>, require_auth_flag: bool) {
+async fn run_serve(
+    port: u16,
+    bind: &str,
+    workspace_arg: Option<PathBuf>,
+    static_dir: Option<PathBuf>,
+    require_auth_flag: bool,
+    max_concurrent_arg: u32,
+) {
     let workspace_root = workspace_arg.unwrap_or_else(|| {
         std::env::current_dir().unwrap_or_else(|e| {
             error!("Failed to determine current directory: {e}");
@@ -214,12 +232,28 @@ async fn run_serve(port: u16, bind: &str, workspace_arg: Option<PathBuf>, static
     let search_dirs = branchdeck_core::services::workflow::default_search_dirs(
         &workspace_root.display().to_string(),
     );
-    let workflow_registry = Arc::new(
-        branchdeck_core::services::workflow::WorkflowRegistry::scan(&search_dirs),
+    let workflow_registry = Arc::new(branchdeck_core::services::workflow::WorkflowRegistry::scan(
+        &search_dirs,
+    ));
+    info!(
+        "Loaded {} workflow(s)",
+        workflow_registry.list_workflows().len()
     );
-    info!("Loaded {} workflow(s)", workflow_registry.list_workflows().len());
 
     // RunManager + DaemonEmitter from main
+    // Resolve max_concurrent: CLI arg (non-zero) overrides project config, default 1
+    let max_concurrent = if max_concurrent_arg > 0 {
+        max_concurrent_arg
+    } else {
+        // Try loading from project config
+        branchdeck_core::services::project_config::load_project_config(
+            &workspace_root.display().to_string(),
+        )
+        .map(|c| c.max_concurrent)
+        .unwrap_or(1)
+    };
+    info!("Max concurrent runs: {max_concurrent}");
+
     let sidecar_path = data_dir.join("sidecar").join("index.js");
     let daemon_emitter: Arc<dyn EventEmitter> = Arc::new(emitter::DaemonEmitter);
     let run_manager_state = run_manager::create_run_manager_state(
@@ -227,6 +261,7 @@ async fn run_serve(port: u16, bind: &str, workspace_arg: Option<PathBuf>, static
         Arc::clone(&event_bus),
         daemon_emitter,
         0, // hook_port — configured at runtime via CLI args
+        max_concurrent,
     );
 
     let update_state = Arc::new(tokio::sync::Mutex::new(
@@ -244,10 +279,8 @@ async fn run_serve(port: u16, bind: &str, workspace_arg: Option<PathBuf>, static
         update_state,
     };
 
-    let schema_header_value =
-        http::HeaderValue::from_str(SCHEMA_VERSION).unwrap_or_else(|_| {
-            http::HeaderValue::from_static("unknown")
-        });
+    let schema_header_value = http::HeaderValue::from_str(SCHEMA_VERSION)
+        .unwrap_or_else(|_| http::HeaderValue::from_static("unknown"));
 
     // Auth-protected routes with timeout + body limit
     let protected_api = Router::new()
@@ -264,34 +297,19 @@ async fn run_serve(port: u16, bind: &str, workspace_arg: Option<PathBuf>, static
             "/api/workflows/{name}",
             get(routes::workflows::get_workflow),
         )
-        .route("/api/runs", post(routes::runs::create_run).get(routes::runs::list_runs))
+        .route(
+            "/api/runs",
+            post(routes::runs::create_run).get(routes::runs::list_runs),
+        )
         .route("/api/runs/{id}", get(routes::runs::get_run))
-        .route(
-            "/api/runs/{id}/cancel",
-            post(routes::runs::cancel_run),
-        )
-        .route(
-            "/api/runs/{id}/approve",
-            post(routes::runs::approve_run),
-        )
+        .route("/api/runs/{id}/cancel", post(routes::runs::cancel_run))
+        .route("/api/runs/{id}/approve", post(routes::runs::approve_run))
         .route("/api/repos", get(routes::repos::get_repo))
         .route("/api/sat/scores", get(routes::sat::get_sat_scores))
-        .route(
-            "/api/setup/status",
-            get(routes::setup::get_setup_status),
-        )
-        .route(
-            "/api/setup/validate",
-            get(routes::setup::validate_tokens),
-        )
-        .route(
-            "/api/setup/workflows",
-            get(routes::setup::list_workflows),
-        )
-        .route(
-            "/api/setup/save",
-            post(routes::setup::save_config),
-        )
+        .route("/api/setup/status", get(routes::setup::get_setup_status))
+        .route("/api/setup/validate", get(routes::setup::validate_tokens))
+        .route("/api/setup/workflows", get(routes::setup::list_workflows))
+        .route("/api/setup/save", post(routes::setup::save_config))
         .route(
             "/api/sat/false-positive",
             post(routes::sat::label_false_positive),
@@ -321,10 +339,8 @@ async fn run_serve(port: u16, bind: &str, workspace_arg: Option<PathBuf>, static
         ));
 
     // Swagger UI is auth-protected (leaks full API surface)
-    let protected_with_docs = protected.merge(
-        SwaggerUi::new("/api/docs")
-            .url("/api/openapi.json", ApiDoc::openapi()),
-    );
+    let protected_with_docs =
+        protected.merge(SwaggerUi::new("/api/docs").url("/api/openapi.json", ApiDoc::openapi()));
 
     // Health endpoint is exempt from auth so monitoring tools and desktop startup can probe
     let mut app = Router::new()
@@ -337,24 +353,26 @@ async fn run_serve(port: u16, bind: &str, workspace_arg: Option<PathBuf>, static
         .with_state(app_state);
 
     // Serve static frontend files if the directory exists (Docker/web mode)
-    let resolved_static_dir = static_dir
-        .or_else(|| {
-            let candidate = std::env::current_exe()
-                .ok()?
-                .parent()?
-                .join("dist");
-            if candidate.is_dir() { Some(candidate) } else { None }
-        });
+    let resolved_static_dir = static_dir.or_else(|| {
+        let candidate = std::env::current_exe().ok()?.parent()?.join("dist");
+        if candidate.is_dir() {
+            Some(candidate)
+        } else {
+            None
+        }
+    });
 
     if let Some(dir) = resolved_static_dir {
         if dir.is_dir() {
             let index_html = dir.join("index.html");
-            let serve_dir = ServeDir::new(&dir)
-                .not_found_service(ServeFile::new(&index_html));
+            let serve_dir = ServeDir::new(&dir).not_found_service(ServeFile::new(&index_html));
             app = app.fallback_service(serve_dir);
             info!("Serving static frontend from {}", dir.display());
         } else {
-            warn!("Static dir {} does not exist, skipping frontend serving", dir.display());
+            warn!(
+                "Static dir {} does not exist, skipping frontend serving",
+                dir.display()
+            );
         }
     }
 
