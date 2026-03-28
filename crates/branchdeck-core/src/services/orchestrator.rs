@@ -25,7 +25,11 @@ fn load_enabled_workflows(repo_path: &str, repo_label: &str) -> Option<Vec<Strin
             return None;
         }
     };
-    if enabled.is_empty() { None } else { Some(enabled) }
+    if enabled.is_empty() {
+        None
+    } else {
+        Some(enabled)
+    }
 }
 
 // --- Retry backoff constants ---
@@ -449,9 +453,19 @@ pub fn apply_relaunch(
     // Recover branch info + attempt from retry or review_ready
     let review_entry = state.review_ready.remove(pr_key);
     let (prev_attempt, branch, base_branch, wf_name) = if let Some(ref r) = retry_entry {
-        (r.attempt, r.branch.clone(), r.base_branch.clone(), r.workflow_name.clone())
+        (
+            r.attempt,
+            r.branch.clone(),
+            r.base_branch.clone(),
+            r.workflow_name.clone(),
+        )
     } else if let Some(ref r) = review_entry {
-        (r.attempt, r.branch.clone(), r.base_branch.clone(), r.workflow_name.clone())
+        (
+            r.attempt,
+            r.branch.clone(),
+            r.base_branch.clone(),
+            r.workflow_name.clone(),
+        )
     } else {
         (0, String::new(), String::new(), None)
     };
@@ -1160,12 +1174,17 @@ pub async fn execute_effects(
             } => {
                 info!("Stopping session for {key} (tab={tab_id})");
                 let mut rm = run_manager.lock().await;
-                // Cancel if the active run matches this tab_id
-                if let Some(active) = rm.get_status() {
-                    if active.tab_id.as_deref() == Some(&tab_id) {
-                        if let Err(e) = rm.cancel_run() {
-                            error!("Failed to cancel run for {key}: {e}");
-                        }
+                // Find and cancel the run matching this tab_id
+                let matching_run_id = rm.get_all_runs().iter().find_map(|r| {
+                    if r.tab_id.as_deref() == Some(&tab_id) {
+                        Some(r.run_id.clone())
+                    } else {
+                        None
+                    }
+                });
+                if let Some(rid) = matching_run_id {
+                    if let Err(e) = rm.cancel_run_by_id(&rid) {
+                        error!("Failed to cancel run for {key}: {e}");
                     }
                 }
                 // Also remove from queue if not yet active
@@ -1270,16 +1289,11 @@ pub async fn execute_effects(
                         display_status: display,
                         detail: format!(
                             "{} (attempt {})",
-                            event
-                                .display_status
-                                .as_deref()
-                                .unwrap_or(status_str),
+                            event.display_status.as_deref().unwrap_or(status_str),
                             event.attempt
                         ),
                     };
-                    let entries = orch.timelines
-                        .entry(event.pr_key.clone())
-                        .or_default();
+                    let entries = orch.timelines.entry(event.pr_key.clone()).or_default();
                     entries.push(timeline_entry);
                     // Cap timeline entries per PR to prevent unbounded growth
                     if entries.len() > 100 {
@@ -1488,7 +1502,10 @@ async fn handle_event(
                 let enabled = load_enabled_workflows(&repo_path, repo);
                 let enabled_ref = enabled.as_deref();
                 let plan = crate::services::workflow_dispatch::plan_dispatch(
-                    &registry, trigger, &repo_path, enabled_ref,
+                    &registry,
+                    trigger,
+                    &repo_path,
+                    enabled_ref,
                 );
                 if plan.workflow_name.is_empty() {
                     debug!(
@@ -1609,7 +1626,10 @@ async fn handle_event(
             let enabled_ref = enabled.as_deref();
             for trigger in &trigger_events {
                 let plan = crate::services::workflow_dispatch::plan_dispatch(
-                    &registry, trigger, &repo_path, enabled_ref,
+                    &registry,
+                    trigger,
+                    &repo_path,
+                    enabled_ref,
                 );
                 if plan.workflow_name.is_empty() {
                     debug!("No workflow matched post-merge trigger for {repo}");

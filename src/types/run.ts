@@ -8,6 +8,7 @@ export type RunStatus =
   | 'cancelled';
 
 export type RunInfo = {
+  runId: string;
   sessionId: string | null;
   taskPath: string;
   status: RunStatus;
@@ -17,6 +18,8 @@ export type RunInfo = {
   elapsedSecs: number;
   tabId: string | null;
   failureReason: string | null;
+  maxBudgetUsd: number | null;
+  worktreePath: string | null;
 };
 
 export type RunStepEvent = {

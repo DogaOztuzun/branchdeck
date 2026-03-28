@@ -12,9 +12,7 @@ pub struct DaemonClient {
 impl DaemonClient {
     pub fn new(port: u16, json_output: bool) -> Self {
         // Load auth token so CLI subcommands work when auth is enabled
-        let auth_token = crate::auth::load_token()
-            .ok()
-            .flatten();
+        let auth_token = crate::auth::load_token().ok().flatten();
         Self {
             base_url: format!("http://127.0.0.1:{port}/api"),
             client: reqwest::Client::new(),
@@ -55,11 +53,20 @@ impl DaemonClient {
                 "workflows": workflows.len(),
                 "active_runs": runs.len(),
             });
-            println!("{}", serde_json::to_string_pretty(&output).unwrap_or_default());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&output).unwrap_or_default()
+            );
         } else {
-            let version = health.get("version").and_then(|v| v.as_str()).unwrap_or("unknown");
+            let version = health
+                .get("version")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
             let pid = health.get("pid").and_then(|v| v.as_u64()).unwrap_or(0);
-            let workspace = health.get("workspace-root").and_then(|v| v.as_str()).unwrap_or("unknown");
+            let workspace = health
+                .get("workspace-root")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
 
             println!("Branchdeck Daemon");
             println!("  Version:      {version}");
@@ -97,7 +104,10 @@ impl DaemonClient {
         match self.post::<_, serde_json::Value>("runs", &body).await {
             Ok(resp) => {
                 if self.json_output {
-                    println!("{}", serde_json::to_string_pretty(&resp).unwrap_or_default());
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&resp).unwrap_or_default()
+                    );
                 } else {
                     let session = resp
                         .get("sessionId")
@@ -125,7 +135,10 @@ impl DaemonClient {
         match self.get::<Vec<serde_json::Value>>("runs").await {
             Ok(runs) => {
                 if self.json_output {
-                    println!("{}", serde_json::to_string_pretty(&runs).unwrap_or_default());
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&runs).unwrap_or_default()
+                    );
                 } else if runs.is_empty() {
                     println!("No runs.");
                 } else {
@@ -140,10 +153,7 @@ impl DaemonClient {
                             .get("status")
                             .and_then(|v| v.as_str())
                             .unwrap_or("unknown");
-                        let started = run
-                            .get("startedAt")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("");
+                        let started = run.get("startedAt").and_then(|v| v.as_str()).unwrap_or("");
                         println!("{session:<24} {status:<12} {started:<24}");
                     }
                 }
@@ -159,10 +169,16 @@ impl DaemonClient {
     /// POST /api/runs/{id}/cancel to cancel a run.
     pub async fn cancel_run(&self, id: &str) -> i32 {
         let path = format!("runs/{id}/cancel");
-        match self.post::<_, serde_json::Value>(&path, &serde_json::json!({})).await {
+        match self
+            .post::<_, serde_json::Value>(&path, &serde_json::json!({}))
+            .await
+        {
             Ok(resp) => {
                 if self.json_output {
-                    println!("{}", serde_json::to_string_pretty(&resp).unwrap_or_default());
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&resp).unwrap_or_default()
+                    );
                 } else {
                     println!("Cancelled run: {id}");
                 }
@@ -182,7 +198,10 @@ impl DaemonClient {
                 "status": "not-implemented",
                 "message": "Update checking not yet implemented",
             });
-            println!("{}", serde_json::to_string_pretty(&output).unwrap_or_default());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&output).unwrap_or_default()
+            );
         } else {
             println!("Update checking not yet implemented.");
         }
@@ -195,13 +214,10 @@ impl DaemonClient {
         if let Some(token) = &self.auth_token {
             req = req.header("Authorization", format!("Bearer {token}"));
         }
-        let resp = req
-            .send()
-            .await
-            .map_err(|e| {
-                error!("GET {url} failed: {e}");
-                format!("request failed: {e}")
-            })?;
+        let resp = req.send().await.map_err(|e| {
+            error!("GET {url} failed: {e}");
+            format!("request failed: {e}")
+        })?;
 
         if !resp.status().is_success() {
             let status = resp.status();
@@ -226,13 +242,10 @@ impl DaemonClient {
         if let Some(token) = &self.auth_token {
             req = req.header("Authorization", format!("Bearer {token}"));
         }
-        let resp = req
-            .send()
-            .await
-            .map_err(|e| {
-                error!("POST {url} failed: {e}");
-                format!("request failed: {e}")
-            })?;
+        let resp = req.send().await.map_err(|e| {
+            error!("POST {url} failed: {e}");
+            format!("request failed: {e}")
+        })?;
 
         if !resp.status().is_success() {
             let status = resp.status();

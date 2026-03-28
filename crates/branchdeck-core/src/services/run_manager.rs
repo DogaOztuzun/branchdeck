@@ -6,7 +6,7 @@ use crate::models::task::TaskStatus;
 use crate::services::{run_effects, run_responses, run_stale, run_state, task};
 use crate::traits::{self, EventEmitter};
 use log::{debug, error, info, warn};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -29,7 +29,6 @@ pub fn now_epoch_ms() -> u64 {
 fn epoch_ms_to_rfc3339(epoch_ms: u64) -> String {
     #[allow(clippy::cast_possible_wrap)]
     let secs = (epoch_ms / 1000) as i64;
-    // Nanos from millisecond remainder always fits in u32
     #[allow(clippy::cast_possible_truncation)]
     let nanos = ((epoch_ms % 1000) * 1_000_000) as u32;
     chrono::DateTime::from_timestamp(secs, nanos)
@@ -37,50 +36,69 @@ fn epoch_ms_to_rfc3339(epoch_ms: u64) -> String {
         .to_rfc3339()
 }
 
-/// A queued run waiting for the active run to complete.
+/// Maximum number of consecutive launch failures before a queued run is dropped.
+const MAX_QUEUE_FAILURES: u32 = 3;
+
+/// A queued run waiting for a slot to open.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueuedRun {
+    /// Pre-assigned `run_id` so callers can track the queued run before it launches.
+    pub run_id: String,
     pub task_path: String,
     pub worktree_path: String,
+    pub options: LaunchOptions,
+    /// Number of consecutive launch failures. Dropped after `MAX_QUEUE_FAILURES`.
+    #[serde(skip)]
+    pub failure_count: u32,
+}
+
+/// Per-run state: bundles the sidecar process, `RunInfo`, and timing data.
+struct ActiveRun {
+    process: Option<Child>,
+    stdin: Option<ChildStdin>,
+    info: RunInfo,
+    started_at_epoch_ms: u64,
+    last_activity_ms: u64,
+    pending_permissions: HashMap<String, PendingPermission>,
 }
 
 /// Status of the run queue.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueueStatus {
-    pub active: Option<String>,
+    pub active: Vec<RunSummaryBrief>,
     pub queued: Vec<QueuedRun>,
     pub completed: u32,
     pub failed: u32,
+    pub max_concurrent: u32,
+}
+
+/// Brief summary of an active run for queue status reporting.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunSummaryBrief {
+    pub run_id: String,
+    pub task_path: String,
+    pub status: RunStatus,
 }
 
 pub struct RunManager {
-    process: Option<Child>,
-    stdin: Option<ChildStdin>,
-    active_run: Option<RunInfo>,
+    /// Active runs keyed by `run_id`.
+    runs: HashMap<String, ActiveRun>,
+    /// Pending queue for runs waiting for a slot.
+    pending: VecDeque<QueuedRun>,
+    /// Maximum number of concurrent runs.
+    max_concurrent: u32,
     sidecar_path: PathBuf,
-    /// Epoch milliseconds of the last heartbeat or activity from the sidecar.
-    last_activity_ms: u64,
-    /// Epoch milliseconds when the current run started.
-    started_at_epoch_ms: u64,
-    /// Pending permission requests awaiting user decisions, keyed by `tool_use_id`.
-    pending_permissions: std::collections::HashMap<String, PendingPermission>,
-    /// `EventBus` for publishing `RunComplete` events to `KnowledgeService`.
     event_bus: Arc<crate::services::event_bus::EventBus>,
-    /// Transport-agnostic event emitter (replaces `AppHandle`).
     emitter: Arc<dyn EventEmitter>,
-    /// Port for the hook receiver (passed to sidecar on launch/resume).
     hook_port: u16,
-    /// Sequential queue for batch runs.
-    run_queue: VecDeque<QueuedRun>,
     /// Counts for queue progress tracking.
     queue_completed: u32,
     queue_failed: u32,
-    /// Set when queue is cancelled to prevent race with `advance_queue`.
+    /// Set when queue is cancelled to prevent race with `try_advance`.
     queue_cancelled: bool,
-    /// Worktree path for the currently active run (for cleanup on cancel).
-    active_worktree_path: Option<String>,
 }
 
 impl RunManager {
@@ -90,52 +108,40 @@ impl RunManager {
         event_bus: Arc<crate::services::event_bus::EventBus>,
         emitter: Arc<dyn EventEmitter>,
         hook_port: u16,
+        max_concurrent: u32,
     ) -> Self {
         Self {
-            process: None,
-            stdin: None,
-            active_run: None,
+            runs: HashMap::new(),
+            pending: VecDeque::new(),
+            max_concurrent: max_concurrent.max(1),
             sidecar_path,
-            last_activity_ms: 0,
-            started_at_epoch_ms: 0,
-            pending_permissions: std::collections::HashMap::new(),
             event_bus,
             emitter,
             hook_port,
-            run_queue: VecDeque::new(),
             queue_completed: 0,
             queue_failed: 0,
             queue_cancelled: false,
-            active_worktree_path: None,
         }
     }
 
-    /// Spawn the sidecar process if not already running.
-    ///
-    /// # Errors
-    ///
-    /// Returns `SidecarError` if the Node.js process cannot be spawned.
-    fn ensure_sidecar(&mut self, state: RunManagerState) -> Result<(), AppError> {
-        if let Some(ref mut child) = self.process {
-            match child.try_wait() {
-                Ok(Some(status)) => {
-                    warn!("Sidecar process exited with {status}, will respawn");
-                    self.process = None;
-                    self.stdin = None;
-                }
-                Ok(None) => {
-                    debug!("Sidecar already running");
-                    return Ok(());
-                }
-                Err(e) => {
-                    warn!("Failed to check sidecar process status: {e}, will respawn");
-                    self.process = None;
-                    self.stdin = None;
-                }
-            }
-        }
+    /// Check how many slots are available for new runs.
+    #[must_use]
+    fn available_slots(&self) -> u32 {
+        #[allow(clippy::cast_possible_truncation)]
+        let active = self.runs.len() as u32;
+        self.max_concurrent.saturating_sub(active)
+    }
 
-        info!("Spawning sidecar at {}", self.sidecar_path.display());
+    /// Spawn a sidecar process for a specific run.
+    fn spawn_sidecar(
+        &self,
+        run_id: &str,
+        _state: RunManagerState,
+    ) -> Result<(Child, ChildStdin, BufReader<tokio::process::ChildStdout>), AppError> {
+        info!(
+            "Spawning sidecar for run {run_id} at {}",
+            self.sidecar_path.display()
+        );
         let start = std::time::Instant::now();
 
         let mut child = tokio::process::Command::new("node")
@@ -145,93 +151,152 @@ impl RunManager {
             .stderr(std::process::Stdio::inherit())
             .spawn()
             .map_err(|e| {
-                error!("Failed to spawn sidecar: {e}");
+                error!("Failed to spawn sidecar for run {run_id}: {e}");
                 AppError::SidecarError(format!("Failed to spawn node process: {e}"))
             })?;
 
         let child_stdout = child.stdout.take().ok_or_else(|| {
-            error!("Sidecar stdout not available");
+            error!("Sidecar stdout not available for run {run_id}");
             AppError::SidecarError("Sidecar stdout not available".to_owned())
         })?;
 
         let child_stdin = child.stdin.take().ok_or_else(|| {
-            error!("Sidecar stdin not available");
+            error!("Sidecar stdin not available for run {run_id}");
             AppError::SidecarError("Sidecar stdin not available".to_owned())
         })?;
 
-        self.process = Some(child);
-        self.stdin = Some(child_stdin);
-
-        // Spawn reader task for stdout
         let reader = BufReader::new(child_stdout);
-        start_stdout_reader(state, reader);
 
-        info!("Sidecar spawned in {:?}", start.elapsed());
-        Ok(())
+        info!("Sidecar for run {run_id} spawned in {:?}", start.elapsed());
+        Ok((child, child_stdin, reader))
     }
 
-    /// Get the current run status with computed elapsed time.
+    /// Get all active run infos with computed elapsed times.
+    #[must_use]
+    pub fn get_all_runs(&self) -> Vec<RunInfo> {
+        let now = now_epoch_ms();
+        self.runs
+            .values()
+            .map(|active| {
+                let mut run = active.info.clone();
+                if active.started_at_epoch_ms > 0 {
+                    run.elapsed_secs = (now.saturating_sub(active.started_at_epoch_ms)) / 1000;
+                }
+                if active.last_activity_ms > 0 {
+                    run.last_heartbeat = Some(epoch_ms_to_rfc3339(active.last_activity_ms));
+                }
+                run
+            })
+            .collect()
+    }
+
+    /// Get a specific run by `run_id`. Checks active runs and pending queue.
+    #[must_use]
+    pub fn get_run(&self, run_id: &str) -> Option<RunInfo> {
+        // Check active runs first
+        if let Some(active) = self.runs.get(run_id) {
+            let mut run = active.info.clone();
+            let now = now_epoch_ms();
+            if active.started_at_epoch_ms > 0 {
+                run.elapsed_secs = (now.saturating_sub(active.started_at_epoch_ms)) / 1000;
+            }
+            if active.last_activity_ms > 0 {
+                run.last_heartbeat = Some(epoch_ms_to_rfc3339(active.last_activity_ms));
+            }
+            return Some(run);
+        }
+        // Check pending queue
+        self.pending
+            .iter()
+            .find(|q| q.run_id == run_id)
+            .map(|q| RunInfo {
+                run_id: q.run_id.clone(),
+                session_id: None,
+                task_path: q.task_path.clone(),
+                status: RunStatus::Created,
+                started_at: String::new(),
+                cost_usd: 0.0,
+                last_heartbeat: None,
+                elapsed_secs: 0,
+                tab_id: None,
+                failure_reason: None,
+                max_budget_usd: q.options.max_budget_usd,
+                worktree_path: Some(q.worktree_path.clone()),
+            })
+    }
+
+    /// Get the first active run status (backwards compat for single-run callers).
     #[must_use]
     pub fn get_status(&self) -> Option<RunInfo> {
-        debug!("Getting run status");
-        self.active_run.clone().map(|mut run| {
-            if self.started_at_epoch_ms > 0 {
-                let now = now_epoch_ms();
-                run.elapsed_secs = (now.saturating_sub(self.started_at_epoch_ms)) / 1000;
-            }
-            if self.last_activity_ms > 0 {
-                run.last_heartbeat = Some(epoch_ms_to_rfc3339(self.last_activity_ms));
-            }
-            run
-        })
+        self.runs.keys().next().and_then(|k| self.get_run(k))
     }
 
-    /// Record activity (heartbeat or any sidecar response).
-    fn update_activity(&mut self) {
-        self.last_activity_ms = now_epoch_ms();
-    }
+    /// Check all active runs for staleness, permission timeouts, and cost budgets.
+    /// Returns `true` if any runs were removed (slots freed), signalling the caller
+    /// should call `try_advance`.
+    pub async fn check_stale(&mut self) -> bool {
+        let now = now_epoch_ms();
+        let mut stale_runs = Vec::new();
 
-    /// Check if the active run is stale (no activity for the stale threshold).
-    /// If stale, marks the run as failed with a "stalled" reason.
-    /// Also checks for permission request timeouts.
-    pub async fn check_stale(&mut self) {
-        if self.active_run.is_none() {
-            return;
+        for (run_id, active) in &self.runs {
+            // Skip terminal runs (they're about to be removed by the stdout reader)
+            if matches!(
+                active.info.status,
+                RunStatus::Succeeded | RunStatus::Failed | RunStatus::Cancelled
+            ) {
+                continue;
+            }
+            if run_stale::check_run_stale(active.last_activity_ms, now) {
+                stale_runs.push(run_id.clone());
+            }
         }
 
-        if run_stale::check_run_stale(self.last_activity_ms, now_epoch_ms()) {
-            self.mark_run_failed_with_reason("heartbeat-stalled");
-            return;
+        let had_stale = !stale_runs.is_empty();
+        for run_id in stale_runs {
+            self.mark_run_failed_by_id(&run_id, "heartbeat-stalled");
         }
 
-        run_stale::check_permission_timeout(
-            &mut self.pending_permissions,
-            &mut self.active_run,
-            self.stdin.as_mut(),
-            self.emitter.as_ref(),
-        )
-        .await;
+        // Check per-run cost budgets
+        self.check_cost_budgets();
+
+        // Check permission timeouts for all active runs
+        let run_ids: Vec<String> = self.runs.keys().cloned().collect();
+        for run_id in run_ids {
+            if let Some(active) = self.runs.get_mut(&run_id) {
+                run_stale::check_permission_timeout(
+                    &mut active.pending_permissions,
+                    &mut Some(&mut active.info),
+                    active.stdin.as_mut(),
+                    self.emitter.as_ref(),
+                )
+                .await;
+            }
+        }
+
+        had_stale
     }
 
-    /// Update the active run from a sidecar response.
-    /// Dispatches to handler functions in `run_responses`.
-    pub fn handle_response(&mut self, response: &SidecarResponse) {
-        // Update activity timestamp on every response (heartbeat or real)
-        self.update_activity();
+    /// Update the active run from a sidecar response, keyed by `run_id`.
+    pub fn handle_response(&mut self, run_id: &str, response: &SidecarResponse) {
+        let Some(active) = self.runs.get_mut(run_id) else {
+            warn!("Ignoring response for unknown run {run_id}");
+            return;
+        };
 
+        active.last_activity_ms = now_epoch_ms();
         let emitter = self.emitter.as_ref();
 
         match response {
             SidecarResponse::Heartbeat { session_id } => {
-                if !run_responses::session_matches(self.active_run.as_ref(), session_id.as_ref()) {
-                    warn!("Ignoring heartbeat with mismatched session_id: {session_id:?}");
+                if !run_responses::session_matches(Some(&active.info), session_id.as_ref()) {
+                    warn!("Ignoring heartbeat with mismatched session_id for run {run_id}");
                     return;
                 }
-                debug!("Heartbeat received");
+                debug!("Heartbeat received for run {run_id}");
             }
             SidecarResponse::SessionStarted { session_id } => {
                 run_responses::handle_session_started(
-                    &mut self.active_run,
+                    &mut Some(&mut active.info),
                     session_id,
                     emitter,
                     &self.event_bus,
@@ -240,8 +305,8 @@ impl RunManager {
             SidecarResponse::RunStep { session_id, .. }
             | SidecarResponse::AssistantText { session_id, .. }
             | SidecarResponse::ToolCall { session_id, .. } => {
-                if !run_responses::session_matches(self.active_run.as_ref(), session_id.as_ref()) {
-                    warn!("Ignoring run step with mismatched session_id: {session_id:?}");
+                if !run_responses::session_matches(Some(&active.info), session_id.as_ref()) {
+                    warn!("Ignoring run step with mismatched session_id for run {run_id}");
                     return;
                 }
                 run_responses::handle_run_step(response, emitter);
@@ -251,20 +316,19 @@ impl RunManager {
                 session_id,
                 ..
             } => {
-                if !run_responses::session_matches(self.active_run.as_ref(), session_id.as_ref()) {
-                    warn!("Ignoring run complete with mismatched session_id: {session_id:?}");
+                if !run_responses::session_matches(Some(&active.info), session_id.as_ref()) {
+                    warn!("Ignoring run complete with mismatched session_id for run {run_id}");
                     return;
                 }
                 run_responses::handle_run_complete(
-                    &mut self.active_run,
-                    &mut self.started_at_epoch_ms,
-                    &mut self.last_activity_ms,
-                    &mut self.pending_permissions,
+                    &mut Some(&mut active.info),
+                    &mut active.started_at_epoch_ms,
+                    &mut active.last_activity_ms,
+                    &mut active.pending_permissions,
                     cost_usd.as_ref(),
                     emitter,
                     &self.event_bus,
                 );
-                self.active_worktree_path = None;
             }
             SidecarResponse::PermissionRequest {
                 tool,
@@ -272,13 +336,15 @@ impl RunManager {
                 tool_use_id,
                 session_id,
             } => {
-                if !run_responses::session_matches(self.active_run.as_ref(), session_id.as_ref()) {
-                    warn!("Ignoring permission request with mismatched session_id: {session_id:?}");
+                if !run_responses::session_matches(Some(&active.info), session_id.as_ref()) {
+                    warn!(
+                        "Ignoring permission request with mismatched session_id for run {run_id}"
+                    );
                     return;
                 }
                 run_responses::handle_permission_request(
-                    &mut self.active_run,
-                    &mut self.pending_permissions,
+                    &mut Some(&mut active.info),
+                    &mut active.pending_permissions,
                     tool.as_ref(),
                     command.as_ref(),
                     tool_use_id,
@@ -292,123 +358,145 @@ impl RunManager {
                 cost_usd,
                 session_id,
             } => {
-                if !run_responses::session_matches(self.active_run.as_ref(), session_id.as_ref()) {
-                    warn!("Ignoring run error with mismatched session_id: {session_id:?}");
+                if !run_responses::session_matches(Some(&active.info), session_id.as_ref()) {
+                    warn!("Ignoring run error with mismatched session_id for run {run_id}");
                     return;
                 }
                 run_responses::handle_run_error(
-                    &mut self.active_run,
-                    &mut self.started_at_epoch_ms,
-                    &mut self.last_activity_ms,
-                    &mut self.pending_permissions,
+                    &mut Some(&mut active.info),
+                    &mut active.started_at_epoch_ms,
+                    &mut active.last_activity_ms,
+                    &mut active.pending_permissions,
                     err_msg,
                     status,
                     cost_usd.as_ref(),
                     emitter,
                     &self.event_bus,
                 );
-                self.active_worktree_path = None;
             }
         }
     }
 
-    /// Mark the active run as failed (used when sidecar crashes).
-    pub fn mark_run_failed(&mut self) {
-        self.mark_run_failed_with_reason("sidecar crash");
+    /// Check if a run reached terminal state after handling a response.
+    #[must_use]
+    pub fn is_run_terminal(&self, run_id: &str) -> bool {
+        self.runs.get(run_id).is_none_or(|a| {
+            matches!(
+                a.info.status,
+                RunStatus::Succeeded | RunStatus::Failed | RunStatus::Cancelled
+            )
+        })
     }
 
-    /// Mark the active run as failed with a specific reason.
-    pub fn mark_run_failed_with_reason(&mut self, reason: &str) {
-        if let Some(ref mut run) = self.active_run {
-            let now = now_epoch_ms();
-            warn!("Marking active run as failed: {reason}");
-            let effects =
-                run_effects::apply_mark_failed(run, reason, self.started_at_epoch_ms, now);
-            run_effects::execute_effects(effects, self.emitter.as_ref(), &self.event_bus);
+    /// Remove a terminal run from the active map. Returns the final `RunInfo`.
+    pub fn remove_terminal_run(&mut self, run_id: &str) -> Option<RunInfo> {
+        if self.is_run_terminal(run_id) {
+            self.runs.remove(run_id).map(|a| a.info)
+        } else {
+            None
         }
-        self.active_run = None;
-        self.process = None;
-        self.stdin = None;
-        self.last_activity_ms = 0;
-        self.started_at_epoch_ms = 0;
-        self.pending_permissions.clear();
-        self.active_worktree_path = None;
+    }
+
+    /// Mark a specific run as failed by `run_id`.
+    pub fn mark_run_failed_by_id(&mut self, run_id: &str, reason: &str) {
+        if let Some(active) = self.runs.get_mut(run_id) {
+            let now = now_epoch_ms();
+            warn!("Marking run {run_id} as failed: {reason}");
+            let effects = run_effects::apply_mark_failed(
+                &mut active.info,
+                reason,
+                active.started_at_epoch_ms,
+                now,
+            );
+            run_effects::execute_effects(effects, self.emitter.as_ref(), &self.event_bus);
+
+            // Kill the sidecar process
+            if let Some(ref mut child) = active.process {
+                if let Err(e) = child.start_kill() {
+                    error!("Failed to kill sidecar process for run {run_id}: {e}");
+                }
+            }
+        }
+        // Remove the run after marking failed
+        self.runs.remove(run_id);
+    }
+
+    /// Mark a specific run as failed (sidecar crash).
+    pub fn mark_run_failed(&mut self, run_id: &str) {
+        self.mark_run_failed_by_id(run_id, "sidecar crash");
     }
 
     /// Shut down the run manager during app exit.
-    ///
-    /// If there is an active run, kills the sidecar child process,
-    /// marks the run as failed, and updates task.md. Keeps run.json
-    /// with `session_id` so the user can manually resume later.
     pub fn shutdown(&mut self) {
-        if self.active_run.is_none() {
-            debug!("Shutdown: no active run to clean up");
+        if self.runs.is_empty() {
+            debug!("Shutdown: no active runs to clean up");
             return;
         }
 
-        // Kill the sidecar child process if it's running
-        if let Some(ref mut child) = self.process {
-            info!("Shutdown: killing sidecar child process");
-            if let Err(e) = child.start_kill() {
-                error!("Shutdown: failed to kill sidecar process: {e}");
+        let run_ids: Vec<String> = self.runs.keys().cloned().collect();
+        let count = run_ids.len();
+        for run_id in run_ids {
+            if let Some(active) = self.runs.get_mut(&run_id) {
+                if let Some(ref mut child) = active.process {
+                    info!("Shutdown: killing sidecar for run {run_id}");
+                    if let Err(e) = child.start_kill() {
+                        error!("Shutdown: failed to kill sidecar for run {run_id}: {e}");
+                    }
+                }
             }
+            self.mark_run_failed_by_id(&run_id, "daemon shutdown");
         }
-
-        // Mark run as failed (saves run.json with session_id for resume)
-        self.mark_run_failed();
-        info!("Shutdown: cleaned up active run");
+        info!("Shutdown: cleaned up {count} active runs");
     }
 
     /// Get the current queue status.
     #[must_use]
     pub fn get_queue_status(&self) -> QueueStatus {
         QueueStatus {
-            active: self.active_run.as_ref().map(|r| r.task_path.clone()),
-            queued: self.run_queue.iter().cloned().collect(),
+            active: self
+                .runs
+                .values()
+                .map(|a| RunSummaryBrief {
+                    run_id: a.info.run_id.clone(),
+                    task_path: a.info.task_path.clone(),
+                    status: a.info.status,
+                })
+                .collect(),
+            queued: self.pending.iter().cloned().collect(),
             completed: self.queue_completed,
             failed: self.queue_failed,
+            max_concurrent: self.max_concurrent,
         }
     }
 
-    /// Cancel the queue — cancels the active run and clears remaining queued items.
-    /// Queued tasks remain in Created status. The active run is force-killed.
+    /// Cancel the queue — cancels all active runs and clears pending items.
     pub fn cancel_queue(&mut self) {
-        let cleared = self.run_queue.len();
-        self.run_queue.clear();
+        let cleared = self.pending.len();
+        self.pending.clear();
         self.queue_completed = 0;
         self.queue_failed = 0;
         self.queue_cancelled = true;
 
-        // Also cancel the active run if one exists
-        let had_active = self.active_run.is_some();
-        if had_active {
-            if let Err(e) = self.cancel_run() {
-                error!("Failed to cancel active run during queue cancel: {e}");
+        let run_ids: Vec<String> = self.runs.keys().cloned().collect();
+        let active_count = run_ids.len();
+        for run_id in run_ids {
+            if let Err(e) = self.cancel_run_by_id(&run_id) {
+                error!("Failed to cancel run {run_id} during queue cancel: {e}");
             }
         }
 
-        if had_active {
-            info!("Cancelled queue: cleared {cleared} queued items, cancelled active run");
-        } else {
-            info!("Cancelled queue: cleared {cleared} queued items");
-        }
+        info!("Cancelled queue: cleared {cleared} pending items, cancelled {active_count} active runs");
     }
 
     /// Remove a queued run by worktree path. Returns true if found and removed.
     pub fn remove_queued_by_worktree(&mut self, worktree_path: &str) -> bool {
-        let before = self.run_queue.len();
-        self.run_queue.retain(|r| r.worktree_path != worktree_path);
-        let removed = before - self.run_queue.len();
+        let before = self.pending.len();
+        self.pending.retain(|r| r.worktree_path != worktree_path);
+        let removed = before - self.pending.len();
         if removed > 0 {
             info!("Removed {removed} queued run(s) for worktree {worktree_path}");
         }
         removed > 0
-    }
-
-    /// Check if there's a next item in the queue and return it.
-    /// Called after a run completes or fails to trigger auto-advance.
-    fn dequeue_next(&mut self) -> Option<QueuedRun> {
-        self.run_queue.pop_front()
     }
 
     /// Record a queue run completion (for progress tracking).
@@ -420,85 +508,75 @@ impl RunManager {
         }
     }
 
-    /// Cancel the active run immediately.
-    ///
-    /// Kills the sidecar process, marks the run as cancelled, records elapsed
-    /// time, and emits lifecycle events. Does NOT wait for graceful completion.
+    /// Cancel a specific run by `run_id`.
     ///
     /// # Errors
     ///
-    /// Returns `RunError` if no run is active.
-    pub fn cancel_run(&mut self) -> Result<RunInfo, AppError> {
-        if self.active_run.is_none() {
-            error!("Cannot cancel: no active run");
-            return Err(AppError::RunError("No active run to cancel".to_owned()));
-        }
+    /// Returns `RunError` if no active run matches the given ID.
+    pub fn cancel_run_by_id(&mut self, run_id: &str) -> Result<RunInfo, AppError> {
+        let active = self.runs.get_mut(run_id).ok_or_else(|| {
+            error!("Cannot cancel: no active run with id {run_id}");
+            AppError::RunError(format!("No active run with id {run_id}"))
+        })?;
 
         // Kill sidecar child process immediately
-        if let Some(ref mut child) = self.process {
-            info!("Killing sidecar process for cancellation");
+        if let Some(ref mut child) = active.process {
+            info!("Killing sidecar process for run {run_id}");
             if let Err(e) = child.start_kill() {
-                error!("Failed to kill sidecar process during cancel: {e}");
+                error!("Failed to kill sidecar process during cancel of run {run_id}: {e}");
             }
         }
 
         // Apply cancellation effects
-        let cancelled_run = if let Some(ref mut run) = self.active_run {
-            let now = now_epoch_ms();
-            let effects = run_effects::apply_cancel(run, self.started_at_epoch_ms, now);
-            run_effects::execute_effects(effects, self.emitter.as_ref(), &self.event_bus);
-            info!(
-                "Cancelled run for task {} after {}s",
-                run.task_path, run.elapsed_secs
-            );
-            run.clone()
-        } else {
-            // Unreachable — guarded above
-            return Err(AppError::RunError("No active run to cancel".to_owned()));
-        };
+        let now = now_epoch_ms();
+        let effects = run_effects::apply_cancel(&mut active.info, active.started_at_epoch_ms, now);
+        run_effects::execute_effects(effects, self.emitter.as_ref(), &self.event_bus);
+        info!(
+            "Cancelled run {run_id} for task {} after {}s",
+            active.info.task_path, active.info.elapsed_secs
+        );
 
-        // Mark worktree for cleanup if we know the path
-        if let Some(ref wt_path) = self.active_worktree_path {
+        // Mark worktree for cleanup
+        if let Some(ref wt_path) = active.info.worktree_path {
             let cleanup_effects = vec![run_effects::RunEffect::MarkWorktreeForCleanup {
                 path: wt_path.clone(),
             }];
             run_effects::execute_effects(cleanup_effects, self.emitter.as_ref(), &self.event_bus);
         }
 
-        // Clean up manager state
-        self.active_run = None;
-        self.process = None;
-        self.stdin = None;
-        self.last_activity_ms = 0;
-        self.started_at_epoch_ms = 0;
-        self.pending_permissions.clear();
-        self.active_worktree_path = None;
-
+        let cancelled_run = active.info.clone();
+        self.runs.remove(run_id);
         Ok(cancelled_run)
     }
 
-    /// Respond to a pending permission request.
+    /// Respond to a pending permission request for a specific run.
     ///
     /// # Errors
     ///
-    /// Returns `RunError` if no matching permission is pending.
+    /// Returns `RunError` if no active run or no pending permission matches.
     /// Returns `SidecarError` if the response cannot be sent.
     pub async fn respond_to_permission(
         &mut self,
+        run_id: &str,
         tool_use_id: &str,
         decision: &str,
         reason: Option<&str>,
     ) -> Result<(), AppError> {
-        let pending = self
+        let active = self.runs.get_mut(run_id).ok_or_else(|| {
+            error!("No active run with id {run_id} for permission response");
+            AppError::RunError(format!("No active run with id {run_id}"))
+        })?;
+
+        let pending = active
             .pending_permissions
             .remove(tool_use_id)
             .ok_or_else(|| {
-                error!("No pending permission for tool_use_id: {tool_use_id}");
+                error!("No pending permission for tool_use_id: {tool_use_id} in run {run_id}");
                 AppError::RunError("No matching pending permission request".to_owned())
             })?;
 
         info!(
-            "Responding to permission for tool {:?}: {decision}",
+            "Responding to permission for tool {:?} in run {run_id}: {decision}",
             pending.tool
         );
 
@@ -508,85 +586,95 @@ impl RunManager {
             reason: reason.map(str::to_owned),
         };
 
-        self.send_permission_response(&response_msg).await?;
+        send_to_stdin(active.stdin.as_mut(), &response_msg).await?;
 
-        if let Some(ref mut run) = self.active_run {
-            run.status = RunStatus::Running;
-            run_state::save_run_state(&run.task_path, run);
+        // Only restore Running status if the run is still in a non-terminal state
+        if matches!(
+            active.info.status,
+            RunStatus::Blocked | RunStatus::Starting | RunStatus::Running
+        ) {
+            active.info.status = RunStatus::Running;
+            run_state::save_run_state(&active.info.task_path, &active.info);
         }
 
         Ok(())
     }
 
-    /// Send a permission response JSON message to the sidecar via stdin.
-    async fn send_permission_response(
-        &mut self,
-        response: &crate::models::run::PermissionResponseMsg,
-    ) -> Result<(), AppError> {
-        let stdin = self.stdin.as_mut().ok_or_else(|| {
-            error!("Sidecar stdin not available for permission response");
-            AppError::SidecarError("Sidecar not running".to_owned())
-        })?;
+    /// Check per-run cost budgets and cancel runs that exceed their budget.
+    fn check_cost_budgets(&mut self) {
+        let over_budget: Vec<String> = self
+            .runs
+            .iter()
+            .filter_map(|(run_id, active)| {
+                // Skip terminal runs awaiting removal
+                if matches!(
+                    active.info.status,
+                    RunStatus::Succeeded | RunStatus::Failed | RunStatus::Cancelled
+                ) {
+                    return None;
+                }
+                if let Some(budget) = active.info.max_budget_usd {
+                    if active.info.cost_usd > budget {
+                        return Some(run_id.clone());
+                    }
+                }
+                None
+            })
+            .collect();
 
-        let mut json = serde_json::to_string(response).map_err(|e| {
-            error!("Failed to serialize permission response: {e}");
-            AppError::SidecarError(format!("JSON serialization error: {e}"))
-        })?;
-        json.push('\n');
-
-        stdin.write_all(json.as_bytes()).await.map_err(|e| {
-            error!("Failed to write permission response to sidecar stdin: {e}");
-            AppError::SidecarError(format!("Failed to write to sidecar: {e}"))
-        })?;
-
-        stdin.flush().await.map_err(|e| {
-            error!("Failed to flush sidecar stdin: {e}");
-            AppError::SidecarError(format!("Failed to flush sidecar stdin: {e}"))
-        })?;
-
-        debug!("Sent permission response to sidecar");
-        Ok(())
-    }
-
-    /// Send a JSON request to the sidecar via stdin.
-    async fn send_request(&mut self, request: &SidecarRequest) -> Result<(), AppError> {
-        let stdin = self.stdin.as_mut().ok_or_else(|| {
-            error!("Sidecar stdin not available");
-            AppError::SidecarError("Sidecar not running".to_owned())
-        })?;
-
-        let mut json = serde_json::to_string(request).map_err(|e| {
-            error!("Failed to serialize sidecar request: {e}");
-            AppError::SidecarError(format!("JSON serialization error: {e}"))
-        })?;
-        json.push('\n');
-
-        stdin.write_all(json.as_bytes()).await.map_err(|e| {
-            error!("Failed to write to sidecar stdin: {e}");
-            AppError::SidecarError(format!("Failed to write to sidecar: {e}"))
-        })?;
-
-        stdin.flush().await.map_err(|e| {
-            error!("Failed to flush sidecar stdin: {e}");
-            AppError::SidecarError(format!("Failed to flush sidecar stdin: {e}"))
-        })?;
-
-        debug!("Sent request to sidecar");
-        Ok(())
+        for run_id in over_budget {
+            warn!("Run {run_id} exceeded cost budget, cancelling");
+            if let Err(e) = self.cancel_run_by_id(&run_id) {
+                error!("Failed to cancel over-budget run {run_id}: {e}");
+            }
+            if let Err(e) = traits::emit(
+                self.emitter.as_ref(),
+                "run:cost_exceeded",
+                &serde_json::json!({ "runId": run_id }),
+            ) {
+                error!("Failed to emit run:cost_exceeded for {run_id}: {e}");
+            }
+        }
     }
 }
 
-/// Launch a run for the given task.
-///
-/// This is a standalone function (not a method) because it needs both the
-/// `RunManagerState` arc (to pass to the stdout reader) and mutable access
-/// to the inner `RunManager`.
+/// Send a serializable message to a sidecar's stdin.
+async fn send_to_stdin<T: serde::Serialize>(
+    stdin: Option<&mut ChildStdin>,
+    message: &T,
+) -> Result<(), AppError> {
+    let stdin = stdin.ok_or_else(|| {
+        error!("Sidecar stdin not available");
+        AppError::SidecarError("Sidecar not running".to_owned())
+    })?;
+
+    let mut json = serde_json::to_string(message).map_err(|e| {
+        error!("Failed to serialize message: {e}");
+        AppError::SidecarError(format!("JSON serialization error: {e}"))
+    })?;
+    json.push('\n');
+
+    stdin.write_all(json.as_bytes()).await.map_err(|e| {
+        error!("Failed to write to sidecar stdin: {e}");
+        AppError::SidecarError(format!("Failed to write to sidecar: {e}"))
+    })?;
+
+    stdin.flush().await.map_err(|e| {
+        error!("Failed to flush sidecar stdin: {e}");
+        AppError::SidecarError(format!("Failed to flush sidecar stdin: {e}"))
+    })?;
+
+    debug!("Sent message to sidecar");
+    Ok(())
+}
+
+/// Launch a run for the given task. If at capacity, enqueues to pending.
 ///
 /// # Errors
 ///
-/// Returns `RunError` if a run is already active.
 /// Returns `TaskNotFound` if the task file does not exist.
 /// Returns `SidecarError` if the sidecar cannot be spawned or written to.
+#[allow(clippy::too_many_lines)]
 pub async fn launch_run(
     state: RunManagerState,
     task_path: &str,
@@ -594,10 +682,54 @@ pub async fn launch_run(
     options: LaunchOptions,
 ) -> Result<RunInfo, AppError> {
     let mut manager = state.lock().await;
+    let max_budget_usd = options.max_budget_usd;
 
-    if manager.active_run.is_some() {
-        error!("Cannot launch run: a run is already active");
-        return Err(AppError::RunError("A run is already active".to_owned()));
+    // Reject duplicate task_path in active runs or pending queue
+    let is_active_dup = manager.runs.values().any(|a| a.info.task_path == task_path);
+    let is_pending_dup = manager.pending.iter().any(|q| q.task_path == task_path);
+    if is_active_dup || is_pending_dup {
+        error!("Duplicate task_path rejected: {task_path}");
+        return Err(AppError::RunError(format!(
+            "A run for task {task_path} is already active or queued"
+        )));
+    }
+
+    // Check if at capacity — if so, enqueue to pending
+    if manager.available_slots() == 0 {
+        let run_id = uuid::Uuid::new_v4().to_string();
+        info!(
+            "At capacity ({} runs), enqueuing task {task_path} as {run_id}",
+            manager.max_concurrent
+        );
+        manager.pending.push_back(QueuedRun {
+            run_id: run_id.clone(),
+            task_path: task_path.to_owned(),
+            worktree_path: worktree_path.to_owned(),
+            options,
+            failure_count: 0,
+        });
+
+        let queue_status = manager.get_queue_status();
+        if let Err(e) = traits::emit(manager.emitter.as_ref(), "run:queue_status", &queue_status) {
+            error!("Failed to emit queue status: {e}");
+        }
+
+        // Return a Created RunInfo with the pre-assigned run_id
+        let run_info = RunInfo {
+            run_id,
+            session_id: None,
+            task_path: task_path.to_owned(),
+            status: RunStatus::Created,
+            started_at: chrono::Utc::now().to_rfc3339(),
+            cost_usd: 0.0,
+            last_heartbeat: None,
+            elapsed_secs: 0,
+            tab_id: None,
+            failure_reason: None,
+            max_budget_usd,
+            worktree_path: Some(worktree_path.to_owned()),
+        };
+        return Ok(run_info);
     }
 
     let task_file = Path::new(task_path);
@@ -613,7 +745,8 @@ pub async fn launch_run(
     })?;
     crate::services::task::parse_task_md(&content, task_path)?;
 
-    manager.ensure_sidecar(Arc::clone(&state))?;
+    let run_id = uuid::Uuid::new_v4().to_string();
+    let (child, child_stdin, reader) = manager.spawn_sidecar(&run_id, Arc::clone(&state))?;
 
     let tab_id = uuid::Uuid::new_v4().to_string();
     let hook_port = manager.hook_port;
@@ -625,11 +758,10 @@ pub async fn launch_run(
         tab_id: tab_id.clone(),
     };
 
-    manager.send_request(&request).await?;
-
     let now = chrono::Utc::now().to_rfc3339();
     let now_ms = now_epoch_ms();
     let run_info = RunInfo {
+        run_id: run_id.clone(),
         session_id: None,
         task_path: task_path.to_owned(),
         status: RunStatus::Starting,
@@ -639,40 +771,55 @@ pub async fn launch_run(
         elapsed_secs: 0,
         tab_id: Some(tab_id),
         failure_reason: None,
+        max_budget_usd,
+        worktree_path: Some(worktree_path.to_owned()),
     };
 
+    let active = ActiveRun {
+        process: Some(child),
+        stdin: Some(child_stdin),
+        info: run_info.clone(),
+        started_at_epoch_ms: now_ms,
+        last_activity_ms: now_ms,
+        pending_permissions: HashMap::new(),
+    };
+
+    manager.runs.insert(run_id.clone(), active);
+
+    // Send the launch request to the sidecar
+    let stdin = manager.runs.get_mut(&run_id).and_then(|a| a.stdin.as_mut());
+    if let Err(e) = send_to_stdin(stdin, &request).await {
+        // Clean up if send failed
+        manager.runs.remove(&run_id);
+        return Err(e);
+    }
+
     task::increment_run_count(task_path);
-    manager.started_at_epoch_ms = now_ms;
-    manager.last_activity_ms = now_ms;
-    manager.active_run = Some(run_info.clone());
-    manager.active_worktree_path = Some(worktree_path.to_owned());
     run_state::save_run_state(task_path, &run_info);
 
-    info!("Launched run for task {task_path}");
+    info!("Launched run {run_id} for task {task_path}");
 
     if let Err(e) = traits::emit(manager.emitter.as_ref(), "run:status_changed", &run_info) {
         error!("Failed to emit run:status_changed event: {e}");
     }
+
+    // Start stdout reader for this specific run
+    start_stdout_reader(Arc::clone(&state), run_id.clone(), reader);
 
     Ok(run_info)
 }
 
 /// Retry a failed or cancelled run by launching a fresh session.
 ///
-/// Verifies no active run exists, the task is in a terminal-failed state,
-/// resets task status to running, increments run count, then launches.
-///
 /// # Errors
 ///
-/// Returns `RunError` if a run is already active or the task is not failed/cancelled.
+/// Returns `RunError` if the task is not in a retryable state.
 /// Returns `TaskNotFound` if the task file does not exist.
-/// Returns `SidecarError` if the sidecar cannot be spawned or written to.
 pub async fn retry_run(
     state: RunManagerState,
     task_path: &str,
     worktree_path: &str,
 ) -> Result<RunInfo, AppError> {
-    // Validate task exists and is in a retryable state
     let task_info = task::get_task(worktree_path)?;
     match task_info.frontmatter.status {
         TaskStatus::Failed | TaskStatus::Cancelled => {}
@@ -684,8 +831,6 @@ pub async fn retry_run(
         }
     }
 
-    // Launch a fresh run — task status will be set to Running by
-    // handle_session_started once the SDK session is confirmed.
     let options = LaunchOptions {
         max_turns: None,
         max_budget_usd: None,
@@ -697,15 +842,10 @@ pub async fn retry_run(
 
 /// Resume a failed or cancelled run by continuing its previous SDK session.
 ///
-/// Loads the `session_id` from the last known run state (run.json), then sends
-/// a `ResumeRun` request to the sidecar so the SDK picks up where it left off.
-///
 /// # Errors
 ///
-/// Returns `RunError` if a run is already active, the task is not failed/cancelled,
-/// or no `session_id` is available to resume.
+/// Returns `RunError` if the task is not resumable or no `session_id` exists.
 /// Returns `TaskNotFound` if the task file does not exist.
-/// Returns `SidecarError` if the sidecar cannot be spawned or written to.
 pub async fn resume_run(
     state: RunManagerState,
     task_path: &str,
@@ -713,12 +853,7 @@ pub async fn resume_run(
 ) -> Result<RunInfo, AppError> {
     let mut manager = state.lock().await;
 
-    if manager.active_run.is_some() {
-        error!("Cannot resume run: a run is already active");
-        return Err(AppError::RunError("A run is already active".to_owned()));
-    }
-
-    // Validate task exists and is in a resumable state (under lock to avoid TOCTOU)
+    // Validate task exists and is in a resumable state
     let task_info = task::get_task(worktree_path)?;
     match task_info.frontmatter.status {
         TaskStatus::Failed | TaskStatus::Cancelled => {}
@@ -730,7 +865,7 @@ pub async fn resume_run(
         }
     }
 
-    // Load session_id from run.json (saved during previous run)
+    // Load session_id from run.json
     let previous_run = run_state::load_run_state(worktree_path);
     let session_id = previous_run.and_then(|r| r.session_id).ok_or_else(|| {
         error!("Cannot resume: no session_id found for {task_path}");
@@ -743,7 +878,18 @@ pub async fn resume_run(
         return Err(AppError::TaskNotFound(task_path.to_owned()));
     }
 
-    manager.ensure_sidecar(Arc::clone(&state))?;
+    if manager.available_slots() == 0 {
+        error!(
+            "Cannot resume: at capacity ({} runs)",
+            manager.max_concurrent
+        );
+        return Err(AppError::RunError(
+            "At max concurrent capacity — cannot resume now".to_owned(),
+        ));
+    }
+
+    let run_id = uuid::Uuid::new_v4().to_string();
+    let (child, child_stdin, reader) = manager.spawn_sidecar(&run_id, Arc::clone(&state))?;
 
     let tab_id = uuid::Uuid::new_v4().to_string();
     let hook_port = manager.hook_port;
@@ -761,16 +907,10 @@ pub async fn resume_run(
         tab_id: tab_id.clone(),
     };
 
-    manager.send_request(&request).await?;
-
-    // Update task status and run count only after sidecar is confirmed alive
-    // and the request was sent successfully
-    task::update_task_status(task_path, TaskStatus::Running);
-    task::increment_run_count(task_path);
-
     let now = chrono::Utc::now().to_rfc3339();
     let now_ms = now_epoch_ms();
     let run_info = RunInfo {
+        run_id: run_id.clone(),
         session_id: Some(session_id),
         task_path: task_path.to_owned(),
         status: RunStatus::Starting,
@@ -780,26 +920,49 @@ pub async fn resume_run(
         elapsed_secs: 0,
         tab_id: Some(tab_id),
         failure_reason: None,
+        max_budget_usd: None,
+        worktree_path: Some(worktree_path.to_owned()),
     };
 
-    manager.started_at_epoch_ms = now_ms;
-    manager.last_activity_ms = now_ms;
-    manager.active_run = Some(run_info.clone());
-    manager.active_worktree_path = Some(worktree_path.to_owned());
+    let active = ActiveRun {
+        process: Some(child),
+        stdin: Some(child_stdin),
+        info: run_info.clone(),
+        started_at_epoch_ms: now_ms,
+        last_activity_ms: now_ms,
+        pending_permissions: HashMap::new(),
+    };
+
+    manager.runs.insert(run_id.clone(), active);
+
+    // Send resume request
+    let stdin = manager.runs.get_mut(&run_id).and_then(|a| a.stdin.as_mut());
+    if let Err(e) = send_to_stdin(stdin, &request).await {
+        manager.runs.remove(&run_id);
+        return Err(e);
+    }
+
+    task::update_task_status(task_path, TaskStatus::Running);
+    task::increment_run_count(task_path);
     run_state::save_run_state(task_path, &run_info);
 
-    info!("Resumed run for task {task_path}");
+    info!("Resumed run {run_id} for task {task_path}");
 
     if let Err(e) = traits::emit(manager.emitter.as_ref(), "run:status_changed", &run_info) {
         error!("Failed to emit run:status_changed event: {e}");
     }
 
+    start_stdout_reader(Arc::clone(&state), run_id.clone(), reader);
+
     Ok(run_info)
 }
 
-/// Spawn a tokio task that reads stdout lines from the sidecar,
-/// parses them, and calls `handle_response` / `mark_run_failed` directly.
-fn start_stdout_reader(state: RunManagerState, reader: BufReader<tokio::process::ChildStdout>) {
+/// Spawn a tokio task that reads stdout lines from a sidecar for a specific `run_id`.
+fn start_stdout_reader(
+    state: RunManagerState,
+    run_id: String,
+    reader: BufReader<tokio::process::ChildStdout>,
+) {
     tokio::spawn(async move {
         let mut lines = reader.lines();
         loop {
@@ -818,49 +981,91 @@ fn start_stdout_reader(state: RunManagerState, reader: BufReader<tokio::process:
 
                             let should_advance = {
                                 let mut manager = state.lock().await;
-                                let was_active = manager.active_run.is_some();
-                                manager.handle_response(&response);
-                                let still_active = manager.active_run.is_some();
-                                let queue_nonempty = !manager.run_queue.is_empty();
-                                is_terminal && was_active && !still_active && queue_nonempty
+                                manager.handle_response(&run_id, &response);
+
+                                if is_terminal {
+                                    // Remove terminal run and check queue
+                                    manager.remove_terminal_run(&run_id);
+                                    manager.record_queue_completion(is_complete);
+
+                                    let queue_status = manager.get_queue_status();
+                                    if let Err(e) = traits::emit(
+                                        manager.emitter.as_ref(),
+                                        "run:queue_status",
+                                        &queue_status,
+                                    ) {
+                                        error!("Failed to emit queue status: {e}");
+                                    }
+
+                                    !manager.pending.is_empty()
+                                        && manager.available_slots() > 0
+                                        && !manager.queue_cancelled
+                                } else {
+                                    false
+                                }
                             };
 
                             if should_advance {
-                                if let Err(e) = advance_queue(Arc::clone(&state), is_complete).await
-                                {
+                                if let Err(e) = try_advance(Arc::clone(&state)).await {
                                     error!("Queue advance failed: {e}");
                                 }
                             }
                         }
                         Err(e) => {
-                            warn!("Failed to parse sidecar response: {e} — line: {trimmed}");
+                            warn!("Failed to parse sidecar response for run {run_id}: {e} — line: {trimmed}");
                         }
                     }
                 }
                 Ok(None) => {
                     // Stdout closed — sidecar process has exited
-                    warn!("Sidecar stdout closed (process exited)");
-                    let has_queue = {
+                    warn!("Sidecar stdout closed for run {run_id}");
+                    let should_advance = {
                         let mut manager = state.lock().await;
-                        manager.mark_run_failed();
-                        !manager.run_queue.is_empty()
+                        manager.mark_run_failed(&run_id);
+                        manager.record_queue_completion(false);
+
+                        let queue_status = manager.get_queue_status();
+                        if let Err(e) = traits::emit(
+                            manager.emitter.as_ref(),
+                            "run:queue_status",
+                            &queue_status,
+                        ) {
+                            error!("Failed to emit queue status: {e}");
+                        }
+
+                        !manager.pending.is_empty()
+                            && manager.available_slots() > 0
+                            && !manager.queue_cancelled
                     };
-                    if has_queue {
-                        if let Err(e) = advance_queue(Arc::clone(&state), false).await {
+                    if should_advance {
+                        if let Err(e) = try_advance(Arc::clone(&state)).await {
                             error!("Queue advance after sidecar death failed: {e}");
                         }
                     }
                     break;
                 }
                 Err(e) => {
-                    error!("Error reading sidecar stdout: {e}");
-                    let has_queue = {
+                    error!("Error reading sidecar stdout for run {run_id}: {e}");
+                    let should_advance = {
                         let mut manager = state.lock().await;
-                        manager.mark_run_failed();
-                        !manager.run_queue.is_empty()
+                        manager.mark_run_failed(&run_id);
+                        manager.record_queue_completion(false);
+
+                        let queue_status = manager.get_queue_status();
+                        if let Err(e) = traits::emit(
+                            manager.emitter.as_ref(),
+                            "run:queue_status",
+                            &queue_status,
+                        ) {
+                            error!("Failed to emit queue status: {e}");
+                        }
+
+                        !manager.pending.is_empty()
+                            && manager.available_slots() > 0
+                            && !manager.queue_cancelled
                     };
-                    if has_queue {
-                        if let Err(e) = advance_queue(Arc::clone(&state), false).await {
+                    if should_advance {
+                        if let Err(e) = try_advance(Arc::clone(&state)).await {
                             error!("Queue advance after read error failed: {e}");
                         }
                     }
@@ -871,171 +1076,145 @@ fn start_stdout_reader(state: RunManagerState, reader: BufReader<tokio::process:
     });
 }
 
-/// Batch-launch multiple runs sequentially. Enqueues all pairs, starts the first.
-///
-/// # Errors
-///
-/// Returns `RunError` if a run is already active (and no queue advancement is possible).
-pub async fn batch_launch(
-    state: RunManagerState,
-    pairs: Vec<(String, String)>,
-) -> Result<QueueStatus, AppError> {
-    let mut manager = state.lock().await;
-
-    // Reset queue state — clear any prior queue items
-    manager.run_queue.clear();
-    // Only reset counters if no active run — otherwise the completing run
-    // would increment the new batch's counters incorrectly
-    if manager.active_run.is_none() {
-        manager.queue_completed = 0;
-        manager.queue_failed = 0;
-    }
-    manager.queue_cancelled = false;
-
-    // Enqueue all pairs
-    for (task_path, worktree_path) in &pairs {
-        manager.run_queue.push_back(QueuedRun {
-            task_path: task_path.clone(),
-            worktree_path: worktree_path.clone(),
-        });
-    }
-
-    // If no active run, start the first one
-    if manager.active_run.is_none() {
-        if let Some(next) = manager.dequeue_next() {
-            drop(manager); // Release lock before launching
-            let options = LaunchOptions {
-                max_turns: None,
-                max_budget_usd: None,
-                permission_mode: None,
-                allowed_directories: Vec::new(),
-            };
-            launch_run(
-                Arc::clone(&state),
-                &next.task_path,
-                &next.worktree_path,
-                options,
-            )
-            .await?;
-        }
-    }
-
-    // Return status AFTER dequeue so it reflects the actual queue state
-    let manager = state.lock().await;
-    let status = manager.get_queue_status();
-    Ok(status)
-}
-
-/// Advance the queue after a run completes. Called outside the lock.
-///
-/// # Errors
-///
-/// Returns `AppError` if the next run cannot be launched.
-pub async fn advance_queue(state: RunManagerState, succeeded: bool) -> Result<(), AppError> {
-    let next = {
-        let mut manager = state.lock().await;
-        manager.record_queue_completion(succeeded);
-
-        // Emit queue status update
-        let queue_status = manager.get_queue_status();
-        if let Err(e) = traits::emit(manager.emitter.as_ref(), "run:queue_status", &queue_status) {
-            error!("Failed to emit queue status: {e}");
-        }
-
-        // Check if queue was cancelled between run completion and this call
-        if manager.queue_cancelled {
-            info!("Queue was cancelled — not advancing");
-            None
-        } else {
-            manager.dequeue_next()
-        }
-    };
-
-    if let Some(next) = next {
-        // Re-check cancel flag before launching — closes race window between dequeue and launch
-        {
-            let manager = state.lock().await;
-            if manager.queue_cancelled {
-                info!("Queue cancelled after dequeue — skipping launch");
-                return Ok(());
-            }
-        }
-
-        info!("Queue advancing: launching next run for {}", next.task_path);
-        let options = LaunchOptions {
-            max_turns: None,
-            max_budget_usd: None,
-            permission_mode: None,
-            allowed_directories: Vec::new(),
-        };
-        if let Err(e) = launch_run(
-            Arc::clone(&state),
-            &next.task_path,
-            &next.worktree_path,
-            options,
-        )
-        .await
-        {
-            // Re-enqueue the failed item so it's not silently dropped
-            error!(
-                "Queue advance failed for {}: {e} — re-enqueuing",
-                next.task_path
-            );
-            let mut manager = state.lock().await;
-            manager.run_queue.push_front(next);
-            return Err(e);
-        }
-    } else {
-        info!("Queue empty — all batch runs complete");
-    }
-
-    Ok(())
-}
-
-/// Enqueue a single run without clearing the existing queue.
-/// Unlike `batch_launch`, this appends non-destructively.
-/// If no run is active, starts immediately.
+/// Batch-launch multiple runs. Fills available slots, enqueues the rest.
 ///
 /// # Errors
 ///
 /// Returns `AppError` if the first run cannot be launched.
+pub async fn batch_launch(
+    state: RunManagerState,
+    pairs: Vec<(String, String)>,
+) -> Result<QueueStatus, AppError> {
+    {
+        let mut manager = state.lock().await;
+        let cleared = manager.pending.len();
+        manager.pending.clear();
+        if cleared > 0 {
+            info!("batch_launch: cleared {cleared} previously pending items");
+            if let Err(e) = traits::emit(
+                manager.emitter.as_ref(),
+                "run:queue_cleared",
+                &serde_json::json!({ "clearedCount": cleared }),
+            ) {
+                error!("Failed to emit run:queue_cleared: {e}");
+            }
+        }
+        if manager.runs.is_empty() {
+            manager.queue_completed = 0;
+            manager.queue_failed = 0;
+        }
+        manager.queue_cancelled = false;
+
+        // Enqueue all pairs as pending
+        for (task_path, worktree_path) in &pairs {
+            manager.pending.push_back(QueuedRun {
+                run_id: uuid::Uuid::new_v4().to_string(),
+                task_path: task_path.clone(),
+                worktree_path: worktree_path.clone(),
+                options: LaunchOptions {
+                    max_turns: None,
+                    max_budget_usd: None,
+                    permission_mode: None,
+                    allowed_directories: Vec::new(),
+                },
+                failure_count: 0,
+            });
+        }
+    }
+
+    // Fill available slots
+    try_advance(Arc::clone(&state)).await?;
+
+    let manager = state.lock().await;
+    Ok(manager.get_queue_status())
+}
+
+/// Try to advance the queue by launching pending runs into available slots.
+///
+/// # Errors
+///
+/// Returns `AppError` if a pending run cannot be launched.
+pub async fn try_advance(state: RunManagerState) -> Result<(), AppError> {
+    loop {
+        let next = {
+            let mut manager = state.lock().await;
+            if manager.queue_cancelled {
+                info!("Queue was cancelled — not advancing");
+                return Ok(());
+            }
+            if manager.available_slots() == 0 {
+                return Ok(());
+            }
+            manager.pending.pop_front()
+        };
+
+        let Some(next) = next else {
+            return Ok(());
+        };
+
+        info!("Queue advancing: launching run for {}", next.task_path);
+        if let Err(e) = launch_run(
+            Arc::clone(&state),
+            &next.task_path,
+            &next.worktree_path,
+            next.options.clone(),
+        )
+        .await
+        {
+            let mut failed = next;
+            failed.failure_count += 1;
+            if failed.failure_count >= MAX_QUEUE_FAILURES {
+                error!(
+                    "Queue advance failed for {} ({} times) — dropping from queue: {e}",
+                    failed.task_path, failed.failure_count
+                );
+                let mut manager = state.lock().await;
+                manager.queue_failed += 1;
+            } else {
+                error!(
+                    "Queue advance failed for {} (attempt {}/{}) — re-enqueuing: {e}",
+                    failed.task_path, failed.failure_count, MAX_QUEUE_FAILURES
+                );
+                let mut manager = state.lock().await;
+                manager.pending.push_front(failed);
+            }
+            return Err(e);
+        }
+    }
+}
+
+/// Enqueue a single run without clearing the existing queue.
+///
+/// # Errors
+///
+/// Returns `AppError` if the run cannot be launched.
 pub async fn enqueue_run(
     state: RunManagerState,
     task_path: &str,
     worktree_path: &str,
     options: LaunchOptions,
 ) -> Result<QueueStatus, AppError> {
-    // Single lock acquisition: push to queue and dequeue if no active run
-    let next_to_launch = {
+    {
         let mut manager = state.lock().await;
-        manager.run_queue.push_back(QueuedRun {
+        // Reset cancelled flag so the new item can be drained
+        manager.queue_cancelled = false;
+        manager.pending.push_back(QueuedRun {
+            run_id: uuid::Uuid::new_v4().to_string(),
             task_path: task_path.to_string(),
             worktree_path: worktree_path.to_string(),
-        });
-        if manager.active_run.is_none() {
-            manager.dequeue_next()
-        } else {
-            None
-        }
-    };
-
-    if let Some(next) = next_to_launch {
-        launch_run(
-            Arc::clone(&state),
-            &next.task_path,
-            &next.worktree_path,
             options,
-        )
-        .await?;
+            failure_count: 0,
+        });
     }
+
+    // Try to launch immediately if slots available
+    try_advance(Arc::clone(&state)).await?;
 
     let manager = state.lock().await;
     Ok(manager.get_queue_status())
 }
 
-/// Cancel a run by ID. Matches against the active run by `session_id` first,
-/// then falls back to `task_path` (handles `Starting` state where `session_id`
-/// is still `None`).
+/// Cancel a run by ID. Searches active runs by `run_id`, `session_id`, or `task_path`.
 ///
 /// # Errors
 ///
@@ -1043,11 +1222,41 @@ pub async fn enqueue_run(
 pub async fn force_cancel_run(state: RunManagerState, run_id: &str) -> Result<RunInfo, AppError> {
     let mut manager = state.lock().await;
 
-    // Check if active run matches by session_id or task_path
-    if let Some(ref active) = manager.active_run {
-        if active.session_id.as_deref() == Some(run_id) || active.task_path == run_id {
-            return manager.cancel_run();
+    // Direct match by run_id
+    if manager.runs.contains_key(run_id) {
+        let result = manager.cancel_run_by_id(run_id);
+        if result.is_ok() {
+            // Try to advance queue after cancellation
+            let should_advance = !manager.pending.is_empty() && manager.available_slots() > 0;
+            drop(manager);
+            if should_advance {
+                if let Err(e) = try_advance(Arc::clone(&state)).await {
+                    error!("Queue advance after cancel failed: {e}");
+                }
+            }
         }
+        return result;
+    }
+
+    // Fallback: match by session_id or task_path
+    let matching_id = manager
+        .runs
+        .iter()
+        .find(|(_, a)| a.info.session_id.as_deref() == Some(run_id) || a.info.task_path == run_id)
+        .map(|(k, _)| k.clone());
+
+    if let Some(id) = matching_id {
+        let result = manager.cancel_run_by_id(&id);
+        if result.is_ok() {
+            let should_advance = !manager.pending.is_empty() && manager.available_slots() > 0;
+            drop(manager);
+            if should_advance {
+                if let Err(e) = try_advance(Arc::clone(&state)).await {
+                    error!("Queue advance after cancel failed: {e}");
+                }
+            }
+        }
+        return result;
     }
 
     error!("No active run matching id {run_id}");
@@ -1066,11 +1275,32 @@ pub fn create_run_manager_state(
     event_bus: Arc<crate::services::event_bus::EventBus>,
     emitter: Arc<dyn EventEmitter>,
     hook_port: u16,
+    max_concurrent: u32,
 ) -> RunManagerState {
     Arc::new(Mutex::new(RunManager::new(
         sidecar_path,
         event_bus,
         emitter,
         hook_port,
+        max_concurrent,
     )))
+}
+
+/// Advance the queue after a run completes. Backwards-compatible wrapper.
+///
+/// # Errors
+///
+/// Returns `AppError` if the next run cannot be launched.
+pub async fn advance_queue(state: RunManagerState, succeeded: bool) -> Result<(), AppError> {
+    {
+        let mut manager = state.lock().await;
+        manager.record_queue_completion(succeeded);
+
+        let queue_status = manager.get_queue_status();
+        if let Err(e) = traits::emit(manager.emitter.as_ref(), "run:queue_status", &queue_status) {
+            error!("Failed to emit queue status: {e}");
+        }
+    }
+
+    try_advance(state).await
 }

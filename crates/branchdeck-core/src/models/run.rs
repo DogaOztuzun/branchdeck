@@ -17,6 +17,8 @@ pub enum RunStatus {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct RunInfo {
+    /// Stable run identifier, assigned at creation time (UUID).
+    pub run_id: String,
     pub session_id: Option<String>,
     pub task_path: String,
     pub status: RunStatus,
@@ -30,6 +32,12 @@ pub struct RunInfo {
     pub tab_id: Option<String>,
     #[serde(default)]
     pub failure_reason: Option<String>,
+    /// Per-run cost budget. If set, run is cancelled when `cost_usd` exceeds this.
+    #[serde(default)]
+    pub max_budget_usd: Option<f64>,
+    /// Worktree path for this run (needed for cleanup and identification).
+    #[serde(default)]
+    pub worktree_path: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -55,7 +63,7 @@ pub enum SidecarRequest {
     },
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LaunchOptions {
     pub max_turns: Option<u32>,

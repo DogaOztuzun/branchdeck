@@ -214,10 +214,7 @@ const INTERNAL_ERROR: i64 = -32603;
     ),
     tag = "mcp"
 )]
-pub async fn mcp_handler(
-    State(state): State<AppState>,
-    Json(body): Json<Value>,
-) -> Response {
+pub async fn mcp_handler(State(state): State<AppState>, Json(body): Json<Value>) -> Response {
     let req: JsonRpcRequest = match serde_json::from_value(body) {
         Ok(r) => r,
         Err(e) => {

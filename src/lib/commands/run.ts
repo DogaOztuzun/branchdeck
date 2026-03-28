@@ -32,9 +32,28 @@ export async function cancelRun(sessionId: string): Promise<void> {
 
 export async function getRunStatus(): Promise<RunInfo | null> {
   try {
-    return await apiGet<RunInfo | null>('/runs/status');
+    const runs = await apiGet<RunInfo[]>('/runs');
+    return runs.length > 0 ? (runs[0] ?? null) : null;
   } catch (e) {
     console.error(`getRunStatus failed: ${e}`);
+    throw e;
+  }
+}
+
+export async function listRuns(): Promise<RunInfo[]> {
+  try {
+    return await apiGet<RunInfo[]>('/runs');
+  } catch (e) {
+    console.error(`listRuns failed: ${e}`);
+    throw e;
+  }
+}
+
+export async function getRunById(runId: string): Promise<RunInfo> {
+  try {
+    return await apiGet<RunInfo>(`/runs/${encodeURIComponent(runId)}`);
+  } catch (e) {
+    console.error(`getRunById failed: ${e}`);
     throw e;
   }
 }

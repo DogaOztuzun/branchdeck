@@ -23,8 +23,10 @@ pub fn session_matches(active_run: Option<&RunInfo>, response_session_id: Option
 }
 
 /// Handle a `SessionStarted` response from the sidecar.
+/// Accepts `&mut Option<&mut RunInfo>` for compatibility with both
+/// `Option<RunInfo>` and direct `&mut RunInfo` callers.
 pub fn handle_session_started(
-    active_run: &mut Option<RunInfo>,
+    active_run: &mut Option<&mut RunInfo>,
     session_id: &String,
     emitter: &dyn EventEmitter,
     event_bus: &EventBus,
@@ -47,7 +49,7 @@ pub fn handle_run_step(response: &SidecarResponse, emitter: &dyn EventEmitter) {
 /// Handle a `RunComplete` response from the sidecar.
 #[allow(clippy::implicit_hasher)]
 pub fn handle_run_complete(
-    active_run: &mut Option<RunInfo>,
+    active_run: &mut Option<&mut RunInfo>,
     started_at_epoch_ms: &mut u64,
     last_activity_ms: &mut u64,
     pending_permissions: &mut std::collections::HashMap<String, PendingPermission>,
@@ -67,7 +69,6 @@ pub fn handle_run_complete(
             pending_permissions.len()
         );
     }
-    *active_run = None;
     *last_activity_ms = 0;
     *started_at_epoch_ms = 0;
     pending_permissions.clear();
@@ -76,7 +77,7 @@ pub fn handle_run_complete(
 /// Handle a `PermissionRequest` response from the sidecar.
 #[allow(clippy::implicit_hasher)]
 pub fn handle_permission_request(
-    active_run: &mut Option<RunInfo>,
+    active_run: &mut Option<&mut RunInfo>,
     pending_permissions: &mut std::collections::HashMap<String, PendingPermission>,
     tool: Option<&String>,
     command: Option<&String>,
@@ -99,7 +100,7 @@ pub fn handle_permission_request(
 /// Handle a `RunError` response from the sidecar.
 #[allow(clippy::too_many_arguments, clippy::implicit_hasher)]
 pub fn handle_run_error(
-    active_run: &mut Option<RunInfo>,
+    active_run: &mut Option<&mut RunInfo>,
     started_at_epoch_ms: &mut u64,
     last_activity_ms: &mut u64,
     pending_permissions: &mut std::collections::HashMap<String, PendingPermission>,
@@ -122,7 +123,6 @@ pub fn handle_run_error(
             pending_permissions.len()
         );
     }
-    *active_run = None;
     *last_activity_ms = 0;
     *started_at_epoch_ms = 0;
     pending_permissions.clear();

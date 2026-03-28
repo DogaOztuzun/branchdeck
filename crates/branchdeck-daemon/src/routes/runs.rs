@@ -1,6 +1,6 @@
 use axum::extract::{Path, State};
 use axum::response::Json;
-use branchdeck_core::models::run::{RunInfo, RunStatus};
+use branchdeck_core::models::run::{LaunchOptions, RunInfo, RunStatus};
 use branchdeck_core::services::run_manager;
 use serde::Deserialize;
 use utoipa::ToSchema;
@@ -10,21 +10,35 @@ use crate::state::AppState;
 
 /// Request body for creating a new run.
 #[derive(Debug, Deserialize, ToSchema)]
-#[allow(dead_code)] // worktree_path used when RunManager is wired into AppState
 #[serde(rename_all = "camelCase")]
 pub struct CreateRunRequest {
     /// Path to the task file.
     pub task_path: String,
     /// Worktree path to run in.
+    pub worktree_path: String,
+    /// Maximum agent turns.
     #[serde(default)]
-    pub worktree_path: Option<String>,
+    pub max_turns: Option<u32>,
+    /// Per-run cost budget in USD.
+    #[serde(default)]
+    pub max_budget_usd: Option<f64>,
 }
 
+/// Request body for permission response.
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PermissionResponse {
+    pub tool_use_id: String,
+    pub decision: String,
+    #[serde(default)]
+    pub reason: Option<String>,
+}
 
 /// Minimal run status response.
 #[derive(Debug, serde::Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RunSummary {
+    pub run_id: String,
     pub session_id: Option<String>,
     pub task_path: String,
     pub status: RunStatus,
@@ -35,6 +49,7 @@ pub struct RunSummary {
 impl From<&RunInfo> for RunSummary {
     fn from(info: &RunInfo) -> Self {
         Self {
+            run_id: info.run_id.clone(),
             session_id: info.session_id.clone(),
             task_path: info.task_path.clone(),
             status: info.status,
@@ -49,20 +64,32 @@ impl From<&RunInfo> for RunSummary {
     path = "/api/runs",
     request_body = CreateRunRequest,
     responses(
-        (status = 201, description = "Run created (stub)", body = RunSummary),
+        (status = 201, description = "Run created", body = RunSummary),
         (status = 400, description = "Invalid request", body = crate::error::ProblemDetails)
     ),
     tag = "runs"
 )]
 pub async fn create_run(
-    State(_state): State<AppState>,
-    Json(_req): Json<CreateRunRequest>,
+    State(state): State<AppState>,
+    Json(req): Json<CreateRunRequest>,
 ) -> Result<(axum::http::StatusCode, Json<RunSummary>), ApiError> {
-    // RunManager requires process orchestration not yet wired (stories 8.1-8.4)
-    Err(branchdeck_core::error::AppError::RunError(
-        "Not implemented: RunManager not yet wired (requires stories 8.1-8.4)".to_string(),
+    let options = LaunchOptions {
+        max_turns: req.max_turns,
+        max_budget_usd: req.max_budget_usd,
+        permission_mode: None,
+        allowed_directories: Vec::new(),
+    };
+    let run = run_manager::launch_run(
+        state.run_manager,
+        &req.task_path,
+        &req.worktree_path,
+        options,
     )
-    .into())
+    .await?;
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(RunSummary::from(&run)),
+    ))
 }
 
 #[utoipa::path(
@@ -73,39 +100,44 @@ pub async fn create_run(
     ),
     tag = "runs"
 )]
-pub async fn list_runs(State(_state): State<AppState>) -> Result<Json<Vec<RunSummary>>, ApiError> {
-    // RunManager not yet wired (stories 8.1-8.4) — return empty list (not an error, just no runs)
-    Ok(Json(Vec::new()))
+pub async fn list_runs(State(state): State<AppState>) -> Result<Json<Vec<RunSummary>>, ApiError> {
+    let manager = state.run_manager.lock().await;
+    let runs: Vec<RunSummary> = manager
+        .get_all_runs()
+        .iter()
+        .map(RunSummary::from)
+        .collect();
+    Ok(Json(runs))
 }
 
 #[utoipa::path(
     get,
     path = "/api/runs/{id}",
     params(
-        ("id" = String, Path, description = "Run session ID")
+        ("id" = String, Path, description = "Run ID")
     ),
     responses(
-        (status = 200, description = "Run details", body = RunSummary),
+        (status = 200, description = "Run details", body = RunInfo),
         (status = 404, description = "Run not found", body = crate::error::ProblemDetails)
     ),
     tag = "runs"
 )]
 pub async fn get_run(
-    Path(_id): Path<String>,
-    State(_state): State<AppState>,
-) -> Result<Json<RunSummary>, ApiError> {
-    // RunManager not yet wired (stories 8.1-8.4)
-    Err(branchdeck_core::error::AppError::RunError(
-        "Not implemented: RunManager not yet wired (requires stories 8.1-8.4)".to_string(),
-    )
-    .into())
+    Path(id): Path<String>,
+    State(state): State<AppState>,
+) -> Result<Json<RunInfo>, ApiError> {
+    let manager = state.run_manager.lock().await;
+    let run = manager.get_run(&id).ok_or_else(|| {
+        branchdeck_core::error::AppError::RunError(format!("No run with id {id}"))
+    })?;
+    Ok(Json(run))
 }
 
 #[utoipa::path(
     post,
     path = "/api/runs/{id}/cancel",
     params(
-        ("id" = String, Path, description = "Run session ID")
+        ("id" = String, Path, description = "Run ID")
     ),
     responses(
         (status = 200, description = "Run cancelled", body = RunInfo),
@@ -125,21 +157,28 @@ pub async fn cancel_run(
     post,
     path = "/api/runs/{id}/approve",
     params(
-        ("id" = String, Path, description = "Run session ID")
+        ("id" = String, Path, description = "Run ID")
     ),
+    request_body = PermissionResponse,
     responses(
-        (status = 200, description = "Run approved"),
+        (status = 200, description = "Permission responded"),
         (status = 404, description = "Run not found", body = crate::error::ProblemDetails)
     ),
     tag = "runs"
 )]
 pub async fn approve_run(
-    Path(_id): Path<String>,
-    State(_state): State<AppState>,
+    Path(run_id): Path<String>,
+    State(state): State<AppState>,
+    Json(req): Json<PermissionResponse>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    // RunManager not yet wired (stories 8.1-8.4)
-    Err(branchdeck_core::error::AppError::RunError(
-        "Not implemented: RunManager not yet wired (requires stories 8.1-8.4)".to_string(),
-    )
-    .into())
+    let mut manager = state.run_manager.lock().await;
+    manager
+        .respond_to_permission(
+            &run_id,
+            &req.tool_use_id,
+            &req.decision,
+            req.reason.as_deref(),
+        )
+        .await?;
+    Ok(Json(serde_json::json!({"ok": true})))
 }

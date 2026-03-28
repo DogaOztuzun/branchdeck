@@ -22,6 +22,9 @@ pub struct ProjectConfig {
     /// SAT confidence threshold (0-100). Findings below this are ignored.
     #[serde(default = "default_confidence_threshold")]
     pub confidence_threshold: u8,
+    /// Maximum number of concurrent workflow runs. Default 1.
+    #[serde(default = "default_max_concurrent")]
+    pub max_concurrent: u32,
 }
 
 /// How a secret token is sourced at runtime.
@@ -54,6 +57,10 @@ fn default_confidence_threshold() -> u8 {
     70
 }
 
+fn default_max_concurrent() -> u32 {
+    1
+}
+
 impl ProjectConfig {
     /// Validate semantic constraints that serde cannot enforce.
     ///
@@ -62,9 +69,7 @@ impl ProjectConfig {
     /// `confidence_threshold` exceeds 100.
     pub fn validate(&self) -> Result<(), AppError> {
         if !Path::new(&self.repo_path).is_absolute() {
-            return Err(AppError::Config(
-                "repo_path must be absolute".to_string(),
-            ));
+            return Err(AppError::Config("repo_path must be absolute".to_string()));
         }
         if self.confidence_threshold > 100 {
             return Err(AppError::Config(
@@ -84,6 +89,7 @@ impl Default for ProjectConfig {
             enabled_workflows: Vec::new(),
             min_severity: default_min_severity(),
             confidence_threshold: default_confidence_threshold(),
+            max_concurrent: default_max_concurrent(),
         }
     }
 }

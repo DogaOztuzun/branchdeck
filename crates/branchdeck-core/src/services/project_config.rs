@@ -3,9 +3,7 @@ use std::path::{Path, PathBuf};
 use log::{debug, error, info};
 
 use crate::error::AppError;
-use crate::models::project_config::{
-    ProjectConfig, SetupStatus, TokenValidation, WorkflowOption,
-};
+use crate::models::project_config::{ProjectConfig, SetupStatus, TokenValidation, WorkflowOption};
 use crate::services::workflow::WorkflowRegistry;
 
 const CONFIG_DIR: &str = ".branchdeck";
@@ -50,18 +48,12 @@ pub fn get_setup_status(repo_path: &str) -> Result<SetupStatus, AppError> {
 pub fn load_project_config(repo_path: &str) -> Result<ProjectConfig, AppError> {
     let path = config_path(repo_path);
     let content = std::fs::read_to_string(&path).map_err(|e| {
-        error!(
-            "Failed to read project config at {}: {e}",
-            path.display()
-        );
+        error!("Failed to read project config at {}: {e}", path.display());
         AppError::Config(format!("failed to read {}: {e}", path.display()))
     })?;
 
     let config: ProjectConfig = serde_yaml::from_str(&content).map_err(|e| {
-        error!(
-            "Failed to parse project config at {}: {e}",
-            path.display()
-        );
+        error!("Failed to parse project config at {}: {e}", path.display());
         AppError::Config(format!("failed to parse {}: {e}", path.display()))
     })?;
 
@@ -128,11 +120,7 @@ pub fn list_available_workflows(repo_path: &str) -> Vec<WorkflowOption> {
         .iter()
         .map(|def| WorkflowOption {
             name: def.config.name.clone(),
-            description: def
-                .config
-                .description
-                .clone()
-                .unwrap_or_default(),
+            description: def.config.description.clone().unwrap_or_default(),
         })
         .collect()
 }
@@ -214,6 +202,7 @@ mod tests {
             enabled_workflows: vec!["pr-shepherd".to_string()],
             min_severity: Severity::High,
             confidence_threshold: 70,
+            ..ProjectConfig::default()
         };
 
         save_project_config(&config).unwrap();
@@ -258,7 +247,8 @@ mod tests {
         };
         let err = save_project_config(&config).unwrap_err();
         assert!(
-            err.to_string().contains("confidence_threshold must be 0-100"),
+            err.to_string()
+                .contains("confidence_threshold must be 0-100"),
             "expected threshold error, got: {err}"
         );
     }

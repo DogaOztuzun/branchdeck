@@ -165,7 +165,10 @@ impl ActivityStore {
     /// Returns `AppError::Io` if the data directory cannot be created.
     pub fn new_with_persistence(data_dir: &std::path::Path) -> Result<Self, AppError> {
         std::fs::create_dir_all(data_dir).map_err(|e| {
-            error!("Failed to create activity data dir {}: {e}", data_dir.display());
+            error!(
+                "Failed to create activity data dir {}: {e}",
+                data_dir.display()
+            );
             e
         })?;
 
@@ -198,7 +201,10 @@ impl ActivityStore {
         let file = match std::fs::File::open(&path) {
             Ok(f) => f,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                debug!("No persisted activity file at {}, starting fresh", path.display());
+                debug!(
+                    "No persisted activity file at {}, starting fresh",
+                    path.display()
+                );
                 return Ok(());
             }
             Err(e) => return Err(AppError::Io(e)),
@@ -220,7 +226,10 @@ impl ActivityStore {
         }
 
         if parse_errors > 0 {
-            warn!("Skipped {parse_errors} unparseable lines from {}", path.display());
+            warn!(
+                "Skipped {parse_errors} unparseable lines from {}",
+                path.display()
+            );
         }
 
         // Truncate to last MAX_PERSISTED_EVENTS
@@ -233,7 +242,10 @@ impl ActivityStore {
         let event_count = events.len();
         self.replay_events_sync(&events)?;
 
-        info!("Loaded {event_count} persisted activity events from {}", path.display());
+        info!(
+            "Loaded {event_count} persisted activity events from {}",
+            path.display()
+        );
 
         // Compact the file if we truncated
         if needs_compact {
@@ -343,7 +355,11 @@ impl ActivityStore {
         }
 
         crate::util::write_atomic(path, content.as_bytes())?;
-        info!("Compacted activity file to {} events at {}", events.len(), path.display());
+        info!(
+            "Compacted activity file to {} events at {}",
+            events.len(),
+            path.display()
+        );
         Ok(())
     }
 
@@ -372,7 +388,10 @@ impl ActivityStore {
             .and_then(|mut f| writeln!(f, "{line}"));
 
         if let Err(e) = result {
-            error!("Failed to persist activity event to {}: {e}", path.display());
+            error!(
+                "Failed to persist activity event to {}: {e}",
+                path.display()
+            );
         }
     }
 

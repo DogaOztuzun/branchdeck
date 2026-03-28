@@ -92,9 +92,7 @@ where
                     );
                     tokio::time::sleep(delay).await;
                 } else {
-                    warn!(
-                        "GitHub {label}: transient error, all {MAX_RETRIES} retries exhausted"
-                    );
+                    warn!("GitHub {label}: transient error, all {MAX_RETRIES} retries exhausted");
                 }
             }
         }
@@ -142,7 +140,10 @@ mod tests {
     #[test]
     fn test_not_transient_port_number() {
         let err = AppError::GitHub("connect to port 50300 failed".to_string());
-        assert!(!is_transient(&err), "port 50300 should not match status 503");
+        assert!(
+            !is_transient(&err),
+            "port 50300 should not match status 503"
+        );
     }
 
     #[test]
